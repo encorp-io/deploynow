@@ -1,0 +1,68 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String
+  password  String
+  role      String   @default("member") // admin, member
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  invites TeamInvite[]
+}
+
+model TeamInvite {
+  id        String   @id @default(cuid())
+  email     String
+  token     String   @unique
+  role      String   @default("member")
+  expiresAt DateTime
+  used      Boolean  @default(false)
+  createdBy String
+  creator   User     @relation(fields: [createdBy], references: [id])
+  createdAt DateTime @default(now())
+}
+
+model Settings {
+  id               String  @id @default("singleton")
+  portainerUrl     String  @default("")
+  portainerApiKey  String  @default("")
+  githubToken      String  @default("")
+  pollingInterval  Int     @default(60) // seconds
+  autoUpdateLatest Boolean @default(true)
+}
+
+model Service {
+  id              String   @id @default(cuid())
+  containerId     String   @unique
+  containerName   String
+  image           String   // full image ref e.g. ghcr.io/org/repo:tag
+  registry        String   @default("ghcr.io")
+  currentDigest   String   @default("")
+  remoteDigest    String   @default("")
+  tag             String   @default("latest")
+  isFloatingTag   Boolean  @default(true) // true = auto-update, false = notify only
+  status          String   @default("unknown") // running, stopped, updating, error
+  updateAvailable Boolean  @default(false)
+  lastChecked     DateTime?
+  lastUpdated     DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model ActivityLog {
+  id        String   @id @default(cuid())
+  serviceId String?
+  action    String   // check, update, error, manual_update
+  message   String
+  details   String   @default("")
+  createdAt DateTime @default(now())
+}

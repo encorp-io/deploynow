@@ -1,0 +1,28 @@
+services:
+  deployer:
+    image: encorp-deployer:latest
+    # Or build locally:
+    # build: .
+    container_name: encorp-deployer
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    volumes:
+      - deployer_data:/data
+    environment:
+      # REQUIRED: generate with: openssl rand -base64 32
+      AUTH_SECRET: ${AUTH_SECRET}
+
+      # Optional: override default admin credentials (only used on first boot)
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@encorp.io}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin}
+
+      # SQLite database path (inside the container volume)
+      DATABASE_URL: file:/data/deployer.db
+
+      # App URL (used for building invite links in the UI)
+      NEXTAUTH_URL: ${NEXTAUTH_URL:-http://localhost:3000}
+
+volumes:
+  deployer_data:
+    driver: local
