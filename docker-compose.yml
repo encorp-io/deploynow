@@ -1,6 +1,6 @@
 services:
   deployer:
-    image: ghcr.io/encorp-io/deployer-for-portainer:latest
+    image: encorpio/deployer-for-portainer:latest
     # Or build locally:
     # build: .
     container_name: encorp-deployer
