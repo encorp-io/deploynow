@@ -3,16 +3,18 @@ set -e
 
 # ── Validate required env vars ────────────────────────────────────────────────
 if [ -z "$AUTH_SECRET" ] || [ "$AUTH_SECRET" = "build-placeholder-replaced-at-runtime" ]; then
-  echo "[deployer] ERROR: AUTH_SECRET is not set or is the default placeholder."
+  echo "[deployer] ERROR: AUTH_SECRET is not set."
   echo "[deployer]        Generate one with: openssl rand -base64 32"
   exit 1
 fi
 
+# ── Database migrations ───────────────────────────────────────────────────────
 echo "[deployer] Running database migrations..."
 DATABASE_URL="${DATABASE_URL:-file:/data/deployer.db}" \
   node_modules/.bin/prisma db push --schema=./prisma/schema.prisma --skip-generate
 
-echo "[deployer] Seeding initial admin user (idempotent)..."
+# ── Seed initial admin user (first boot only) ─────────────────────────────────
+echo "[deployer] Checking for initial admin user..."
 DATABASE_URL="${DATABASE_URL:-file:/data/deployer.db}" \
   node -e "
 const { PrismaClient } = require('@prisma/client');
@@ -23,14 +25,12 @@ async function seed() {
   const count = await prisma.user.count();
   if (count === 0) {
     const adminEmail = process.env.ADMIN_EMAIL || 'admin@encorp.io';
-    const adminPass = process.env.ADMIN_PASSWORD;
+    const adminPass  = process.env.ADMIN_PASSWORD;
 
     if (!adminPass) {
       console.error('[deployer] ERROR: ADMIN_PASSWORD env var is required on first boot.');
-      console.error('[deployer]        Set it to a strong password in your .env or docker-compose.yml');
       process.exit(1);
     }
-
     if (adminPass.length < 12) {
       console.error('[deployer] ERROR: ADMIN_PASSWORD must be at least 12 characters.');
       process.exit(1);
@@ -55,12 +55,118 @@ async function seed() {
     });
     console.log('[deployer] Admin user created: ' + adminEmail);
   } else {
-    console.log('[deployer] Users exist, skipping seed');
+    console.log('[deployer] Users exist — skipping seed');
   }
   await prisma.\$disconnect();
 }
-seed().catch(e => { console.error(e); process.exit(1); });
+seed().catch(e => { console.error(e.message); process.exit(1); });
 "
 
-echo "[deployer] Starting Next.js server..."
-exec node server.js
+# ── TLS certificate setup ─────────────────────────────────────────────────────
+#
+# Priority order:
+#   1. CERT_FILE / KEY_FILE env vars point to user-provided PEM files
+#   2. /certs/cert.pem + /certs/key.pem (mounted volume with real cert)
+#   3. Auto-generate a self-signed cert into /data/certs/ (persisted across restarts)
+#
+mkdir -p /data/certs
+
+CERT_FILE="${CERT_FILE:-}"
+KEY_FILE="${KEY_FILE:-}"
+
+if [ -n "$CERT_FILE" ] && [ -n "$KEY_FILE" ]; then
+  # ── User provided explicit paths via env vars ──────────────────────────────
+  if [ ! -f "$CERT_FILE" ] || [ ! -f "$KEY_FILE" ]; then
+    echo "[deployer] ERROR: CERT_FILE / KEY_FILE set but files not found:"
+    echo "[deployer]   CERT_FILE=$CERT_FILE"
+    echo "[deployer]   KEY_FILE=$KEY_FILE"
+    exit 1
+  fi
+  echo "[deployer] Using certificate from CERT_FILE / KEY_FILE env vars"
+  cp "$CERT_FILE" /data/certs/cert.pem
+  cp "$KEY_FILE"  /data/certs/key.pem
+
+elif [ -f "/certs/cert.pem" ] && [ -f "/certs/key.pem" ]; then
+  # ── User mounted a real cert at /certs ────────────────────────────────────
+  echo "[deployer] Using certificate from /certs volume mount"
+  cp /certs/cert.pem /data/certs/cert.pem
+  cp /certs/key.pem  /data/certs/key.pem
+
+elif [ ! -f "/data/certs/cert.pem" ] || [ ! -f "/data/certs/key.pem" ]; then
+  # ── Generate a self-signed certificate (first boot) ───────────────────────
+  echo "[deployer] No certificate found — generating self-signed certificate..."
+
+  # Build SAN list: always include localhost; optionally include custom hostname
+  COMMON_NAME="${TLS_HOSTNAME:-encorp-deployer}"
+  SAN="DNS:localhost,DNS:${COMMON_NAME},IP:127.0.0.1"
+
+  cat > /tmp/ssl.cnf << EOF
+[req]
+default_bits       = 4096
+default_md         = sha256
+prompt             = no
+distinguished_name = dn
+x509_extensions    = v3_req
+
+[dn]
+CN = ${COMMON_NAME}
+O  = Encorp Deployer
+C  = US
+
+[v3_req]
+subjectAltName     = ${SAN}
+keyUsage           = keyEncipherment, dataEncipherment, digitalSignature
+extendedKeyUsage   = serverAuth
+basicConstraints   = CA:FALSE
+EOF
+
+  openssl req -x509 \
+    -newkey rsa:4096 \
+    -keyout /data/certs/key.pem \
+    -out    /data/certs/cert.pem \
+    -days   3650 \
+    -nodes \
+    -config /tmp/ssl.cnf
+
+  echo "[deployer] Self-signed certificate generated (valid 10 years)"
+  echo "[deployer] To use a real certificate, mount it at /certs/cert.pem and /certs/key.pem"
+  echo "[deployer] or set CERT_FILE and KEY_FILE environment variables."
+
+else
+  echo "[deployer] Reusing existing certificate from /data/certs"
+fi
+
+# Secure cert permissions
+chmod 600 /data/certs/key.pem
+chmod 644 /data/certs/cert.pem
+
+# ── Start nginx (SSL termination on :9444 → Next.js on :3001) ─────────────────
+echo "[deployer] Starting nginx (HTTPS :9444)..."
+nginx -c /app/nginx/nginx.conf &
+NGINX_PID=$!
+
+# ── Start Next.js (loopback only — not exposed outside the container) ─────────
+echo "[deployer] Starting Next.js (internal :3001)..."
+PORT=3001 HOSTNAME=127.0.0.1 node server.js &
+NEXT_PID=$!
+
+echo "[deployer] Encorp Deployer is running at https://0.0.0.0:9444"
+
+# ── Signal forwarding — clean shutdown when Docker sends SIGTERM ──────────────
+terminate() {
+  echo "[deployer] Shutting down..."
+  nginx -s quit   2>/dev/null || true
+  kill "$NEXT_PID" 2>/dev/null || true
+  wait "$NGINX_PID" "$NEXT_PID" 2>/dev/null || true
+  exit 0
+}
+trap terminate TERM INT
+
+# ── Wait — exit the container if either process dies ─────────────────────────
+wait "$NGINX_PID" "$NEXT_PID"
+EXIT_CODE=$?
+
+echo "[deployer] A child process exited with code $EXIT_CODE — stopping container"
+nginx -s quit   2>/dev/null || true
+kill "$NEXT_PID" 2>/dev/null || true
+exit "$EXIT_CODE"

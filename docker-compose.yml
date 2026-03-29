@@ -1,27 +1,45 @@
 services:
   deployer:
-    image: encorp-deployer:latest
+    image: ghcr.io/encorp-io/deployer-for-portainer:latest
     # Or build locally:
     # build: .
     container_name: encorp-deployer
     restart: unless-stopped
     ports:
-      - "3000:3000"
+      - "9444:9444"     # HTTPS — Encorp Deployer dashboard
     volumes:
-      - deployer_data:/data
+      - deployer_data:/data          # SQLite DB + auto-generated TLS cert (persisted)
+      # ── Real certificate (optional) ─────────────────────────────────────────
+      # Mount your certificate files here to replace the self-signed cert.
+      # The entrypoint prefers /certs/ over the auto-generated cert in /data/certs/.
+      #
+      # - /path/to/your/cert.pem:/certs/cert.pem:ro
+      # - /path/to/your/key.pem:/certs/key.pem:ro
+      #
+      # Alternatively, set CERT_FILE and KEY_FILE env vars to absolute paths
+      # inside a mounted volume.
     environment:
       # REQUIRED: generate with: openssl rand -base64 32
       AUTH_SECRET: ${AUTH_SECRET}
 
-      # Optional: override default admin credentials (only used on first boot)
-      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@encorp.io}
-      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin}
+      # First-boot admin credentials (only used when no users exist in DB)
+      ADMIN_EMAIL:    ${ADMIN_EMAIL:-admin@encorp.io}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}   # required on first boot, min 12 chars
 
-      # SQLite database path (inside the container volume)
+      # SQLite database (inside /data volume)
       DATABASE_URL: file:/data/deployer.db
 
-      # App URL (used for building invite links in the UI)
-      NEXTAUTH_URL: ${NEXTAUTH_URL:-http://localhost:3000}
+      # Public URL shown in invite links — use https since we're behind nginx
+      NEXTAUTH_URL: ${NEXTAUTH_URL:-https://localhost:9444}
+
+      # ── TLS certificate (optional) ──────────────────────────────────────────
+      # Leave unset to use the auto-generated self-signed cert.
+      # Set both to paths inside a mounted volume to use a real certificate.
+      # CERT_FILE: /certs/cert.pem
+      # KEY_FILE:  /certs/key.pem
+
+      # Custom hostname added to the self-signed cert's SAN (optional)
+      # TLS_HOSTNAME: deployer.yourcompany.com
 
 volumes:
   deployer_data:
