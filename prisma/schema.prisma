@@ -32,12 +32,13 @@ model TeamInvite {
 }
 
 model Settings {
-  id               String  @id @default("singleton")
-  portainerUrl     String  @default("")
-  portainerApiKey  String  @default("")
-  githubToken      String  @default("")
-  pollingInterval  Int     @default(60) // seconds
-  autoUpdateLatest Boolean @default(true)
+  id                  String  @id @default("singleton")
+  portainerUrl        String  @default("")
+  portainerApiKey     String  @default("") // AES-256-GCM encrypted at rest
+  githubToken         String  @default("") // AES-256-GCM encrypted at rest
+  pollingInterval     Int     @default(60) // seconds, range 30–3600
+  autoUpdateLatest    Boolean @default(true)
+  portainerEndpointId Int     @default(1)  // which Portainer environment to manage
 }
 
 model Service {
@@ -52,6 +53,7 @@ model Service {
   isFloatingTag   Boolean  @default(true) // true = auto-update, false = notify only
   status          String   @default("unknown") // running, stopped, updating, error
   updateAvailable Boolean  @default(false)
+  portainerEndpointId Int      @default(1)
   lastChecked     DateTime?
   lastUpdated     DateTime?
   createdAt       DateTime @default(now())

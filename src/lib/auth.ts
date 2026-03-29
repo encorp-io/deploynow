@@ -2,6 +2,7 @@ import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
 import { prisma } from "./prisma";
+import { isRateLimited, recordFailure, recordSuccess } from "./rateLimit";
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
   providers: [
@@ -14,25 +15,32 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       async authorize(credentials) {
         if (!credentials?.email || !credentials?.password) return null;
 
-        const user = await prisma.user.findUnique({
-          where: { email: credentials.email as string },
-        });
+        const email = (credentials.email as string).toLowerCase().trim();
 
-        if (!user) return null;
+        // Rate limit by email — prevents brute-force / credential stuffing
+        if (isRateLimited(email)) {
+          throw new Error("Too many failed login attempts. Try again in 15 minutes.");
+        }
+
+        const user = await prisma.user.findUnique({ where: { email } });
+
+        if (!user) {
+          recordFailure(email);
+          return null;
+        }
 
         const isValid = await bcrypt.compare(
           credentials.password as string,
           user.password
         );
 
-        if (!isValid) return null;
+        if (!isValid) {
+          recordFailure(email);
+          return null;
+        }
 
-        return {
-          id: user.id,
-          email: user.email,
-          name: user.name,
-          role: user.role,
-        };
+        recordSuccess(email);
+        return { id: user.id, email: user.email, name: user.name, role: user.role };
       },
     }),
   ],
@@ -57,5 +65,6 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
   },
   session: {
     strategy: "jwt",
+    maxAge: 8 * 60 * 60, // 8-hour sessions — appropriate for an internal tool
   },
 });

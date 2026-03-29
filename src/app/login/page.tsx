@@ -92,9 +92,11 @@ export default function LoginPage() {
           </button>
         </form>
 
-        <p className="text-xs text-text-muted text-center mt-6">
-          Default credentials: admin@encorp.io / admin
-        </p>
+        {process.env.NODE_ENV === "development" && (
+          <p className="text-xs text-text-muted text-center mt-6">
+            Dev mode — check your ADMIN_EMAIL / ADMIN_PASSWORD env vars
+          </p>
+        )}
       </div>
     </div>
   );

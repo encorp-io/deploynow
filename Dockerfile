@@ -1,5 +1,7 @@
 # ─── Stage 1: deps ────────────────────────────────────────────────────────────
-FROM node:22-alpine AS deps
+# Pin digest to prevent silent supply-chain substitution.
+# Update intentionally: docker pull node:22-alpine && docker inspect --format='{{index .RepoDigests 0}}' node:22-alpine
+FROM node:22-alpine@sha256:9bef0ef1e268f60627da9ba7d7605e8831d5b56ad07487d24d1aa386336d1944 AS deps
 WORKDIR /app
 
 RUN apk add --no-cache libc6-compat openssl
@@ -10,7 +12,7 @@ COPY prisma ./prisma/
 RUN npm ci
 
 # ─── Stage 2: builder ─────────────────────────────────────────────────────────
-FROM node:22-alpine AS builder
+FROM node:22-alpine@sha256:9bef0ef1e268f60627da9ba7d7605e8831d5b56ad07487d24d1aa386336d1944 AS builder
 WORKDIR /app
 
 RUN apk add --no-cache openssl
@@ -19,14 +21,15 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
 ENV NEXT_TELEMETRY_DISABLED=1
-ENV DATABASE_URL="file:/data/deployer.db"
-ENV AUTH_SECRET="build-placeholder-replaced-at-runtime"
+# DATABASE_URL is only needed for prisma db push at runtime, not at build time.
+# AUTH_SECRET must never be baked into the image — it is required at runtime only.
+ENV DATABASE_URL="file:/tmp/build-dummy.db"
 
-RUN npx prisma generate
-RUN npm run build
+RUN npx prisma generate && npx prisma db push --skip-generate
+RUN npx next build
 
 # ─── Stage 3: runner ──────────────────────────────────────────────────────────
-FROM node:22-alpine AS runner
+FROM node:22-alpine@sha256:9bef0ef1e268f60627da9ba7d7605e8831d5b56ad07487d24d1aa386336d1944 AS runner
 WORKDIR /app
 
 RUN apk add --no-cache openssl

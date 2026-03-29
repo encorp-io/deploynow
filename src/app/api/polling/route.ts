@@ -2,10 +2,12 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { syncServicesFromPortainer, checkForUpdates, initializeDigests } from "@/lib/polling";
 import { prisma } from "@/lib/prisma";
+import { isAdmin } from "@/lib/sessionHelpers";
 
 export async function POST(request: Request) {
   const session = await auth();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!isAdmin(session)) return NextResponse.json({ error: "Admin only" }, { status: 403 });
 
   const body = await request.json();
 
@@ -31,6 +33,14 @@ export async function GET() {
   const logs = await prisma.activityLog.findMany({
     orderBy: { createdAt: "desc" },
     take: 50,
+    select: {
+      id: true,
+      serviceId: true,
+      action: true,
+      message: true,
+      details: true,
+      createdAt: true,
+    },
   });
 
   return NextResponse.json(logs);
