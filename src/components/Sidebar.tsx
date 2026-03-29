@@ -9,10 +9,12 @@ import {
   Users,
   Container,
   LogOut,
+  History,
 } from "lucide-react";
 
 const nav = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/activity", label: "Activity", icon: History },
   { href: "/settings", label: "Settings", icon: Settings },
   { href: "/team", label: "Team", icon: Users },
 ];

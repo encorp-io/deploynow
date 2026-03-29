@@ -2,9 +2,9 @@ import { prisma } from "./prisma";
 import {
   getContainers,
   getConfiguredEndpointId,
+  getImageInspect,
   parseImageRef,
   isFloatingTag,
-  pullImage,
   recreateContainer,
 } from "./portainer";
 import { getRemoteDigest } from "./ghcr";
@@ -20,6 +20,24 @@ export async function syncServicesFromPortainer() {
     const name   = container.Names[0]?.replace(/^\//, "") || container.Id.slice(0, 12);
     const parsed = parseImageRef(container.Image);
 
+    // ImageID from Portainer is the config digest of the image actually running.
+    // This is the ground truth for "what version is deployed".
+    const localDigest = container.ImageID || "";
+
+    // Detect architecture from the running image via Portainer's image inspect.
+    // This ensures we compare against the same arch in the registry manifest list.
+    let arch = "amd64"; // safe default
+    if (container.ImageID) {
+      try {
+        const imgInfo = await getImageInspect(endpointId, container.ImageID);
+        if (imgInfo.Architecture) {
+          arch = imgInfo.Architecture;
+        }
+      } catch {
+        // Non-fatal — fall back to amd64
+      }
+    }
+
     await prisma.service.upsert({
       where: { containerId: container.Id },
       update: {
@@ -29,6 +47,8 @@ export async function syncServicesFromPortainer() {
         tag:                 parsed.tag,
         status:              container.State?.toLowerCase() || "unknown",
         isFloatingTag:       isFloatingTag(parsed.tag),
+        currentDigest:       localDigest,
+        arch,
         portainerEndpointId: endpointId,
       },
       create: {
@@ -39,6 +59,8 @@ export async function syncServicesFromPortainer() {
         tag:                 parsed.tag,
         status:              container.State?.toLowerCase() || "unknown",
         isFloatingTag:       isFloatingTag(parsed.tag),
+        currentDigest:       localDigest,
+        arch,
         portainerEndpointId: endpointId,
       },
     });
@@ -58,16 +80,30 @@ export async function checkForUpdates() {
   for (const service of services) {
     try {
       const parsed       = parseImageRef(service.image);
-      const remoteDigest = await getRemoteDigest(parsed.registry, parsed.repository, parsed.tag);
+      const remoteDigest = await getRemoteDigest(parsed.registry, parsed.repository, parsed.tag, service.arch);
 
-      if (!remoteDigest) continue;
+      if (!remoteDigest) {
+        // Still mark as checked even if no digest was returned
+        await prisma.service.update({
+          where: { id: service.id },
+          data: { lastChecked: new Date() },
+        });
+        continue;
+      }
 
+      // currentDigest is the local ImageID from Portainer (set during sync).
+      // remoteDigest is the config digest of the latest image in the registry.
+      // If they differ, an update is available.
       const hasUpdate =
         service.currentDigest !== "" && service.currentDigest !== remoteDigest;
 
       await prisma.service.update({
         where: { id: service.id },
-        data: { remoteDigest, updateAvailable: hasUpdate, lastChecked: new Date() },
+        data: {
+          remoteDigest,
+          updateAvailable: hasUpdate,
+          lastChecked: new Date(),
+        },
       });
 
       if (hasUpdate && service.isFloatingTag && settings?.autoUpdateLatest) {
@@ -83,6 +119,12 @@ export async function checkForUpdates() {
         });
       }
     } catch (error) {
+      // Still mark as checked so the UI doesn't show "Never"
+      await prisma.service.update({
+        where: { id: service.id },
+        data: { lastChecked: new Date() },
+      }).catch(() => {});
+
       // Log only the message — never the full error object (may contain tokens)
       const message = error instanceof Error ? error.message : "Unknown error";
       await prisma.activityLog.create({
@@ -105,11 +147,13 @@ export async function performUpdate(serviceId: string) {
   await prisma.service.update({ where: { id: serviceId }, data: { status: "updating" } });
 
   try {
-    await pullImage(endpointId, service.image);
-    const newContainerId = await recreateContainer(endpointId, service.containerId);
+    // Use Portainer's native recreate with PullImage: true.
+    // This safely pulls the new image and recreates the container in one step,
+    // preserving all config (volumes, networks, env vars, labels, etc.).
+    const newContainerId = await recreateContainer(endpointId, service.containerId, true);
 
     const parsed    = parseImageRef(service.image);
-    const newDigest = await getRemoteDigest(parsed.registry, parsed.repository, parsed.tag);
+    const newDigest = await getRemoteDigest(parsed.registry, parsed.repository, parsed.tag, service.arch);
 
     await prisma.service.update({
       where: { id: serviceId },
@@ -145,21 +189,10 @@ export async function performUpdate(serviceId: string) {
   }
 }
 
+/**
+ * @deprecated currentDigest is now set from Portainer's ImageID during sync.
+ * Kept for backward compat but effectively a no-op if sync ran first.
+ */
 export async function initializeDigests() {
-  const services = await prisma.service.findMany({ where: { currentDigest: "" } });
-
-  for (const service of services) {
-    try {
-      const parsed  = parseImageRef(service.image);
-      const digest  = await getRemoteDigest(parsed.registry, parsed.repository, parsed.tag);
-      if (digest) {
-        await prisma.service.update({
-          where: { id: service.id },
-          data: { currentDigest: digest, remoteDigest: digest, lastChecked: new Date() },
-        });
-      }
-    } catch {
-      // Skip silently — will retry on next poll cycle
-    }
-  }
+  // No-op — currentDigest is set during syncServicesFromPortainer from container.ImageID
 }

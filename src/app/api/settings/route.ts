@@ -39,6 +39,7 @@ export async function GET() {
   return NextResponse.json({
     portainerUrl:       settings?.portainerUrl ?? "",
     portainerApiKey:    settings?.portainerApiKey ? "••••••••" : "",
+    githubUser:         settings?.githubUser ?? "",
     githubToken:        settings?.githubToken    ? "••••••••" : "",
     pollingInterval:    settings?.pollingInterval    ?? 60,
     autoUpdateLatest:   settings?.autoUpdateLatest   ?? true,
@@ -48,10 +49,15 @@ export async function GET() {
 
 export async function PUT(request: Request) {
   const session = await auth();
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (!isAdmin(session)) return NextResponse.json({ error: "Admin only" }, { status: 403 });
+  if (!session) return NextResponse.json({ error: "Unauthorized — not logged in" }, { status: 401 });
+  if (!isAdmin(session)) return NextResponse.json({ error: "Admin only — your role: " + (session as any)?.user?.role }, { status: 403 });
 
-  const body = await request.json();
+  let body: any;
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+  }
   const data: Record<string, unknown> = {};
 
   // ── portainerUrl ─────────────────────────────────────────────────────────────
@@ -77,6 +83,12 @@ export async function PUT(request: Request) {
     data.portainerApiKey = body.portainerApiKey
       ? encryptSecret(body.portainerApiKey)
       : "";
+  }
+
+  // ── githubUser ────────────────────────────────────────────────────────────
+  if (typeof body.githubUser === "string") {
+    const trimmed = body.githubUser.trim().slice(0, 100);
+    data.githubUser = trimmed;
   }
 
   // ── githubToken — encrypt before storing ─────────────────────────────────
@@ -119,19 +131,25 @@ export async function PUT(request: Request) {
     data.portainerEndpointId = endpointId;
   }
 
-  await prisma.settings.upsert({
-    where: { id: "singleton" },
-    update: data,
-    create: {
-      id: "singleton",
-      portainerUrl:        (data.portainerUrl        as string)  ?? "",
-      portainerApiKey:     (data.portainerApiKey     as string)  ?? "",
-      githubToken:         (data.githubToken         as string)  ?? "",
-      pollingInterval:     (data.pollingInterval     as number)  ?? 60,
-      autoUpdateLatest:    (data.autoUpdateLatest    as boolean) ?? true,
-      portainerEndpointId: (data.portainerEndpointId as number)  ?? 1,
-    },
-  });
+  try {
+    await prisma.settings.upsert({
+      where: { id: "singleton" },
+      update: data,
+      create: {
+        id: "singleton",
+        portainerUrl:        (data.portainerUrl        as string)  ?? "",
+        portainerApiKey:     (data.portainerApiKey     as string)  ?? "",
+        githubUser:          (data.githubUser           as string)  ?? "",
+        githubToken:         (data.githubToken         as string)  ?? "",
+        pollingInterval:     (data.pollingInterval     as number)  ?? 60,
+        autoUpdateLatest:    (data.autoUpdateLatest    as boolean) ?? true,
+        portainerEndpointId: (data.portainerEndpointId as number)  ?? 1,
+      },
+    });
+  } catch (err) {
+    console.error("[settings] Save failed:", err instanceof Error ? err.message : err);
+    return NextResponse.json({ error: "Failed to save: " + (err instanceof Error ? err.message : "unknown") }, { status: 500 });
+  }
 
   return NextResponse.json({ success: true });
 }

@@ -35,6 +35,7 @@ model Settings {
   id                  String  @id @default("singleton")
   portainerUrl        String  @default("")
   portainerApiKey     String  @default("") // AES-256-GCM encrypted at rest
+  githubUser          String  @default("") // GitHub username for GHCR auth
   githubToken         String  @default("") // AES-256-GCM encrypted at rest
   pollingInterval     Int     @default(60) // seconds, range 30–3600
   autoUpdateLatest    Boolean @default(true)
@@ -51,6 +52,7 @@ model Service {
   remoteDigest    String   @default("")
   tag             String   @default("latest")
   isFloatingTag   Boolean  @default(true) // true = auto-update, false = notify only
+  arch            String   @default("amd64")   // image architecture: amd64, arm64, etc.
   status          String   @default("unknown") // running, stopped, updating, error
   updateAvailable Boolean  @default(false)
   portainerEndpointId Int      @default(1)

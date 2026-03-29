@@ -24,10 +24,13 @@ export default auth((req: NextRequest & { auth: unknown }) => {
   // NextAuth routes — always public
   if (pathname.startsWith("/api/auth")) return NextResponse.next();
 
-  // Login and setup pages — public
+  // Login, setup, and static assets — public
   if (pathname === "/login" || pathname.startsWith("/setup")) {
     return NextResponse.next();
   }
+
+  // Onboarding page and API — require auth (checked below) but not onboarding-complete
+  // These are handled by the normal auth gate further down.
 
   // ONLY PUT /api/team is public (invite registration — user has no session yet)
   // GET and POST on /api/team require a valid session (enforced inside the handler)

@@ -22,6 +22,7 @@ interface Service {
   isFloatingTag: boolean;
   status: string;
   updateAvailable: boolean;
+  arch: string;
   currentDigest: string;
   remoteDigest: string;
   lastChecked: string | null;
@@ -116,6 +117,9 @@ export default function ServiceCard({
         <span className="px-2 py-0.5 rounded text-xs bg-bg-secondary text-text-muted">
           {service.registry}
         </span>
+        <span className="px-2 py-0.5 rounded text-xs bg-bg-secondary text-text-muted font-mono">
+          {service.arch}
+        </span>
         {service.isFloatingTag && (
           <span className="px-2 py-0.5 rounded text-xs bg-success/15 text-success">
             auto-update
@@ -162,25 +166,26 @@ export default function ServiceCard({
                 service.isFloatingTag ? "text-accent" : "text-warning"
               )}
             >
-              {service.isFloatingTag
-                ? "Auto-updating..."
-                : "New version available"}
+              New version available
             </span>
           </div>
-          {!service.isFloatingTag && (
-            <button
-              onClick={() => onUpdate(service.id)}
-              disabled={updating}
-              className="flex items-center gap-1.5 px-3 py-1 rounded-md bg-warning/20 text-warning text-xs font-medium hover:bg-warning/30 transition-colors disabled:opacity-50"
-            >
-              {updating ? (
-                <Loader2 className="w-3 h-3 animate-spin" />
-              ) : (
-                <RefreshCw className="w-3 h-3" />
-              )}
-              Update
-            </button>
-          )}
+          <button
+            onClick={() => onUpdate(service.id)}
+            disabled={updating}
+            className={clsx(
+              "flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-medium transition-colors disabled:opacity-50",
+              service.isFloatingTag
+                ? "bg-accent/20 text-accent hover:bg-accent/30"
+                : "bg-warning/20 text-warning hover:bg-warning/30"
+            )}
+          >
+            {updating ? (
+              <Loader2 className="w-3 h-3 animate-spin" />
+            ) : (
+              <RefreshCw className="w-3 h-3" />
+            )}
+            Update
+          </button>
         </div>
       )}
 

@@ -6,6 +6,7 @@ import { Save, Loader2, CheckCircle, Wifi, AlertCircle } from "lucide-react";
 interface SettingsData {
   portainerUrl: string;
   portainerApiKey: string;
+  githubUser: string;
   githubToken: string;
   pollingInterval: number;
   autoUpdateLatest: boolean;
@@ -15,6 +16,7 @@ export default function SettingsPage() {
   const [settings, setSettings] = useState<SettingsData>({
     portainerUrl: "",
     portainerApiKey: "",
+    githubUser: "",
     githubToken: "",
     pollingInterval: 60,
     autoUpdateLatest: true,
@@ -27,6 +29,11 @@ export default function SettingsPage() {
     success: boolean;
     message: string;
   } | null>(null);
+  const [testingGithub, setTestingGithub] = useState(false);
+  const [githubTestResult, setGithubTestResult] = useState<{
+    success: boolean;
+    message: string;
+  } | null>(null);
 
   useEffect(() => {
     fetch("/api/settings")
@@ -35,20 +42,42 @@ export default function SettingsPage() {
       .finally(() => setLoading(false));
   }, []);
 
+  const [saveError, setSaveError] = useState("");
+
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
     setSaving(true);
     setSaved(false);
+    setSaveError("");
 
-    await fetch("/api/settings", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(settings),
-    });
+    try {
+      const res = await fetch("/api/settings", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(settings),
+      });
 
-    setSaving(false);
-    setSaved(true);
-    setTimeout(() => setSaved(false), 3000);
+      if (!res.ok) {
+        const text = await res.text();
+        let errMsg: string;
+        try {
+          const d = JSON.parse(text);
+          errMsg = d.error || `HTTP ${res.status}`;
+        } catch {
+          errMsg = `HTTP ${res.status}: ${text.substring(0, 200)}`;
+        }
+        setSaveError(errMsg);
+        setSaving(false);
+        return;
+      }
+
+      setSaved(true);
+      setTimeout(() => setSaved(false), 3000);
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : "Network error");
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function handleTestConnection() {
@@ -80,6 +109,40 @@ export default function SettingsPage() {
       });
     } finally {
       setTesting(false);
+    }
+  }
+
+  async function handleTestGithub() {
+    setTestingGithub(true);
+    setGithubTestResult(null);
+
+    try {
+      // Send credentials directly to the test endpoint — no save needed
+      const res = await fetch("/api/github/test", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          githubUser: settings.githubUser,
+          githubToken: settings.githubToken,
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        // Auto-fill username if it was detected
+        if (data.user && !settings.githubUser) {
+          setSettings({ ...settings, githubUser: data.user });
+        }
+        setGithubTestResult({ success: true, message: data.message });
+      } else {
+        setGithubTestResult({ success: false, message: data.error });
+      }
+    } catch (err) {
+      setGithubTestResult({
+        success: false,
+        message: err instanceof Error ? err.message : "Connection failed",
+      });
+    } finally {
+      setTestingGithub(false);
     }
   }
 
@@ -178,23 +241,71 @@ export default function SettingsPage() {
           <h2 className="text-sm font-semibold text-text-primary mb-4">
             GitHub Container Registry
           </h2>
-          <div>
-            <label className="block text-xs font-medium text-text-secondary mb-1.5">
-              Personal Access Token (PAT)
-            </label>
-            <input
-              type="password"
-              value={settings.githubToken}
-              onChange={(e) =>
-                setSettings({ ...settings, githubToken: e.target.value })
-              }
-              className="w-full px-3 py-2.5 bg-bg-secondary border border-border rounded-lg text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent/30 transition-colors"
-              placeholder="ghp_xxxxxxxxxxxx"
-            />
-            <p className="text-xs text-text-muted mt-1">
-              Needs <code className="text-accent">read:packages</code> scope.
-              Used to check for new image versions on ghcr.io
-            </p>
+          <div className="space-y-4">
+            <div>
+              <label className="block text-xs font-medium text-text-secondary mb-1.5">
+                GitHub Username
+              </label>
+              <input
+                type="text"
+                value={settings.githubUser}
+                onChange={(e) =>
+                  setSettings({ ...settings, githubUser: e.target.value })
+                }
+                className="w-full px-3 py-2.5 bg-bg-secondary border border-border rounded-lg text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent/30 transition-colors"
+                placeholder="your-github-username"
+              />
+              <p className="text-xs text-text-muted mt-1">
+                Your GitHub username — used with the PAT for GHCR authentication
+              </p>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-text-secondary mb-1.5">
+                Personal Access Token (PAT)
+              </label>
+              <input
+                type="password"
+                value={settings.githubToken}
+                onChange={(e) =>
+                  setSettings({ ...settings, githubToken: e.target.value })
+                }
+                className="w-full px-3 py-2.5 bg-bg-secondary border border-border rounded-lg text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent/30 transition-colors"
+                placeholder="ghp_xxxxxxxxxxxx"
+              />
+              <p className="text-xs text-text-muted mt-1">
+                Needs <code className="text-accent">read:packages</code> scope.
+                Used to check for new image versions on ghcr.io
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={handleTestGithub}
+              disabled={testingGithub}
+              className="flex items-center gap-2 px-4 py-2 bg-bg-secondary border border-border rounded-lg text-sm font-medium text-text-secondary hover:text-text-primary hover:border-border-bright transition-all disabled:opacity-50"
+            >
+              {testingGithub ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Wifi className="w-4 h-4" />
+              )}
+              Test Connection
+            </button>
+            {githubTestResult && (
+              <div
+                className={`flex items-start gap-2 px-3 py-2 rounded-lg text-xs ${
+                  githubTestResult.success
+                    ? "bg-success/10 text-success"
+                    : "bg-danger/10 text-danger"
+                }`}
+              >
+                {githubTestResult.success ? (
+                  <CheckCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                ) : (
+                  <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                )}
+                <span>{githubTestResult.message}</span>
+              </div>
+            )}
           </div>
         </section>
 
@@ -270,6 +381,12 @@ export default function SettingsPage() {
             <span className="flex items-center gap-1 text-xs text-success">
               <CheckCircle className="w-3.5 h-3.5" />
               Saved!
+            </span>
+          )}
+          {saveError && (
+            <span className="flex items-center gap-1 text-xs text-danger">
+              <AlertCircle className="w-3.5 h-3.5" />
+              {saveError}
             </span>
           )}
         </div>

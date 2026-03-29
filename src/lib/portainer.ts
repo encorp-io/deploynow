@@ -1,7 +1,9 @@
+import https from "https";
+import http from "http";
 import { prisma } from "./prisma";
 import { decryptSecret } from "./secretsCrypto";
 
-interface PortainerContainer {
+export interface PortainerContainer {
   Id: string;
   Names: string[];
   Image: string;
@@ -28,26 +30,82 @@ async function getSettings() {
   };
 }
 
+/**
+ * Low-level HTTP(S) request for Portainer.
+ * Portainer commonly uses self-signed TLS certs, so we set rejectUnauthorized: false
+ * scoped to Portainer calls only (not globally).
+ */
+function rawRequest(
+  url: string,
+  options: {
+    method?: string;
+    headers?: Record<string, string>;
+    body?: string;
+  } = {}
+): Promise<{ status: number; body: string }> {
+  return new Promise((resolve, reject) => {
+    const parsed = new URL(url);
+    const isHttps = parsed.protocol === "https:";
+    const lib = isHttps ? https : http;
+
+    const req = lib.request(
+      {
+        hostname: parsed.hostname,
+        port: parsed.port || (isHttps ? 443 : 80),
+        path: parsed.pathname + parsed.search,
+        method: options.method || "GET",
+        headers: options.headers || {},
+        rejectUnauthorized: false, // Portainer self-signed certs
+      },
+      (res) => {
+        const chunks: Buffer[] = [];
+        res.on("data", (chunk) => chunks.push(chunk));
+        res.on("end", () => {
+          resolve({
+            status: res.statusCode || 0,
+            body: Buffer.concat(chunks).toString("utf8"),
+          });
+        });
+      }
+    );
+
+    req.on("error", reject);
+
+    if (options.body) {
+      req.write(options.body);
+    }
+    req.end();
+  });
+}
+
 async function portainerFetch(path: string, options: RequestInit = {}) {
   const settings = await getSettings();
   const base = settings.portainerUrl.replace(/\/$/, "");
   const url = `${base}/api${path}`;
 
-  const res = await fetch(url, {
-    ...options,
-    headers: {
-      "X-API-Key": settings.portainerApiKey,
-      "Content-Type": "application/json",
-      ...options.headers,
-    },
+  const headers: Record<string, string> = {
+    "X-API-Key": settings.portainerApiKey,
+    "Content-Type": "application/json",
+  };
+
+  // Merge additional headers
+  if (options.headers) {
+    const h = options.headers as Record<string, string>;
+    Object.assign(headers, h);
+  }
+
+  const res = await rawRequest(url, {
+    method: (options.method as string) || "GET",
+    headers,
+    body: options.body as string | undefined,
   });
 
-  if (!res.ok) {
+  if (res.status < 200 || res.status >= 300) {
     // Don't include response body — may contain internal details
     throw new Error(`Portainer API error ${res.status} on ${path}`);
   }
 
-  return res.json();
+  return JSON.parse(res.body);
 }
 
 export async function getEndpoints(): Promise<PortainerEndpoint[]> {
@@ -61,6 +119,19 @@ export async function getConfiguredEndpointId(): Promise<number> {
 
 export async function getContainers(endpointId: number): Promise<PortainerContainer[]> {
   return portainerFetch(`/endpoints/${endpointId}/docker/containers/json?all=true`);
+}
+
+/**
+ * Inspect a Docker image via Portainer to get its architecture.
+ * Returns { Architecture, Os, Variant } from the image metadata.
+ */
+export async function getImageInspect(
+  endpointId: number,
+  imageId: string
+): Promise<{ Architecture?: string; Os?: string; Variant?: string }> {
+  return portainerFetch(
+    `/endpoints/${endpointId}/docker/images/${encodeURIComponent(imageId)}/json`
+  );
 }
 
 export async function getContainerInspect(endpointId: number, containerId: string) {
@@ -78,10 +149,11 @@ export async function pullImage(endpointId: number, image: string) {
 
   if (settings.githubToken && image.startsWith("ghcr.io")) {
     const decryptedGhToken = decryptSecret(settings.githubToken);
+    const ghUser = settings.githubUser || "token";
     if (decryptedGhToken) {
       const authConfig = Buffer.from(
         JSON.stringify({
-          username: "token",
+          username: ghUser,
           password: decryptedGhToken,
           serveraddress: "ghcr.io",
         })
@@ -90,58 +162,77 @@ export async function pullImage(endpointId: number, image: string) {
     }
   }
 
-  const res = await fetch(url, { method: "POST", headers });
+  const res = await rawRequest(url, { method: "POST", headers });
 
-  if (!res.ok) {
+  if (res.status < 200 || res.status >= 300) {
     throw new Error(`Image pull failed with status ${res.status}`);
   }
 
-  await res.text(); // consume streaming response
   return true;
 }
 
-export async function recreateContainer(endpointId: number, containerId: string) {
-  const inspect = await portainerFetch(
-    `/endpoints/${endpointId}/docker/containers/${containerId}/json`
-  );
+/**
+ * Recreate a container using Portainer's native recreate API.
+ *
+ * This is much safer than manual stop→delete→create→start because Portainer
+ * handles all config preservation (volumes, networks, env vars, labels, etc.)
+ * internally. If PullImage is true, it pulls the latest image first.
+ */
+export async function recreateContainer(endpointId: number, containerId: string, pullImage = false) {
+  // Portainer's recreate endpoint: POST /api/docker/{endpointId}/containers/{id}/recreate
+  // This preserves the full container configuration and just swaps the image.
+  const settings = await getSettings();
+  const base = settings.portainerUrl.replace(/\/$/, "");
+  const url = `${base}/api/docker/${endpointId}/containers/${containerId}/recreate`;
 
-  const config          = inspect.Config;
-  const hostConfig      = inspect.HostConfig;
-  const networkingConfig = inspect.NetworkSettings;
-  const name            = inspect.Name.replace(/^\//, "");
-
-  try {
-    await portainerFetch(
-      `/endpoints/${endpointId}/docker/containers/${containerId}/stop`,
-      { method: "POST" }
-    );
-  } catch {
-    // Container may already be stopped — ignore
-  }
-
-  await portainerFetch(
-    `/endpoints/${endpointId}/docker/containers/${containerId}?force=true`,
-    { method: "DELETE" }
-  );
-
-  const createBody = {
-    ...config,
-    HostConfig: hostConfig,
-    NetworkingConfig: { EndpointsConfig: networkingConfig?.Networks || {} },
-    name,
+  const headers: Record<string, string> = {
+    "X-API-Key": settings.portainerApiKey,
+    "Content-Type": "application/json",
   };
 
-  const created = await portainerFetch(
-    `/endpoints/${endpointId}/docker/containers/create?name=${encodeURIComponent(name)}`,
-    { method: "POST", body: JSON.stringify(createBody) }
-  );
+  // If pulling a GHCR image, include registry auth
+  // We need to check the container's image to decide
+  let registryAuth: Record<string, string> = {};
+  if (pullImage) {
+    try {
+      const inspect = await portainerFetch(
+        `/endpoints/${endpointId}/docker/containers/${containerId}/json`
+      );
+      const image: string = inspect.Config?.Image || "";
+      if (image.startsWith("ghcr.io") && settings.githubToken) {
+        const decryptedGhToken = decryptSecret(settings.githubToken);
+        const ghUser = settings.githubUser || "token";
+        if (decryptedGhToken) {
+          registryAuth = {
+            username: ghUser,
+            password: decryptedGhToken,
+            serveraddress: "ghcr.io",
+          };
+        }
+      }
+    } catch {
+      // Non-fatal — proceed without registry auth
+    }
+  }
 
-  await portainerFetch(
-    `/endpoints/${endpointId}/docker/containers/${created.Id}/start`,
-    { method: "POST" }
-  );
+  const body: Record<string, unknown> = { PullImage: pullImage };
+  if (Object.keys(registryAuth).length > 0) {
+    // Portainer expects the registry credentials in the body
+    body.Registries = registryAuth;
+  }
 
-  return created.Id as string;
+  const res = await rawRequest(url, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(body),
+  });
+
+  if (res.status < 200 || res.status >= 300) {
+    throw new Error(`Portainer recreate failed (status ${res.status})`);
+  }
+
+  const result = JSON.parse(res.body);
+  return (result.Id || result.id) as string;
 }
 
 export function parseImageRef(image: string): {

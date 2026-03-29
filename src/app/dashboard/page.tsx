@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import {
   RefreshCw,
   Activity,
@@ -23,6 +24,7 @@ interface Service {
   isFloatingTag: boolean;
   status: string;
   updateAvailable: boolean;
+  arch: string;
   currentDigest: string;
   remoteDigest: string;
   lastChecked: string | null;
@@ -39,6 +41,7 @@ interface LogEntry {
 }
 
 export default function DashboardPage() {
+  const router = useRouter();
   const [services, setServices] = useState<Service[]>([]);
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [loading, setLoading] = useState(true);
@@ -48,6 +51,16 @@ export default function DashboardPage() {
 
   const fetchData = useCallback(async () => {
     try {
+      // Check onboarding status first
+      const onboardingRes = await fetch("/api/onboarding");
+      if (onboardingRes.ok) {
+        const onboarding = await onboardingRes.json();
+        if (onboarding.needsOnboarding) {
+          router.push("/onboarding");
+          return;
+        }
+      }
+
       const [servicesRes, logsRes] = await Promise.all([
         fetch("/api/services"),
         fetch("/api/polling"),
@@ -59,7 +72,7 @@ export default function DashboardPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [router]);
 
   useEffect(() => {
     fetchData();

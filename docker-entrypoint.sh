@@ -40,22 +40,88 @@ async function seed() {
     await prisma.user.create({
       data: { email: adminEmail, name: 'Admin', password: hash, role: 'admin' }
     });
-    await prisma.settings.upsert({
-      where: { id: 'singleton' },
-      update: {},
-      create: {
+    console.log('[deployer] Admin user created: ' + adminEmail);
+  } else {
+    console.log('[deployer] Users exist — skipping user seed');
+  }
+
+  // Seed settings — env vars can pre-configure Portainer + GitHub credentials
+  // so users can skip the onboarding wizard entirely.
+  const portainerUrl    = process.env.PORTAINER_URL    || '';
+  const portainerApiKey = process.env.PORTAINER_API_KEY || process.env.PORTAINER_KEY || '';
+  const githubUser      = process.env.GITHUB_USER       || '';
+  const githubToken     = process.env.GITHUB_TOKEN      || '';
+
+  const settings = await prisma.settings.findUnique({ where: { id: 'singleton' } });
+  if (!settings) {
+    // First boot — create settings, encrypting secrets if AUTH_SECRET is available
+    let encApiKey = '';
+    let encGhToken = '';
+
+    // We encrypt using the same AES-256-GCM as the web app
+    if (portainerApiKey || githubToken) {
+      const crypto = require('crypto');
+      const key = crypto.pbkdf2Sync(process.env.AUTH_SECRET, 'encorp-deployer-secrets-v1', 100000, 32, 'sha256');
+
+      function encrypt(plaintext) {
+        if (!plaintext) return '';
+        const iv = crypto.randomBytes(16);
+        const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
+        const encrypted = Buffer.concat([cipher.update(plaintext, 'utf8'), cipher.final()]);
+        const authTag = cipher.getAuthTag();
+        return Buffer.concat([iv, authTag, encrypted]).toString('base64');
+      }
+
+      encApiKey  = encrypt(portainerApiKey);
+      encGhToken = encrypt(githubToken);
+    }
+
+    await prisma.settings.create({
+      data: {
         id: 'singleton',
-        portainerUrl: '',
-        portainerApiKey: '',
-        githubToken: '',
+        portainerUrl: portainerUrl,
+        portainerApiKey: encApiKey,
+        githubUser: githubUser,
+        githubToken: encGhToken,
         pollingInterval: 60,
         autoUpdateLatest: true,
         portainerEndpointId: 1
       }
     });
-    console.log('[deployer] Admin user created: ' + adminEmail);
+    if (portainerUrl) {
+      console.log('[deployer] Settings created with Portainer URL: ' + portainerUrl);
+    } else {
+      console.log('[deployer] Settings created — onboarding wizard will appear on first login');
+    }
+    if (portainerApiKey) console.log('[deployer] Portainer API key configured from env');
+    if (githubToken) console.log('[deployer] GitHub token configured from env');
   } else {
-    console.log('[deployer] Users exist — skipping seed');
+    // Settings exist — update only if env vars are set AND the field is currently empty
+    const updates = {};
+    if (portainerUrl && !settings.portainerUrl) updates.portainerUrl = portainerUrl;
+    if (githubUser && !settings.githubUser) updates.githubUser = githubUser;
+
+    if ((portainerApiKey && !settings.portainerApiKey) || (githubToken && !settings.githubToken)) {
+      const crypto = require('crypto');
+      const key = crypto.pbkdf2Sync(process.env.AUTH_SECRET, 'encorp-deployer-secrets-v1', 100000, 32, 'sha256');
+      function encrypt(plaintext) {
+        if (!plaintext) return '';
+        const iv = crypto.randomBytes(16);
+        const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
+        const encrypted = Buffer.concat([cipher.update(plaintext, 'utf8'), cipher.final()]);
+        const authTag = cipher.getAuthTag();
+        return Buffer.concat([iv, authTag, encrypted]).toString('base64');
+      }
+      if (portainerApiKey && !settings.portainerApiKey) updates.portainerApiKey = encrypt(portainerApiKey);
+      if (githubToken && !settings.githubToken) updates.githubToken = encrypt(githubToken);
+    }
+
+    if (Object.keys(updates).length > 0) {
+      await prisma.settings.update({ where: { id: 'singleton' }, data: updates });
+      console.log('[deployer] Settings updated from env vars: ' + Object.keys(updates).join(', '));
+    } else {
+      console.log('[deployer] Settings exist — no env overrides applied');
+    }
   }
   await prisma.\$disconnect();
 }

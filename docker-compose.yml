@@ -1,6 +1,6 @@
 services:
   deployer:
-    image: encorpio/deployer-for-portainer:latest
+    image: martinkey/deployer-for-portainer:latest
     # Or build locally:
     # build: .
     container_name: encorp-deployer
@@ -15,11 +15,9 @@ services:
       #
       # - /path/to/your/cert.pem:/certs/cert.pem:ro
       # - /path/to/your/key.pem:/certs/key.pem:ro
-      #
-      # Alternatively, set CERT_FILE and KEY_FILE env vars to absolute paths
-      # inside a mounted volume.
     environment:
-      # REQUIRED: generate with: openssl rand -base64 32
+      # ── Required ────────────────────────────────────────────────────────────
+      # Generate with: openssl rand -base64 32
       AUTH_SECRET: ${AUTH_SECRET}
 
       # First-boot admin credentials (only used when no users exist in DB)
@@ -31,6 +29,16 @@ services:
 
       # Public URL shown in invite links — use https since we're behind nginx
       NEXTAUTH_URL: ${NEXTAUTH_URL:-https://localhost:9444}
+
+      # ── Portainer connection (optional — can also configure in web UI) ──────
+      # If set, the onboarding wizard is skipped automatically.
+      PORTAINER_URL: ${PORTAINER_URL:-}
+      PORTAINER_API_KEY: ${PORTAINER_API_KEY:-}
+
+      # ── GitHub Container Registry (optional — can also configure in web UI) ─
+      # Your GitHub username + PAT with read:packages scope
+      GITHUB_USER: ${GITHUB_USER:-}
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
 
       # ── TLS certificate (optional) ──────────────────────────────────────────
       # Leave unset to use the auto-generated self-signed cert.
