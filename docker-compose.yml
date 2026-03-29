@@ -27,8 +27,10 @@ services:
       # SQLite database (inside /data volume)
       DATABASE_URL: file:/data/deployer.db
 
-      # Public URL shown in invite links — use https since we're behind nginx
-      NEXTAUTH_URL: ${NEXTAUTH_URL:-https://localhost:9444}
+      # Public URL of this deployer instance (used for invite links and auth callbacks).
+      # Set this to your server's actual URL, e.g. https://164.90.232.75:9444
+      # If unset, auth and redirects derive the URL from the incoming request headers.
+      NEXTAUTH_URL: ${NEXTAUTH_URL:-}
 
       # ── Portainer connection (optional — can also configure in web UI) ──────
       # If set, the onboarding wizard is skipped automatically.
