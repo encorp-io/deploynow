@@ -9,14 +9,22 @@ export default auth((req: NextRequest & { auth: unknown }) => {
   const { pathname } = req.nextUrl;
   const method = req.method;
 
-  // ── CSRF: verify Origin header matches the server's own origin ─────────────
+  // ── CSRF: verify Origin header matches the expected origin ──────────────────
   // This blocks cross-origin AJAX requests from forging state changes.
   // We skip NextAuth's own routes (they have built-in CSRF protection).
+  //
+  // In Docker, Next.js runs on http://127.0.0.1:3001 behind nginx (https://:9444),
+  // so req.nextUrl.origin won't match the browser's Origin header. We use
+  // NEXTAUTH_URL as the trusted origin since it reflects the public-facing URL.
   if (MUTATING_METHODS.has(method) && !pathname.startsWith("/api/auth")) {
     const requestOrigin = req.headers.get("origin");
-    const serverOrigin = req.nextUrl.origin;
-    if (requestOrigin && requestOrigin !== serverOrigin) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    if (requestOrigin) {
+      const trustedOrigin = process.env.NEXTAUTH_URL
+        ? new URL(process.env.NEXTAUTH_URL).origin
+        : req.nextUrl.origin;
+      if (requestOrigin !== trustedOrigin && requestOrigin !== req.nextUrl.origin) {
+        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      }
     }
   }
 

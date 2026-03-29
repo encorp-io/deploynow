@@ -43,6 +43,8 @@ ENV DATABASE_URL="file:/data/deployer.db"
 # Next.js listens on loopback only — nginx is the public-facing listener
 ENV PORT=3001
 ENV HOSTNAME="127.0.0.1"
+# Trust the proxy (nginx) — NextAuth needs this when behind a reverse proxy
+ENV AUTH_TRUST_HOST=true
 
 # ── Non-root user ─────────────────────────────────────────────────────────────
 RUN addgroup --system --gid 1001 nodejs && \
