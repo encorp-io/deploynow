@@ -14,7 +14,7 @@ concurrency:
 
 env:
   GHCR_IMAGE: ghcr.io/${{ github.repository }}
-  DH_IMAGE: encorpio/deployer-for-portainer
+  DH_IMAGE: encorp/deployer-for-portainer
 
 jobs:
   build-and-push:
