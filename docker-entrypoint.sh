@@ -11,7 +11,7 @@ fi
 # ── Database migrations ───────────────────────────────────────────────────────
 echo "[deployer] Running database migrations..."
 DATABASE_URL="${DATABASE_URL:-file:/data/deployer.db}" \
-  node_modules/.bin/prisma db push --schema=./prisma/schema.prisma --skip-generate
+  node node_modules/prisma/build/index.js db push --schema=./prisma/schema.prisma --skip-generate
 
 # ── Seed initial admin user (first boot only) ─────────────────────────────────
 echo "[deployer] Checking for initial admin user..."
