@@ -76,7 +76,7 @@ describe("GET /api/settings", () => {
 
     expect(data.portainerUrl).toBe("");
     expect(data.pollingInterval).toBe(60);
-    expect(data.autoUpdateLatest).toBe(true);
+    expect(data.autoUpdateLatest).toBe(false);
   });
 });
 

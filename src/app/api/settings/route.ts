@@ -42,7 +42,7 @@ export async function GET() {
     githubUser:         settings?.githubUser ?? "",
     githubToken:        settings?.githubToken    ? "••••••••" : "",
     pollingInterval:    settings?.pollingInterval    ?? 60,
-    autoUpdateLatest:   settings?.autoUpdateLatest   ?? true,
+    autoUpdateLatest:   settings?.autoUpdateLatest   ?? false,
     portainerEndpointId: settings?.portainerEndpointId ?? 1,
   });
 }
@@ -142,7 +142,7 @@ export async function PUT(request: Request) {
         githubUser:          (data.githubUser           as string)  ?? "",
         githubToken:         (data.githubToken         as string)  ?? "",
         pollingInterval:     (data.pollingInterval     as number)  ?? 60,
-        autoUpdateLatest:    (data.autoUpdateLatest    as boolean) ?? true,
+        autoUpdateLatest:    (data.autoUpdateLatest    as boolean) ?? false,
         portainerEndpointId: (data.portainerEndpointId as number)  ?? 1,
       },
     });

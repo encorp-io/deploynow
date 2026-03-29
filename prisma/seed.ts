@@ -86,7 +86,7 @@ async function main() {
       githubUser,
       githubToken: encGhToken,
       pollingInterval: 60,
-      autoUpdateLatest: true,
+      autoUpdateLatest: false,
     },
   });
 

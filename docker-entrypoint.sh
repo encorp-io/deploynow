@@ -84,7 +84,7 @@ async function seed() {
         githubUser: githubUser,
         githubToken: encGhToken,
         pollingInterval: 60,
-        autoUpdateLatest: true,
+        autoUpdateLatest: false,
         portainerEndpointId: 1
       }
     });

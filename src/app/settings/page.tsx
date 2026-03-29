@@ -19,7 +19,7 @@ export default function SettingsPage() {
     githubUser: "",
     githubToken: "",
     pollingInterval: 60,
-    autoUpdateLatest: true,
+    autoUpdateLatest: false,
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);

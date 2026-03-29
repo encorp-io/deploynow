@@ -106,7 +106,10 @@ export async function checkForUpdates() {
         },
       });
 
-      if (hasUpdate && service.isFloatingTag && settings?.autoUpdateLatest) {
+      // Auto-update floating tags if enabled, but NEVER auto-update Portainer itself.
+      // Auto-updating Portainer can break the API we depend on and crash the whole system.
+      const isPortainer = service.image.includes("portainer");
+      if (hasUpdate && service.isFloatingTag && settings?.autoUpdateLatest && !isPortainer) {
         await performUpdate(service.id);
       } else if (hasUpdate) {
         await prisma.activityLog.create({

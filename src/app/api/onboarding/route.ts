@@ -90,7 +90,7 @@ export async function PUT(request: Request) {
       githubUser: (data.githubUser as string) ?? "",
       githubToken: (data.githubToken as string) ?? "",
       pollingInterval: 60,
-      autoUpdateLatest: true,
+      autoUpdateLatest: false,
       portainerEndpointId: 1,
     },
   });

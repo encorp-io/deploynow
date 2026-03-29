@@ -38,7 +38,7 @@ model Settings {
   githubUser          String  @default("") // GitHub username for GHCR auth
   githubToken         String  @default("") // AES-256-GCM encrypted at rest
   pollingInterval     Int     @default(60) // seconds, range 30–3600
-  autoUpdateLatest    Boolean @default(true)
+  autoUpdateLatest    Boolean @default(false)
   portainerEndpointId Int     @default(1)  // which Portainer environment to manage
 }
 
