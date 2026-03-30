@@ -78,5 +78,5 @@ jobs:
             ${{ steps.meta-ghcr.outputs.tags }}
             ${{ steps.meta-dh.outputs.tags }}
           labels: ${{ steps.meta-ghcr.outputs.labels }}
-          cache-from: type=registry,ref=${{ env.GHCR_IMAGE }}:buildcache
-          cache-to: type=registry,ref=${{ env.GHCR_IMAGE }}:buildcache,mode=max
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
