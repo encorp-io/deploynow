@@ -235,6 +235,47 @@ export async function recreateContainer(endpointId: number, containerId: string,
   return (result.Id || result.id) as string;
 }
 
+export async function getContainerLogs(
+  endpointId: number,
+  containerId: string,
+  sinceSeconds: number
+): Promise<string> {
+  const settings = await getSettings();
+  const base = settings.portainerUrl.replace(/\/$/, "");
+  const since = Math.floor(Date.now() / 1000) - sinceSeconds;
+  const url = `${base}/api/endpoints/${endpointId}/docker/containers/${containerId}/logs?since=${since}&stdout=true&stderr=true`;
+
+  const res = await rawRequest(url, {
+    headers: { "X-API-Key": settings.portainerApiKey },
+  });
+
+  if (res.status < 200 || res.status >= 300) {
+    throw new Error(`Failed to fetch container logs (status ${res.status})`);
+  }
+
+  // Docker log streaming uses multiplexed frames with 8-byte binary headers.
+  // Strip control characters (except newline 0x0a) to get clean text for pattern matching.
+  return res.body.replace(/[\x00-\x09\x0b-\x1f\x7f]/g, "");
+}
+
+export async function restartContainer(endpointId: number, containerId: string): Promise<void> {
+  const settings = await getSettings();
+  const base = settings.portainerUrl.replace(/\/$/, "");
+  const url = `${base}/api/endpoints/${endpointId}/docker/containers/${containerId}/restart`;
+
+  const res = await rawRequest(url, {
+    method: "POST",
+    headers: {
+      "X-API-Key": settings.portainerApiKey,
+      "Content-Type": "application/json",
+    },
+  });
+
+  if (res.status < 200 || res.status >= 300) {
+    throw new Error(`Container restart failed (status ${res.status})`);
+  }
+}
+
 export function parseImageRef(image: string): {
   registry: string;
   repository: string;

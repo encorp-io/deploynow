@@ -56,10 +56,20 @@ model Service {
   status          String   @default("unknown") // running, stopped, updating, error
   updateAvailable Boolean  @default(false)
   portainerEndpointId Int      @default(1)
-  lastChecked     DateTime?
-  lastUpdated     DateTime?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  lastChecked       DateTime?
+  lastUpdated       DateTime?
+  lastHealthRestart DateTime?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+
+model HealthMonitor {
+  id          String  @id @default("singleton")
+  enabled     Boolean @default(false)
+  prefixes    String  @default("")              // newline-separated; empty = match all containers
+  logWindow   Int     @default(300)             // seconds of recent logs to scan per cycle
+  cooldown    Int     @default(10)              // minutes between restarts per container
+  logPatterns String  @default("connection timeout\nconnection refused\nconnection reset\nconnection timed out\nunable to connect\npool exhausted\ntoo many connections\nout of memory\nheap out of memory\noom killer\nkilled process\nmemory limit exceeded\nfatal error\npanic:\nsegfault\nsegmentation fault\ncore dumped\nunhandled exception\ndeadlock detected\nhealth check failed\nno space left\ni/o error\nread-only file system")
 }
 
 model ActivityLog {

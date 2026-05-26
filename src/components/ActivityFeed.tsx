@@ -7,6 +7,7 @@ import {
   ArrowUpCircle,
   Search,
   AlertTriangle,
+  RefreshCw,
 } from "lucide-react";
 
 interface LogEntry {
@@ -24,6 +25,7 @@ const actionConfig: Record<string, { icon: typeof CheckCircle; color: string }> 
   update_available: { icon: ArrowUpCircle, color: "text-warning" },
   error: { icon: AlertCircle, color: "text-danger" },
   manual_update: { icon: AlertTriangle, color: "text-accent" },
+  health_restart: { icon: RefreshCw, color: "text-warning" },
 };
 
 function formatTime(date: string): string {

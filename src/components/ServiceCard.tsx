@@ -27,6 +27,7 @@ interface Service {
   remoteDigest: string;
   lastChecked: string | null;
   lastUpdated: string | null;
+  lastHealthRestart: string | null;
 }
 
 function StatusBadge({ status }: { status: string }) {
@@ -186,6 +187,14 @@ export default function ServiceCard({
             )}
             Update
           </button>
+        </div>
+      )}
+
+      {/* Health restart badge */}
+      {service.lastHealthRestart && (
+        <div className="flex items-center gap-1.5 text-xs text-warning bg-warning/10 border border-warning/20 rounded-lg px-3 py-2 mb-4">
+          <RefreshCw className="w-3.5 h-3.5 flex-shrink-0" />
+          <span>Auto-restarted {timeAgo(service.lastHealthRestart)} by health monitor</span>
         </div>
       )}
 

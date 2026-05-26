@@ -12,6 +12,14 @@ interface SettingsData {
   autoUpdateLatest: boolean;
 }
 
+interface HealthMonitorData {
+  enabled: boolean;
+  prefixes: string;
+  logWindow: number;
+  cooldown: number;
+  logPatterns: string;
+}
+
 export default function SettingsPage() {
   const [settings, setSettings] = useState<SettingsData>({
     portainerUrl: "",
@@ -20,6 +28,13 @@ export default function SettingsPage() {
     githubToken: "",
     pollingInterval: 60,
     autoUpdateLatest: false,
+  });
+  const [healthMonitor, setHealthMonitor] = useState<HealthMonitorData>({
+    enabled: false,
+    prefixes: "",
+    logWindow: 300,
+    cooldown: 10,
+    logPatterns: "",
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -36,35 +51,46 @@ export default function SettingsPage() {
   } | null>(null);
 
   useEffect(() => {
-    fetch("/api/settings")
-      .then((r) => r.json())
-      .then(setSettings)
-      .finally(() => setLoading(false));
+    Promise.all([
+      fetch("/api/settings").then((r) => r.json()),
+      fetch("/api/health-monitor").then((r) => r.json()),
+    ]).then(([s, h]) => {
+      setSettings(s);
+      setHealthMonitor(h);
+    }).finally(() => setLoading(false));
   }, []);
 
   const [saveError, setSaveError] = useState("");
 
-  async function handleSave(e: React.FormEvent) {
+  async function handleSave(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setSaving(true);
     setSaved(false);
     setSaveError("");
 
     try {
-      const res = await fetch("/api/settings", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(settings),
-      });
+      const [res, healthRes] = await Promise.all([
+        fetch("/api/settings", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(settings),
+        }),
+        fetch("/api/health-monitor", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(healthMonitor),
+        }),
+      ]);
 
-      if (!res.ok) {
-        const text = await res.text();
+      const failed = [res, healthRes].find((r) => !r.ok);
+      if (failed) {
+        const text = await failed.text();
         let errMsg: string;
         try {
           const d = JSON.parse(text);
-          errMsg = d.error || `HTTP ${res.status}`;
+          errMsg = d.error || `HTTP ${failed.status}`;
         } catch {
-          errMsg = `HTTP ${res.status}: ${text.substring(0, 200)}`;
+          errMsg = `HTTP ${failed.status}: ${text.substring(0, 200)}`;
         }
         setSaveError(errMsg);
         setSaving(false);
@@ -360,6 +386,117 @@ export default function SettingsPage() {
                 </p>
               </div>
             </label>
+          </div>
+        </section>
+
+        {/* Container Health Monitor */}
+        <section className="bg-bg-card border border-border rounded-xl p-6">
+          <h2 className="text-sm font-semibold text-text-primary mb-1">
+            Container Health Monitor
+          </h2>
+          <p className="text-xs text-text-muted mb-4">
+            Scans container logs every 5 minutes and auto-restarts any container whose logs
+            match the configured patterns. Works with any container type.
+          </p>
+          <div className="space-y-4">
+            <label className="flex items-center gap-3 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={healthMonitor.enabled}
+                onChange={(e) =>
+                  setHealthMonitor({ ...healthMonitor, enabled: e.target.checked })
+                }
+                className="w-4 h-4 rounded bg-bg-secondary border-border text-accent focus:ring-accent/30"
+              />
+              <div>
+                <span className="text-sm text-text-primary">
+                  Enable automatic restart on log pattern match
+                </span>
+                <p className="text-xs text-text-muted">
+                  Runs independently every 5 minutes, separate from the image-update polling
+                  interval
+                </p>
+              </div>
+            </label>
+            <div>
+              <label className="block text-xs font-medium text-text-secondary mb-1.5">
+                Container name prefixes
+              </label>
+              <textarea
+                rows={3}
+                value={healthMonitor.prefixes}
+                onChange={(e) =>
+                  setHealthMonitor({ ...healthMonitor, prefixes: e.target.value })
+                }
+                className="w-full px-3 py-2.5 bg-bg-secondary border border-border rounded-lg text-sm text-text-primary font-mono placeholder:text-text-muted focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent/30 transition-colors resize-none"
+                placeholder={"n8n-worker\nglances\nmy-service"}
+              />
+              <p className="text-xs text-text-muted mt-1">
+                One prefix per line. Only containers whose names start with one of these
+                prefixes are checked. Leave empty to monitor all running containers.
+              </p>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-text-secondary mb-1.5">
+                Log patterns (triggers restart)
+              </label>
+              <textarea
+                rows={4}
+                value={healthMonitor.logPatterns}
+                onChange={(e) =>
+                  setHealthMonitor({ ...healthMonitor, logPatterns: e.target.value })
+                }
+                className="w-full px-3 py-2.5 bg-bg-secondary border border-border rounded-lg text-sm text-text-primary font-mono placeholder:text-text-muted focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent/30 transition-colors resize-none"
+              />
+              <p className="text-xs text-text-muted mt-1">
+                One keyword or phrase per line (case-insensitive). A container is restarted
+                when any pattern appears in its recent logs.
+              </p>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-medium text-text-secondary mb-1.5">
+                  Log window (seconds)
+                </label>
+                <input
+                  type="number"
+                  min="60"
+                  max="900"
+                  value={healthMonitor.logWindow}
+                  onChange={(e) =>
+                    setHealthMonitor({
+                      ...healthMonitor,
+                      logWindow: parseInt(e.target.value) || 300,
+                    })
+                  }
+                  className="w-full px-3 py-2.5 bg-bg-secondary border border-border rounded-lg text-sm text-text-primary focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent/30 transition-colors"
+                />
+                <p className="text-xs text-text-muted mt-1">
+                  How far back to scan logs each check (60–900)
+                </p>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-text-secondary mb-1.5">
+                  Cooldown (minutes)
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  max="60"
+                  value={healthMonitor.cooldown}
+                  onChange={(e) =>
+                    setHealthMonitor({
+                      ...healthMonitor,
+                      cooldown: parseInt(e.target.value) || 10,
+                    })
+                  }
+                  className="w-full px-3 py-2.5 bg-bg-secondary border border-border rounded-lg text-sm text-text-primary focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent/30 transition-colors"
+                />
+                <p className="text-xs text-text-muted mt-1">
+                  Minimum time between restarts per container (1–60)
+                </p>
+              </div>
+            </div>
           </div>
         </section>
 

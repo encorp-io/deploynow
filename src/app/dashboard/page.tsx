@@ -29,6 +29,7 @@ interface Service {
   remoteDigest: string;
   lastChecked: string | null;
   lastUpdated: string | null;
+  lastHealthRestart: string | null;
 }
 
 interface LogEntry {

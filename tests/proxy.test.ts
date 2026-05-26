@@ -4,7 +4,7 @@ import { NextRequest } from "next/server";
 // Mock auth to return the callback wrapper
 const mockAuthCallback = vi.fn();
 vi.mock("@/lib/auth", () => ({
-  auth: (fn: Function) => {
+  auth: (fn: (...args: any[]) => any) => {
     mockAuthCallback.mockImplementation(fn);
     return mockAuthCallback;
   },
