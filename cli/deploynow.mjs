@@ -8,6 +8,11 @@ const ago = (d) => {
   return s < 60 ? `${s}s ago` : s < 3600 ? `${Math.round(s / 60)}m ago` : s < 86400 ? `${Math.round(s / 3600)}h ago` : `${Math.round(s / 86400)}d ago`;
 };
 
+/**
+ * @param {string[]} argv
+ * @param {{ fetchImpl?: any, env?: Record<string, string | undefined>, print?: (s: string) => unknown }} [opts]
+ * @returns {Promise<number>}
+ */
 export async function main(argv, { fetchImpl = globalThis.fetch, env = process.env, print = out } = {}) {
   const { pos, flags } = parseArgs(argv);
   const [cmd, ...args] = pos;

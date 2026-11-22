@@ -2,9 +2,7 @@ import { describe, it, expect, vi } from "vitest";
 import fs from "fs";
 import os from "os";
 import path from "path";
-// @ts-expect-error plain ESM without types
 import { client, findApp, followDeployment, loadConfig, parseArgs, saveConfig, table } from "../../cli/lib.mjs";
-// @ts-expect-error plain ESM without types
 import { main } from "../../cli/deploynow.mjs";
 
 const TOKEN = "dn_" + "a".repeat(43);
@@ -13,8 +11,8 @@ const projects = [
 ];
 
 function fakeFetch(routes: Record<string, (body: unknown) => unknown>) {
-  return vi.fn(async (url: string, init: RequestInit) => {
-    const key = `${init.method} ${url.replace(/^https:\/\/dn\.test\/api/, "")}`;
+  return vi.fn(async (url: string | URL | Request, init: RequestInit = {}) => {
+    const key = `${init.method} ${String(url).replace(/^https:\/\/dn\.test\/api/, "")}`;
     const h = routes[key];
     expect((init.headers as Record<string, string>).Authorization).toBe(`Bearer ${TOKEN}`);
     if (!h) return new Response(JSON.stringify({ error: `no route ${key}` }), { status: 404 });

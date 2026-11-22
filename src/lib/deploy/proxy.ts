@@ -1,6 +1,7 @@
 /**
  * Edge proxy per endpoint: Traefik routes app domains and gets Let's Encrypt
- * certificates with the HTTP challenge.
+ * certificates with the HTTP challenge, or the DNS challenge through Cloudflare
+ * (for servers that aren't reachable on port 80, or sit behind Cloudflare's proxy).
  *
  *   managed   DeployNow runs deploynow-traefik on ports 80/443
  *   external  an existing Traefik already runs there (Dokploy's, for example);
@@ -28,7 +29,18 @@ export async function ensureNetwork(docker: Docker, name: string, labels: Record
   }
 }
 
-export function proxyArgs(email: string, network: string): string[] {
+export const CHALLENGES = ["http", "cloudflare"] as const;
+export type Challenge = (typeof CHALLENGES)[number];
+
+export function proxyArgs(email: string, network: string, challenge: Challenge = "http"): string[] {
+  const acme =
+    challenge === "cloudflare"
+      ? [
+          "--certificatesresolvers.letsencrypt.acme.dnschallenge=true",
+          "--certificatesresolvers.letsencrypt.acme.dnschallenge.provider=cloudflare",
+          "--certificatesresolvers.letsencrypt.acme.dnschallenge.resolvers=1.1.1.1:53,1.0.0.1:53",
+        ]
+      : ["--certificatesresolvers.letsencrypt.acme.httpchallenge=true", "--certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=web"];
   return [
     "--providers.docker=true",
     "--providers.docker.exposedbydefault=false",
@@ -38,8 +50,7 @@ export function proxyArgs(email: string, network: string): string[] {
     "--entrypoints.websecure.http.tls=true",
     `--certificatesresolvers.letsencrypt.acme.email=${email}`,
     "--certificatesresolvers.letsencrypt.acme.storage=/acme/acme.json",
-    "--certificatesresolvers.letsencrypt.acme.httpchallenge=true",
-    "--certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=web",
+    ...acme,
     "--ping=true",
     "--log.level=WARN",
     "--accesslog=false",
@@ -70,8 +81,10 @@ export async function proxyStatus(docker: Docker): Promise<ProxyStatus> {
 }
 
 /** Create or recreate the managed Traefik with the given ACME email. */
-export async function installProxy(docker: Docker, opts: { email: string; network: string }): Promise<void> {
+export async function installProxy(docker: Docker, opts: { email: string; network: string; challenge?: Challenge; dnsToken?: string }): Promise<void> {
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(opts.email)) throw new Error("Enter the email Let's Encrypt should send expiry notices to");
+  const challenge = opts.challenge ?? "http";
+  if (challenge === "cloudflare" && !/^[A-Za-z0-9_-]{20,200}$/.test(opts.dnsToken ?? "")) throw new Error("Enter a Cloudflare API token with Zone:DNS:Edit permission");
   await ensureNetwork(docker, opts.network);
   try {
     await docker.getImage(PROXY_IMAGE).inspect();
@@ -82,7 +95,8 @@ export async function installProxy(docker: Docker, opts: { email: string; networ
   const container = await docker.createContainer({
     name: PROXY_CONTAINER,
     Image: PROXY_IMAGE,
-    Cmd: proxyArgs(opts.email, opts.network),
+    Cmd: proxyArgs(opts.email, opts.network, challenge),
+    Env: challenge === "cloudflare" ? [`CF_DNS_API_TOKEN=${opts.dnsToken}`] : [],
     Labels: { "deploynow.role": "proxy" },
     ExposedPorts: { "80/tcp": {}, "443/tcp": {} },
     HostConfig: {

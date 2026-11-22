@@ -4,6 +4,8 @@ import { readJson, requireStepUp } from "@/lib/apiAuth";
 import { audit, clientIp } from "@/lib/audit";
 import { appGate, serializeApp, serializeDeployment, type AppWithRelations } from "@/lib/apps/access";
 import { ConfigError, validateAppInput } from "@/lib/apps/config";
+import { validateAppExtras } from "@/lib/apps/extras";
+import { removePreview } from "@/lib/apps/previews";
 import { EnvError } from "@/lib/apps/env";
 import { can } from "@/lib/rbac";
 import { dockerFor } from "@/lib/endpoints";
@@ -69,6 +71,7 @@ export async function PATCH(request: Request, { params }: Params) {
   let input;
   try {
     input = validateAppInput(body, app);
+    input = { ...input, ...(await validateAppExtras(body, input.sourceType, app.endpointId, app)) };
   } catch (err) {
     if (err instanceof ConfigError || err instanceof EnvError) return NextResponse.json({ error: err.message }, { status: 400 });
     throw err;
@@ -97,6 +100,8 @@ export async function DELETE(request: Request, { params }: Params) {
   const body = await readJson(request);
   const busy = await prisma.deployment.findFirst({ where: { applicationId: id, status: { in: ["queued", "running"] } } });
   if (busy) return NextResponse.json({ error: "Wait for the running deployment to finish or cancel it" }, { status: 409 });
+  // Its pull request previews go with it
+  for (const p of await prisma.application.findMany({ where: { previewOfId: id }, include: { endpoint: true } })) await removePreview(p);
   if (body.keepContainers !== true) {
     try {
       await teardownApplication(app);

@@ -18,7 +18,7 @@ import { prisma } from "../prisma";
 import { dockerFor, toConnection } from "../endpoints";
 import { dockerErrorMessage } from "../docker/client";
 import { pullImage } from "../docker/recreate";
-import { allRegistryLogins, registryAuthFor } from "../registryAuth";
+import { allRegistryLogins, registryAuthFor, registryById } from "../registryAuth";
 import { withDockerCli, runCommand, type RegistryLogin } from "../docker/cliBridge";
 import { decryptSecret } from "../secretsCrypto";
 import { audit } from "../audit";
@@ -71,7 +71,7 @@ async function pinnedRef(docker: Docker, image: string): Promise<{ ref: string; 
   }
 }
 
-async function pruneImages(docker: Docker, app: FullApp, log: DeployLogger) {
+async function pruneImages(docker: Docker, app: FullApp, log: DeployLogger, extraRepo = "") {
   const keep = await prisma.deployment.findMany({
     where: { applicationId: app.id, status: "success" },
     orderBy: { createdAt: "desc" },
@@ -80,7 +80,7 @@ async function pruneImages(docker: Docker, app: FullApp, log: DeployLogger) {
   });
   const keepTags = new Set(keep.map((d) => d.id.slice(-10)));
   try {
-    const images = await docker.listImages({ filters: { reference: [`dn/${app.slug}:*`, `dn/${app.slug}-*:*`] } });
+    const images = await docker.listImages({ filters: { reference: [`dn/${app.slug}:*`, `dn/${app.slug}-*:*`, ...(extraRepo ? [`${extraRepo}:*`] : [])] } });
     for (const img of images) {
       for (const tag of img.RepoTags ?? []) {
         const t = tag.split(":").pop() ?? "";
@@ -121,6 +121,7 @@ export async function runDeployment(deploymentId: string, ctx: RunContext = {}):
   const workDir = fs.mkdtempSync(path.join(os.tmpdir(), "dn-build-"));
   const result: Partial<Deployment> = {};
   let ok = false;
+  let pushRepo = "";
 
   try {
     const rollbackOf = dep.rollbackOfId ? await prisma.deployment.findUnique({ where: { id: dep.rollbackOfId } }) : null;
@@ -194,21 +195,41 @@ export async function runDeployment(deploymentId: string, ctx: RunContext = {}):
         try {
           await docker.getImage(image).inspect();
         } catch {
-          throw new Error(`The image ${image} from that deployment was removed; only the last ${KEEP_IMAGES} builds are kept`);
+          // Built and pushed elsewhere: the registry may still have it
+          if (image.startsWith("dn/")) throw new Error(`The image ${image} from that deployment was removed; only the last ${KEEP_IMAGES} builds are kept`);
+          log(`Pulling ${image}`);
+          await pullImage(docker, image, await registryAuthFor(image));
         }
         result.imageRef = image;
         result.imageDigest = rollbackOf.imageDigest;
       } else {
-        image = `dn/${app.slug}:${dep.id.slice(-10)}`;
+        // Optionally build on a separate build server and push to a registry; the target pulls it
+        const registry = await registryById(app.registryId);
+        const buildEndpoint = app.buildEndpointId && app.buildEndpointId !== app.endpointId ? await prisma.endpoint.findUnique({ where: { id: app.buildEndpointId } }) : null;
+        if (app.buildEndpointId && app.buildEndpointId !== app.endpointId && !buildEndpoint) throw new Error("The build server for this app was removed; pick another one in the app settings");
+        if (buildEndpoint && !registry?.namespace) throw new Error("Building on another endpoint needs a registry with a push namespace (Settings → Container registries)");
+        pushRepo = registry?.namespace ? `${registry.namespace}/${app.slug}` : "";
+        image = pushRepo ? `${pushRepo}:${dep.id.slice(-10)}` : `dn/${app.slug}:${dep.id.slice(-10)}`;
         const context = insideDir(repoDir, app.buildContext);
         const dockerfile = insideDir(repoDir, app.dockerfilePath);
         if (!fs.existsSync(dockerfile)) throw new Error(`${app.dockerfilePath} isn't in the repository`);
         const args = ["build", "--progress=plain", "-t", image, "-f", dockerfile, "--label", `deploynow.app=${app.id}`, "--label", `deploynow.deployment=${dep.id}`];
         args.push(context);
-        log(`Building ${image}`);
-        await withDockerCli(toConnection(app.endpoint), await registryLogins(), (cli) =>
-          runCommand("docker", args, { cwd: repoDir, env: cli.env, onOutput: log, signal: ctx.signal, timeoutMs: 30 * 60_000 }),
-        );
+        const builder = buildEndpoint ?? app.endpoint;
+        log(`Building ${image}${buildEndpoint ? ` on ${buildEndpoint.name}` : ""}`);
+        await withDockerCli(toConnection(builder), await registryLogins(), async (cli) => {
+          await runCommand("docker", args, { cwd: repoDir, env: cli.env, onOutput: log, signal: ctx.signal, timeoutMs: 30 * 60_000 });
+          if (pushRepo) {
+            log(`Pushing ${image} to ${registry!.name}`);
+            await runCommand("docker", ["push", image], { cwd: repoDir, env: cli.env, onOutput: log, signal: ctx.signal, timeoutMs: 30 * 60_000 });
+          }
+        });
+        if (buildEndpoint) {
+          log(`Pulling ${image} on ${app.endpoint.name}`);
+          await pullImage(docker, image, await registryAuthFor(image));
+          // The build server doesn't need to keep it
+          await dockerFor(buildEndpoint).getImage(image).remove().catch(() => {});
+        }
         const info = await docker.getImage(image).inspect();
         result.imageRef = image;
         result.imageDigest = info.Id;
@@ -273,7 +294,7 @@ export async function runDeployment(deploymentId: string, ctx: RunContext = {}):
       result.containerIds = list.map((c) => c.Id).join(",");
     }
 
-    await pruneImages(docker, app, log);
+    await pruneImages(docker, app, log, pushRepo);
     ok = true;
     log("Deployment finished");
   } catch (err) {

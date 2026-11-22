@@ -9,6 +9,8 @@ interface ProxyInfo {
   mode: "none" | "managed" | "external";
   network: string;
   email: string;
+  challenge: "http" | "cloudflare";
+  dnsToken: string;
   error: string;
   status?: { running: boolean; image: string; error: string };
   check?: { ok: boolean; message: string };
@@ -21,6 +23,8 @@ export default function ProxyCard({ endpointId }: { endpointId: string }) {
   const [mode, setMode] = useState<ProxyInfo["mode"]>("none");
   const [email, setEmail] = useState("");
   const [network, setNetwork] = useState("dokploy-network");
+  const [challenge, setChallenge] = useState<ProxyInfo["challenge"]>("http");
+  const [dnsToken, setDnsToken] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -31,6 +35,8 @@ export default function ProxyCard({ endpointId }: { endpointId: string }) {
     setInfo(d);
     setMode(d.mode);
     if (d.email) setEmail(d.email);
+    setChallenge(d.challenge || "http");
+    setDnsToken(d.dnsToken || "");
     if (d.mode === "external") setNetwork(d.network);
   }, [api, endpointId]);
 
@@ -41,14 +47,14 @@ export default function ProxyCard({ endpointId }: { endpointId: string }) {
   const apply = async () => {
     setBusy(true);
     setError("");
-    const res = await api(`/api/endpoints/${endpointId}/proxy`, { method: "POST", body: { mode, email, network } });
+    const res = await api(`/api/endpoints/${endpointId}/proxy`, { method: "POST", body: { mode, email, network, challenge, dnsToken } });
     setBusy(false);
     if (!res.ok) setError(res.data.error ?? "Could not change the proxy");
     load();
   };
 
   if (!info) return null;
-  const changed = mode !== info.mode || (mode === "managed" && email !== info.email) || (mode === "external" && network !== info.network);
+  const changed = mode !== info.mode || (mode === "managed" && (email !== info.email || challenge !== info.challenge || dnsToken !== info.dnsToken)) || (mode === "external" && network !== info.network);
 
   return (
     <Card className="p-5 mb-4">
@@ -74,9 +80,22 @@ export default function ProxyCard({ endpointId }: { endpointId: string }) {
         ))}
       </div>
       {mode === "managed" && (
-        <Field label="Let's Encrypt email" hint="Expiry notices go here">
-          <Input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="ops@example.com" />
-        </Field>
+        <div className="space-y-3">
+          <Field label="Let's Encrypt email" hint="Expiry notices go here">
+            <Input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="ops@example.com" />
+          </Field>
+          <Field label="How to prove domain ownership" hint="Use Cloudflare DNS when port 80 isn't reachable, or the domain sits behind Cloudflare's proxy">
+            <select value={challenge} onChange={(e) => setChallenge(e.target.value as ProxyInfo["challenge"])} className="w-full px-3 py-2 bg-bg-secondary border border-border rounded-lg text-sm text-text-primary">
+              <option value="http">HTTP challenge on port 80</option>
+              <option value="cloudflare">DNS challenge with Cloudflare</option>
+            </select>
+          </Field>
+          {challenge === "cloudflare" && (
+            <Field label="Cloudflare API token" hint="Create one with Zone → DNS → Edit for the zones you use">
+              <Input type="password" value={dnsToken} onFocus={() => dnsToken === "••••••••" && setDnsToken("")} onChange={(e) => setDnsToken(e.target.value)} autoComplete="new-password" />
+            </Field>
+          )}
+        </div>
       )}
       {mode === "external" && (
         <Field label="Traefik's Docker network" hint="Dokploy uses dokploy-network, with entrypoints web/websecure and a letsencrypt resolver">

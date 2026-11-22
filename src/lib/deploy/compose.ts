@@ -9,7 +9,7 @@
  *  - domains: Traefik labels and the proxy network on the target service.
  */
 import YAML from "yaml";
-import { traefikLabels } from "../apps/config";
+import { traefikLabels, type RoutedDomain } from "../apps/config";
 
 export class ComposeError extends Error {}
 
@@ -18,7 +18,7 @@ export interface RenderInput {
   appId: string;
   slug: string;
   deploymentId: string;
-  domains: { id: string; host: string; path: string; containerPort: number; https: boolean; service: string }[];
+  domains: (RoutedDomain & { service: string })[];
   proxyNetwork: string | null;
 }
 
@@ -97,7 +97,8 @@ export function renderCompose(input: RenderInput): RenderResult {
     if (domains.length) {
       if (!input.proxyNetwork) throw new ComposeError("Set up the edge proxy on this endpoint before adding domains");
       if (svc.network_mode !== undefined) throw new ComposeError(`Service "${name}" sets network_mode, so it can't join the proxy network`);
-      Object.assign(labels, traefikLabels(input.slug, domains, input.proxyNetwork));
+      // Compose interpolates $VAR in labels: escape the $ in bcrypt hashes and redirect patterns
+      for (const [k, v] of Object.entries(traefikLabels(input.slug, domains, input.proxyNetwork))) labels[k] = v.replace(/\$/g, "$$$$");
       if (svc.networks === undefined) {
         svc.networks = ["default", input.proxyNetwork];
       } else if (Array.isArray(svc.networks)) {

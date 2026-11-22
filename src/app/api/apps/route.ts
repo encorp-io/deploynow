@@ -5,6 +5,7 @@ import { readJson } from "@/lib/apiAuth";
 import { audit, clientIp } from "@/lib/audit";
 import { ID_RE, notFound, projectGate } from "@/lib/apps/access";
 import { ConfigError, validateAppInput } from "@/lib/apps/config";
+import { validateAppExtras } from "@/lib/apps/extras";
 import { EnvError } from "@/lib/apps/env";
 import { encryptSecret } from "@/lib/secretsCrypto";
 
@@ -23,6 +24,7 @@ export async function POST(request: Request) {
   let input;
   try {
     input = validateAppInput(body);
+    input = { ...input, ...(await validateAppExtras(body, input.sourceType, endpointId)) };
   } catch (err) {
     if (err instanceof ConfigError || err instanceof EnvError) return NextResponse.json({ error: err.message }, { status: 400 });
     throw err;

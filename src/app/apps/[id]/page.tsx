@@ -7,6 +7,7 @@ import { clsx } from "clsx";
 import { ArrowLeft, Copy, ExternalLink, Globe, Lock, Plus, Rocket, RotateCcw, Square, Trash2, Webhook } from "lucide-react";
 import { useApi } from "@/components/AppShell";
 import { Badge, Button, Card, ErrorText, Field, Input, Modal, PageHeader, stateTone, timeAgo } from "@/components/ui";
+import { AppBuildSettings } from "@/components/AppBuildSettings";
 import { AppForm, appStatusTone, emptyApp, EnvEditor, SOURCE_LABELS, type AppFormValue, type EnvRow } from "@/components/apps";
 
 interface Deployment {
@@ -23,7 +24,7 @@ interface Deployment {
   startedAt: string | null;
   finishedAt: string | null;
 }
-interface DomainRow { id: string; host: string; path: string; containerPort: number; service: string; https: boolean }
+interface DomainRow { id: string; host: string; path: string; containerPort: number; service: string; https: boolean; redirectTo: string; redirectCode: number; basicAuthUser: string }
 interface AppView extends Omit<AppFormValue, "endpointId"> {
   id: string;
   status: string;
@@ -37,6 +38,12 @@ interface AppView extends Omit<AppFormValue, "endpointId"> {
   deployments: Deployment[];
   containers: { id: string; name: string; service: string; image: string; state: string; status: string }[] | null;
   can: { deploy: boolean; manage: boolean; secrets: boolean; logs: boolean };
+  buildEndpointId: string | null;
+  registryId: string | null;
+  previewsEnabled: boolean;
+  previewDomain: string;
+  previewOfId: string | null;
+  prNumber: number | null;
 }
 
 type Tab = "overview" | "deployments" | "environment" | "domains" | "settings";
@@ -122,7 +129,7 @@ export default function AppPage({ params }: { params: Promise<{ id: string }> })
   const [selected, setSelected] = useState<Deployment | null>(null);
   const [env, setEnv] = useState<EnvRow[]>([]);
   const [settings, setSettings] = useState<AppFormValue | null>(null);
-  const [domain, setDomain] = useState({ host: "", path: "/", containerPort: "", service: "", https: true });
+  const [domain, setDomain] = useState({ host: "", path: "/", containerPort: "", service: "", https: true, kind: "route", redirectTo: "", redirectCode: "308", basicAuthUser: "", basicAuthPassword: "" });
   const [revealed, setRevealed] = useState<{ key: string; value: string } | null>(null);
   const [webhook, setWebhook] = useState<{ url: string; secret: string } | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -185,10 +192,21 @@ export default function AppPage({ params }: { params: Promise<{ id: string }> })
   const addDomain = async () => {
     setBusy("domain");
     setError("");
-    const res = await api(`/api/apps/${id}/domains`, { method: "POST", body: { ...domain, containerPort: Number(domain.containerPort) } });
+    const res = await api(`/api/apps/${id}/domains`, {
+      method: "POST",
+      body: {
+        host: domain.host,
+        path: domain.path,
+        service: domain.service,
+        https: domain.https,
+        containerPort: Number(domain.containerPort) || undefined,
+        ...(domain.kind === "redirect" ? { redirectTo: domain.redirectTo, redirectCode: Number(domain.redirectCode) } : {}),
+        ...(domain.kind === "auth" ? { basicAuthUser: domain.basicAuthUser, basicAuthPassword: domain.basicAuthPassword } : {}),
+      },
+    });
     setBusy("");
     if (!res.ok) return setError(res.data.error ?? "Could not add the domain");
-    setDomain({ host: "", path: "/", containerPort: domain.containerPort, service: domain.service, https: true });
+    setDomain({ ...domain, host: "", path: "/", https: true, redirectTo: "", basicAuthPassword: "" });
     setNotice("Domain added. Deploy to apply.");
     load();
   };
@@ -369,13 +387,40 @@ export default function AppPage({ params }: { params: Promise<{ id: string }> })
             <div key={d.id} className="flex items-center gap-3 text-sm">
               <Globe className="w-4 h-4 text-text-muted" />
               <span className="font-mono">{d.host}{d.path !== "/" ? d.path : ""}</span>
-              <span className="text-text-muted">→ {d.service ? `${d.service}:` : ""}{d.containerPort}</span>
+              <span className="text-text-muted">→ {d.redirectTo ? `${d.redirectTo} (${d.redirectCode})` : `${d.service ? `${d.service}:` : ""}${d.containerPort}`}</span>
               <Badge tone={d.https ? "success" : "muted"}>{d.https ? "HTTPS" : "HTTP only"}</Badge>
+              {d.basicAuthUser && <Badge tone="warning">password: {d.basicAuthUser}</Badge>}
               {app.can.manage && <Button variant="ghost" className="ml-auto" onClick={() => removeDomain(d.id)}><Trash2 className="w-4 h-4" /></Button>}
             </div>
           ))}
           {app.can.manage && app.endpoint.proxyMode !== "none" && (
             <div className="grid grid-cols-12 gap-2 items-end pt-2 border-t border-border">
+              <div className="col-span-12 flex gap-2">
+                {([["route", "Route to the app"], ["auth", "Route with a password"], ["redirect", "Redirect elsewhere"]] as const).map(([k, label]) => (
+                  <button key={k} type="button" onClick={() => setDomain({ ...domain, kind: k })} className={`px-2.5 py-1 rounded-lg border text-xs ${domain.kind === k ? "border-accent bg-accent/10 text-text-primary" : "border-border text-text-secondary"}`}>{label}</button>
+                ))}
+              </div>
+              {domain.kind === "redirect" && (
+                <>
+                  <div className="col-span-8"><Field label="Redirect to"><Input value={domain.redirectTo} onChange={(e) => setDomain({ ...domain, redirectTo: e.target.value })} placeholder="https://example.com" /></Field></div>
+                  <div className="col-span-4">
+                    <Field label="Status">
+                      <select value={domain.redirectCode} onChange={(e) => setDomain({ ...domain, redirectCode: e.target.value })} className="w-full px-3 py-2 bg-bg-secondary border border-border rounded-lg text-sm text-text-primary">
+                        <option value="308">308 permanent</option>
+                        <option value="301">301 permanent</option>
+                        <option value="307">307 temporary</option>
+                        <option value="302">302 temporary</option>
+                      </select>
+                    </Field>
+                  </div>
+                </>
+              )}
+              {domain.kind === "auth" && (
+                <>
+                  <div className="col-span-6"><Field label="User name"><Input value={domain.basicAuthUser} onChange={(e) => setDomain({ ...domain, basicAuthUser: e.target.value })} autoComplete="off" /></Field></div>
+                  <div className="col-span-6"><Field label="Password (8+ characters)"><Input type="password" value={domain.basicAuthPassword} onChange={(e) => setDomain({ ...domain, basicAuthPassword: e.target.value })} autoComplete="new-password" /></Field></div>
+                </>
+              )}
               <div className="col-span-4"><Field label="Domain"><Input value={domain.host} onChange={(e) => setDomain({ ...domain, host: e.target.value })} placeholder="app.example.com" /></Field></div>
               <div className="col-span-2"><Field label="Path"><Input value={domain.path} onChange={(e) => setDomain({ ...domain, path: e.target.value })} /></Field></div>
               {isCompose && <div className="col-span-2"><Field label="Service"><Input value={domain.service} onChange={(e) => setDomain({ ...domain, service: e.target.value })} placeholder="web" /></Field></div>}
@@ -383,7 +428,7 @@ export default function AppPage({ params }: { params: Promise<{ id: string }> })
               <label className="col-span-1 flex items-center gap-1.5 text-xs text-text-secondary pb-2.5">
                 <input type="checkbox" checked={domain.https} onChange={(e) => setDomain({ ...domain, https: e.target.checked })} /> HTTPS
               </label>
-              <div className="col-span-1"><Button onClick={addDomain} loading={busy === "domain"} disabled={!domain.host || !domain.containerPort}><Plus className="w-4 h-4" /></Button></div>
+              <div className="col-span-1"><Button onClick={addDomain} loading={busy === "domain"} disabled={!domain.host || (domain.kind === "redirect" ? !domain.redirectTo : !domain.containerPort)}><Plus className="w-4 h-4" /></Button></div>
             </div>
           )}
         </Card>
@@ -408,6 +453,10 @@ export default function AppPage({ params }: { params: Promise<{ id: string }> })
               </div>
             )}
           </Card>
+
+          {(app.sourceType === "git-dockerfile" || (app.sourceType === "git-compose" && !app.previewOfId)) && app.can.manage && (
+            <AppBuildSettings app={app} onSave={save} busy={busy === "save"} />
+          )}
 
           {(app.sourceType === "git-dockerfile" || app.sourceType === "git-compose") && app.can.manage && (
             <Card className="p-5">

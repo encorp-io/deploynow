@@ -14,7 +14,7 @@ const POLL_MS = 2000;
 const CONCURRENCY = 2;
 
 export interface DeployRequest {
-  trigger: "manual" | "push" | "digest" | "rollback" | "redeploy";
+  trigger: "manual" | "push" | "digest" | "rollback" | "redeploy" | "preview";
   commitSha?: string;
   commitMessage?: string;
   rollbackOfId?: string;

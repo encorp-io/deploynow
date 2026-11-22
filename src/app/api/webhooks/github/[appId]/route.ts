@@ -1,5 +1,6 @@
 /**
- * GitHub push webhook: POST /api/webhooks/github/<appId>
+ * GitHub webhook: POST /api/webhooks/github/<appId>
+ * push deploys the app; pull_request creates, updates or removes a preview.
  * Public (GitHub has no session); authenticated by the X-Hub-Signature-256
  * HMAC with the app's webhook secret.
  */
@@ -11,6 +12,7 @@ import { decryptSecret } from "@/lib/secretsCrypto";
 import { DeployBusyError, enqueueDeploy } from "@/lib/jobs";
 import { SHA_RE } from "@/lib/deploy/git";
 import { verifySignature } from "@/lib/deploy/webhook";
+import { handlePullRequest, type PullRequestEvent } from "@/lib/apps/previews";
 
 type Params = { params: Promise<{ appId: string }> };
 
@@ -28,13 +30,17 @@ export async function POST(request: Request, { params }: Params) {
 
   const event = request.headers.get("x-github-event");
   if (event === "ping") return NextResponse.json({ ok: true, message: "pong" });
-  if (event !== "push") return NextResponse.json({ ok: true, ignored: `event ${event}` });
+  if (event !== "push" && event !== "pull_request") return NextResponse.json({ ok: true, ignored: `event ${event}` });
 
-  let payload: { ref?: string; after?: string; deleted?: boolean; head_commit?: { message?: string } | null };
+  let payload: { ref?: string; after?: string; deleted?: boolean; head_commit?: { message?: string } | null } & PullRequestEvent;
   try {
     payload = JSON.parse(raw.toString("utf8"));
   } catch {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
+  }
+  if (event === "pull_request") {
+    const r = await handlePullRequest(app, payload);
+    return NextResponse.json(r, { status: r.deploymentId ? 202 : 200 });
   }
   if (app.updatePolicy !== "on-push") return NextResponse.json({ ok: true, ignored: "auto-deploy on push is off for this app" });
   if (payload.deleted || payload.ref !== `refs/heads/${app.gitBranch}`) return NextResponse.json({ ok: true, ignored: `not ${app.gitBranch}` });

@@ -234,23 +234,43 @@ export function validateAppInput(body: Record<string, unknown>, existing?: Exist
   return out;
 }
 
-/** Docker labels Traefik reads to route a domain to this app. */
-export function traefikLabels(
-  slug: string,
-  domains: { id: string; host: string; path: string; containerPort: number; https: boolean }[],
-  network: string,
-): Record<string, string> {
+export interface RoutedDomain {
+  id: string;
+  host: string;
+  path: string;
+  containerPort: number;
+  https: boolean;
+  redirectTo?: string;
+  redirectCode?: number;
+  basicAuth?: string;
+}
+
+/** Docker labels Traefik reads to route a domain to this app (or redirect it, or guard it with basic auth). */
+export function traefikLabels(slug: string, domains: RoutedDomain[], network: string): Record<string, string> {
   if (!domains.length) return {};
   const labels: Record<string, string> = { "traefik.enable": "true", "traefik.docker.network": network };
   for (const d of domains) {
     const r = `dn-${slug}-${d.id.slice(-8)}`;
     const rule = d.path && d.path !== "/" ? `Host(\`${d.host}\`) && PathPrefix(\`${d.path}\`)` : `Host(\`${d.host}\`)`;
     labels[`traefik.http.services.${r}.loadbalancer.server.port`] = String(d.containerPort);
+    const middlewares: string[] = [];
+    if (d.redirectTo) {
+      // Keep the path and query: https://www.example.com/a?b → https://example.com/a?b
+      labels[`traefik.http.middlewares.${r}-redirect.redirectregex.regex`] = "^https?://[^/]+(.*)$";
+      labels[`traefik.http.middlewares.${r}-redirect.redirectregex.replacement`] = `${d.redirectTo.replace(/\/+$/, "")}\${1}`;
+      labels[`traefik.http.middlewares.${r}-redirect.redirectregex.permanent`] = String((d.redirectCode ?? 308) === 301 || (d.redirectCode ?? 308) === 308);
+      middlewares.push(`${r}-redirect`);
+    } else if (d.basicAuth) {
+      labels[`traefik.http.middlewares.${r}-auth.basicauth.users`] = d.basicAuth.split("\n").filter(Boolean).join(",");
+      labels[`traefik.http.middlewares.${r}-auth.basicauth.removeheader`] = "true";
+      middlewares.push(`${r}-auth`);
+    }
+    labels[`traefik.http.routers.${r}.rule`] = rule;
+    labels[`traefik.http.routers.${r}.service`] = r;
+    if (middlewares.length) labels[`traefik.http.routers.${r}.middlewares`] = middlewares.join(",");
     if (d.https) {
-      labels[`traefik.http.routers.${r}.rule`] = rule;
       labels[`traefik.http.routers.${r}.entrypoints`] = "websecure";
       labels[`traefik.http.routers.${r}.tls.certresolver`] = "letsencrypt";
-      labels[`traefik.http.routers.${r}.service`] = r;
       labels[`traefik.http.routers.${r}-http.rule`] = rule;
       labels[`traefik.http.routers.${r}-http.entrypoints`] = "web";
       labels[`traefik.http.routers.${r}-http.middlewares`] = `${r}-https`;
@@ -258,10 +278,36 @@ export function traefikLabels(
       labels[`traefik.http.middlewares.${r}-https.redirectscheme.scheme`] = "https";
       labels[`traefik.http.middlewares.${r}-https.redirectscheme.permanent`] = "true";
     } else {
-      labels[`traefik.http.routers.${r}.rule`] = rule;
       labels[`traefik.http.routers.${r}.entrypoints`] = "web";
-      labels[`traefik.http.routers.${r}.service`] = r;
     }
   }
   return labels;
+}
+
+export const REDIRECT_CODES = [301, 302, 307, 308];
+
+/** "https://example.com" (no path beyond /, no query): where a redirect domain sends people. */
+export function validateRedirect(raw: unknown): string {
+  const v = String(raw ?? "").trim();
+  if (!v) return "";
+  let u: URL;
+  try {
+    u = new URL(v);
+  } catch {
+    throw new ConfigError("The redirect must be a URL like https://example.com");
+  }
+  if (u.protocol !== "https:" && u.protocol !== "http:") throw new ConfigError("The redirect must start with https://");
+  if (u.search || u.hash || u.username || u.password) throw new ConfigError("The redirect can't have a query, fragment or credentials");
+  if (/[$`\\\s]/.test(v)) throw new ConfigError("The redirect contains characters that aren't allowed");
+  return `${u.origin}${u.pathname === "/" ? "" : u.pathname.replace(/\/+$/, "")}`;
+}
+
+/** Basic auth users as htpasswd lines with bcrypt hashes ($2y$, which Traefik reads). */
+export async function basicAuthLine(user: unknown, password: unknown): Promise<string> {
+  const u = String(user ?? "").trim();
+  const p = String(password ?? "");
+  if (!/^[A-Za-z0-9._@-]{1,64}$/.test(u)) throw new ConfigError("The user name may use letters, digits and . _ @ -");
+  if (p.length < 8 || p.length > 72) throw new ConfigError("The password needs 8 to 72 characters");
+  const bcrypt = (await import("bcryptjs")).default;
+  return `${u}:${(await bcrypt.hash(p, 10)).replace(/^\$2[ab]\$/, () => "$2y$")}`;
 }

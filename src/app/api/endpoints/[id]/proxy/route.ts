@@ -3,7 +3,8 @@ import { prisma } from "@/lib/prisma";
 import { readJson } from "@/lib/apiAuth";
 import { audit, clientIp } from "@/lib/audit";
 import { endpointGate, dockerError } from "@/lib/endpointRoute";
-import { checkExternalProxy, installProxy, proxyStatus, removeProxy } from "@/lib/deploy/proxy";
+import { CHALLENGES, checkExternalProxy, installProxy, proxyStatus, removeProxy, type Challenge } from "@/lib/deploy/proxy";
+import { decryptSecret, encryptSecret } from "@/lib/secretsCrypto";
 import { validateNetworkName } from "@/lib/apps/config";
 
 type Params = { params: Promise<{ id: string }> };
@@ -13,7 +14,7 @@ export async function GET(_req: Request, { params }: Params) {
   const gate = await endpointGate(id, "endpoint.view");
   if (!gate.ok) return gate.response;
   const { endpoint, docker } = gate.ctx;
-  const base = { mode: endpoint.proxyMode, network: endpoint.proxyNetwork, email: endpoint.proxyEmail, error: endpoint.proxyError };
+  const base = { mode: endpoint.proxyMode, network: endpoint.proxyNetwork, email: endpoint.proxyEmail, challenge: endpoint.proxyChallenge, dnsToken: endpoint.proxyDnsToken ? "••••••••" : "", error: endpoint.proxyError };
   try {
     if (endpoint.proxyMode === "managed") return NextResponse.json({ ...base, status: await proxyStatus(docker) });
     if (endpoint.proxyMode === "external") return NextResponse.json({ ...base, check: await checkExternalProxy(docker, endpoint.proxyNetwork) });
@@ -23,7 +24,7 @@ export async function GET(_req: Request, { params }: Params) {
   }
 }
 
-/** {mode: "managed", email} | {mode: "external", network} | {mode: "none"} */
+/** {mode: "managed", email, challenge?: "http"|"cloudflare", dnsToken?} | {mode: "external", network} | {mode: "none"} */
 export async function POST(request: Request, { params }: Params) {
   const { id } = await params;
   const gate = await endpointGate(id, "endpoint.manage");
@@ -31,13 +32,17 @@ export async function POST(request: Request, { params }: Params) {
   const { endpoint, docker, user } = gate.ctx;
   const body = await readJson(request);
   const mode = String(body.mode ?? "");
-  let data: { proxyMode: string; proxyNetwork: string; proxyEmail: string; proxyError: string };
+  let data: { proxyMode: string; proxyNetwork: string; proxyEmail: string; proxyError: string; proxyChallenge?: string; proxyDnsToken?: string };
 
   try {
     if (mode === "managed") {
       const email = String(body.email ?? "").trim();
-      await installProxy(docker, { email, network: "deploynow" });
-      data = { proxyMode: "managed", proxyNetwork: "deploynow", proxyEmail: email, proxyError: "" };
+      const challenge = String(body.challenge ?? "http") as Challenge;
+      if (!CHALLENGES.includes(challenge)) return NextResponse.json({ error: "The challenge must be http or cloudflare" }, { status: 400 });
+      const typed = typeof body.dnsToken === "string" && body.dnsToken && body.dnsToken !== "••••••••" ? body.dnsToken.trim() : "";
+      const dnsToken = challenge === "cloudflare" ? typed || decryptSecret(endpoint.proxyDnsToken) || "" : "";
+      await installProxy(docker, { email, network: "deploynow", challenge, dnsToken });
+      data = { proxyMode: "managed", proxyNetwork: "deploynow", proxyEmail: email, proxyError: "", proxyChallenge: challenge, proxyDnsToken: dnsToken ? encryptSecret(dnsToken) : "" };
     } else if (mode === "external") {
       const network = validateNetworkName(body.network || "dokploy-network");
       const check = await checkExternalProxy(docker, network);
@@ -54,7 +59,7 @@ export async function POST(request: Request, { params }: Params) {
     }
   } catch (err) {
     const msg = (err as Error).message;
-    if (/Enter the email|already in use|Invalid network/.test(msg)) return NextResponse.json({ error: msg }, { status: 400 });
+    if (/Enter the email|Enter a Cloudflare|already in use|Invalid network/.test(msg)) return NextResponse.json({ error: msg }, { status: 400 });
     await prisma.endpoint.update({ where: { id }, data: { proxyError: msg.slice(0, 500) } });
     return dockerError(err);
   }

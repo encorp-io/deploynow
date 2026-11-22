@@ -12,6 +12,7 @@ export function configPath(env = process.env) {
 }
 
 /** The URL and token: flags, then environment, then the saved config. */
+/** @param {Record<string, any>} [flags] @param {Record<string, string | undefined>} [env] @param {string} [file] */
 export function loadConfig(flags = {}, env = process.env, file = configPath(env)) {
   let saved = {};
   try {
