@@ -10,6 +10,8 @@ interface SettingsData {
   pollingInterval: number;
   autoUpdateLatest: boolean;
   require2faForAdmins: boolean;
+  agentPublicUrl: string;
+  agentDefaultUrl?: string;
 }
 
 interface HealthMonitorData {
@@ -27,6 +29,7 @@ export default function SettingsPage() {
     pollingInterval: 60,
     autoUpdateLatest: false,
     require2faForAdmins: true,
+    agentPublicUrl: "",
   });
   const [healthMonitor, setHealthMonitor] = useState<HealthMonitorData>({
     enabled: false,
@@ -171,6 +174,22 @@ export default function SettingsPage() {
               </span>
             </span>
           </label>
+        </section>
+
+        {/* Agents */}
+        <section className="bg-bg-card border border-border rounded-xl p-6">
+          <h2 className="text-sm font-semibold text-text-primary mb-1">Agents</h2>
+          <p className="text-xs text-text-muted mb-4">
+            Agents on remote servers connect out to this address over mutual TLS (port 8444 by default, set with AGENT_PORT).
+            It must reach this DeployNow directly, not through a proxy that terminates TLS.
+          </p>
+          <label className="block text-xs font-medium text-text-secondary mb-1.5">Agent address</label>
+          <input
+            value={settings.agentPublicUrl ?? ""}
+            onChange={(e) => setSettings({ ...settings, agentPublicUrl: e.target.value })}
+            placeholder={settings.agentDefaultUrl || "https://deploynow.example.com:8444"}
+            className="w-full px-3 py-2 bg-bg-secondary border border-border rounded-lg text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-accent"
+          />
         </section>
 
         {/* GitHub */}

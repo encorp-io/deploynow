@@ -7,7 +7,7 @@ import { useApi } from "@/components/AppShell";
 import EndpointForm, { type EndpointView } from "@/components/EndpointForm";
 import { Badge, Button, Card, Modal, PageHeader, formatBytes, stateTone, timeAgo } from "@/components/ui";
 
-const TYPE_LABEL = { socket: "Local socket", ssh: "SSH", tls: "TLS API" } as const;
+const TYPE_LABEL = { socket: "Local socket", ssh: "SSH", tls: "TLS API", agent: "Agent" } as const;
 
 export default function EndpointsPage() {
   const api = useApi();

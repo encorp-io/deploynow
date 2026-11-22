@@ -85,8 +85,9 @@ RUN chmod +x /app/docker-entrypoint.sh
 VOLUME ["/data", "/certs"]
 
 # 9444 — HTTPS (nginx frontend)
+# 8444 — agent hub (mutual TLS; remote agents connect out to it)
 # 3001 is intentionally NOT exposed — it is loopback-only inside the container
-EXPOSE 9444
+EXPOSE 9444 8444
 
 USER nextjs
 

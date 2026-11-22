@@ -2,13 +2,14 @@
 
 import { useState } from "react";
 import { clsx } from "clsx";
-import { CheckCircle, AlertCircle, HardDrive, KeyRound, Lock } from "lucide-react";
+import { CheckCircle, AlertCircle, HardDrive, KeyRound, Lock, Radio } from "lucide-react";
+import AgentJoin, { type JoinInfo } from "./AgentJoin";
 import { Button, ErrorText, Field, Input, TextArea } from "./ui";
 
 export interface EndpointView {
   id: string;
   name: string;
-  type: "socket" | "ssh" | "tls";
+  type: "socket" | "ssh" | "tls" | "agent";
   host: string;
   port: number | null;
   username: string;
@@ -24,12 +25,16 @@ export interface EndpointView {
   hostKeyFingerprint: string;
   hasPrivateKey: boolean;
   hasTlsCerts: boolean;
+  agent?: { enrolled: boolean; joinPending: boolean; version: string; hostname: string; connectedAt: string | null } | null;
+  hostMetrics?: { cpus: number; load1: number; load5: number; memTotal: number; memAvailable: number; diskPath: string; diskTotal: number; diskFree: number } | null;
+  hostMetricsAt?: string | null;
 }
 
 const TYPES = [
   { value: "socket", label: "Local socket", icon: HardDrive, hint: "The machine this deployer runs on. Mount /var/run/docker.sock into the container." },
   { value: "ssh", label: "SSH", icon: KeyRound, hint: "A remote machine you can SSH into. The user needs access to Docker (root or the docker group)." },
   { value: "tls", label: "Docker TLS API", icon: Lock, hint: "A Docker daemon listening on TCP 2376 with client certificate auth." },
+  { value: "agent", label: "Agent", icon: Radio, hint: "A server behind NAT or a firewall. You run a small agent there; it connects out to DeployNow over mutual TLS, so no inbound port is needed." },
 ] as const;
 
 type Api = <T = Record<string, unknown>>(url: string, init?: { method?: string; body?: unknown }) => Promise<{ ok: boolean; status: number; data: T & { error?: string } }>;
@@ -61,6 +66,7 @@ export default function EndpointForm({
   const [test, setTest] = useState<{ ok: boolean; error?: string; info?: { dockerVersion: string; os: string; containers: number }; hostKeyFingerprint?: string } | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState<"" | "test" | "save">("");
+  const [joined, setJoined] = useState<{ endpoint: EndpointView; join: JoinInfo } | null>(null);
 
   const set = (k: keyof typeof form) => (e: { target: { value: string } }) => setForm({ ...form, [k]: e.target.value });
 
@@ -98,16 +104,29 @@ export default function EndpointForm({
       body: payload({ saveOffline }),
     });
     setBusy("");
-    if (res.ok) onSaved(res.data as EndpointView);
-    else setError(res.data.error ?? "Could not save");
+    if (!res.ok) return setError(res.data.error ?? "Could not save");
+    const join = (res.data as { join?: JoinInfo }).join;
+    if (join) setJoined({ endpoint: res.data as EndpointView, join });
+    else onSaved(res.data as EndpointView);
+  }
+
+  if (joined) {
+    return (
+      <div className="space-y-4">
+        <AgentJoin join={joined.join} />
+        <div className="flex justify-end">
+          <Button type="button" onClick={() => onSaved(joined.endpoint)}>Done</Button>
+        </div>
+      </div>
+    );
   }
 
   const typeInfo = TYPES.find((t) => t.value === form.type)!;
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-3 gap-2">
-        {TYPES.map((t) => {
+      <div className="grid grid-cols-4 gap-2">
+        {TYPES.filter((t) => !existing || (t.value === "agent") === (existing.type === "agent")).map((t) => {
           const Icon = t.icon;
           return (
             <button
@@ -139,7 +158,7 @@ export default function EndpointForm({
         </Field>
       </div>
 
-      {form.type === "socket" ? (
+      {form.type === "agent" ? null : form.type === "socket" ? (
         <Field label="Socket path">
           <Input value={form.host} onChange={set("host")} placeholder="/var/run/docker.sock" />
         </Field>
@@ -203,7 +222,7 @@ export default function EndpointForm({
       <ErrorText>{error}</ErrorText>
 
       <div className="flex justify-between gap-2 pt-2">
-        <Button type="button" variant="secondary" loading={busy === "test"} onClick={runTest}>Test connection</Button>
+        {form.type === "agent" ? <span /> : <Button type="button" variant="secondary" loading={busy === "test"} onClick={runTest}>Test connection</Button>}
         <div className="flex gap-2">
           <Button type="button" variant="ghost" onClick={onCancel}>Cancel</Button>
           {error.startsWith("Could not connect") && (

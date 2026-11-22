@@ -70,9 +70,8 @@ export async function createJoinToken(endpointId: string): Promise<{ token: stri
 }
 
 /** What agents dial: AGENT_PUBLIC_URL, Settings, or NEXTAUTH_URL's host on the agent port. */
-export async function agentPublicUrl(): Promise<string> {
-  const s = await prisma.settings.findUnique({ where: { id: "singleton" } });
-  if (s?.agentPublicUrl) return s.agentPublicUrl;
+/** The address agents dial when none is set in Settings. */
+export function defaultAgentUrl(): string {
   if (process.env.AGENT_PUBLIC_URL) return process.env.AGENT_PUBLIC_URL.replace(/\/+$/, "");
   const port = Number(process.env.AGENT_PORT ?? 8444) || 8444;
   try {
@@ -81,6 +80,11 @@ export async function agentPublicUrl(): Promise<string> {
   } catch {
     return `https://<this-server>:${port}`;
   }
+}
+
+export async function agentPublicUrl(): Promise<string> {
+  const s = await prisma.settings.findUnique({ where: { id: "singleton" } });
+  return s?.agentPublicUrl || defaultAgentUrl();
 }
 
 export async function joinInfo(endpointId: string) {

@@ -4,6 +4,7 @@ import { encryptSecret } from "@/lib/secretsCrypto";
 import { requireUser, readJson } from "@/lib/apiAuth";
 import { audit, clientIp } from "@/lib/audit";
 import { validateVaultAddr } from "@/lib/vault";
+import { defaultAgentUrl } from "@/lib/agent/hub";
 
 const MASK = "••••••••";
 
@@ -18,6 +19,8 @@ export async function GET() {
     pollingInterval: settings?.pollingInterval ?? 60,
     autoUpdateLatest: settings?.autoUpdateLatest ?? false,
     require2faForAdmins: settings?.require2faForAdmins ?? true,
+    agentPublicUrl: settings?.agentPublicUrl ?? "",
+    agentDefaultUrl: defaultAgentUrl(),
     vault: {
       addr: settings?.vaultAddr ?? "",
       namespace: settings?.vaultNamespace ?? "",
@@ -57,6 +60,14 @@ export async function PUT(request: Request) {
   }
 
   if (body.autoUpdateLatest !== undefined) data.autoUpdateLatest = Boolean(body.autoUpdateLatest);
+
+  if (typeof body.agentPublicUrl === "string") {
+    const v = body.agentPublicUrl.trim().replace(/\/+$/, "");
+    if (v && !/^https:\/\/[^\s/]+$/.test(v)) {
+      return NextResponse.json({ error: "The agent address must look like https://host:port" }, { status: 400 });
+    }
+    data.agentPublicUrl = v;
+  }
 
   if (body.require2faForAdmins !== undefined) {
     // Turning the requirement off weakens every admin account; owners only
