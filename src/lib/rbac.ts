@@ -49,6 +49,14 @@ export const PERMISSIONS = {
   "users.manage": { min: "admin", scoped: false },
   "settings.manage": { min: "admin", scoped: false },
   "polling.run": { min: "admin", scoped: false },
+  // Apps (phase 2): scoped to a project
+  "project.view": { min: "viewer", scoped: true },
+  "app.logs": { min: "operator", scoped: true },
+  "app.deploy": { min: "operator", scoped: true },
+  "app.manage": { min: "admin", scoped: true },
+  "app.secrets": { min: "admin", scoped: true },
+  "project.manage": { min: "admin", scoped: false },
+  "notifications.manage": { min: "admin", scoped: false },
 } as const satisfies Record<string, { min: Role; scoped: boolean }>;
 
 export type Permission = keyof typeof PERMISSIONS;
@@ -64,19 +72,23 @@ export interface Subject {
   bindings?: Binding[];
 }
 
-export function effectiveRole(subject: Subject, scope?: { endpointId?: string }): Role {
+export interface Scope {
+  endpointId?: string;
+  projectId?: string;
+}
+
+export function effectiveRole(subject: Subject, scope?: Scope): Role {
   let role = normalizeRole(subject.role);
-  if (scope?.endpointId) {
-    for (const b of subject.bindings ?? []) {
-      if (b.scopeType === "endpoint" && b.scopeId === scope.endpointId) {
-        role = higherRole(role, normalizeRole(b.role));
-      }
-    }
+  for (const b of subject.bindings ?? []) {
+    const hit =
+      (scope?.endpointId && b.scopeType === "endpoint" && b.scopeId === scope.endpointId) ||
+      (scope?.projectId && b.scopeType === "project" && b.scopeId === scope.projectId);
+    if (hit) role = higherRole(role, normalizeRole(b.role));
   }
   return role;
 }
 
-export function can(subject: Subject, permission: Permission, scope?: { endpointId?: string }): boolean {
+export function can(subject: Subject, permission: Permission, scope?: Scope): boolean {
   const rule = PERMISSIONS[permission];
   const role = rule.scoped ? effectiveRole(subject, scope) : normalizeRole(subject.role);
   return roleAtLeast(role, rule.min);

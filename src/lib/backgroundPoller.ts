@@ -32,6 +32,8 @@ async function runCycle() {
     const { syncServices, checkForUpdates } = await import("./polling");
     await syncServices();
     await checkForUpdates();
+    const { checkAppImageUpdates } = await import("./apps/autoUpdate");
+    await checkAppImageUpdates();
   } catch (err) {
     // Message only: the full error object may contain credentials
     const msg = err instanceof Error ? err.message : "unknown error";

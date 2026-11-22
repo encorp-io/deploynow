@@ -35,7 +35,7 @@ export async function getCurrentUser() {
   return current;
 }
 
-export async function requireUser(permission?: Permission, scope?: { endpointId?: string }) {
+export async function requireUser(permission?: Permission, scope?: { endpointId?: string; projectId?: string }) {
   if (!current) return { ok: false as const, response: NextResponse.json({ error: "Unauthorized" }, { status: 401 }) };
   if (permission && !can(current, permission, scope)) {
     return { ok: false as const, response: NextResponse.json({ error: "You don't have permission to do that" }, { status: 403 }) };

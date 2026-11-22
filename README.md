@@ -13,7 +13,7 @@
 
 </div>
 
-> **v2.0 branch.** This branch is turning the deployer into a standalone Docker manager that no longer needs Portainer: 2FA, roles, multiple machines over SSH or TLS, and a container explorer with logs and a console. See [docs/v2.md](docs/v2.md) for what changed and how to upgrade. The rest of this README still describes v1.
+> **v2.0 branch: DeployNow.** This branch turns the deployer into DeployNow, a standalone replacement for Portainer and Dokploy: 2FA, roles, multiple machines over SSH or TLS, a container explorer with logs and a console, and projects with apps deployed from images, Dockerfiles or compose files in Git, with domains and SSL, encrypted secrets, rollbacks and notifications. See [docs/v2.md](docs/v2.md) for what changed and how to upgrade. The rest of this README still describes v1.
 
 ---
 
@@ -217,6 +217,7 @@ From this point, the background poller runs every 60 seconds (configurable) and 
 | `ADMIN_EMAIL` | No | `admin@encorp.io` | Admin email created on first boot |
 | `ADMIN_PASSWORD` | No | `admin` | Admin password created on first boot. **Change this.** |
 | `PORT` | No | `3000` | HTTP port |
+| `DEPLOYNOW_DATA_DIR` | No | the database's folder | Where deploy logs and build checkouts are kept (v2) |
 
 > **Security note:** `ADMIN_EMAIL` and `ADMIN_PASSWORD` are only used if no users exist in the database (first boot). After the first login, change the password from your account settings.
 

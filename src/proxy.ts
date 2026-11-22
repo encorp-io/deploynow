@@ -45,6 +45,11 @@ export default auth((req: NextRequest & { auth: unknown }) => {
     return NextResponse.next();
   }
 
+  // GitHub push webhooks — authenticated by their HMAC signature in the route
+  if (pathname.startsWith("/api/webhooks/github/") && method === "POST") {
+    return NextResponse.next();
+  }
+
   // ONLY PUT /api/team is public (invite registration — user has no session yet)
   if (pathname.startsWith("/api/team") && method === "PUT") {
     return NextResponse.next();

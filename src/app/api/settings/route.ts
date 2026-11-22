@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { encryptSecret } from "@/lib/secretsCrypto";
 import { requireUser, readJson } from "@/lib/apiAuth";
 import { audit, clientIp } from "@/lib/audit";
+import { validateVaultAddr } from "@/lib/vault";
 
 const MASK = "••••••••";
 
@@ -17,6 +18,15 @@ export async function GET() {
     pollingInterval: settings?.pollingInterval ?? 60,
     autoUpdateLatest: settings?.autoUpdateLatest ?? false,
     require2faForAdmins: settings?.require2faForAdmins ?? true,
+    vault: {
+      addr: settings?.vaultAddr ?? "",
+      namespace: settings?.vaultNamespace ?? "",
+      auth: settings?.vaultAuth ?? "token",
+      token: settings?.vaultToken ? MASK : "",
+      roleId: settings?.vaultRoleId ?? "",
+      secretId: settings?.vaultSecretId ? MASK : "",
+      caCert: settings?.vaultCaCert ?? "",
+    },
   });
 }
 
@@ -54,6 +64,28 @@ export async function PUT(request: Request) {
       return NextResponse.json({ error: "Only an owner can turn off required 2FA" }, { status: 403 });
     }
     data.require2faForAdmins = Boolean(body.require2faForAdmins);
+  }
+
+  if (body.vault && typeof body.vault === "object") {
+    const v = body.vault as Record<string, unknown>;
+    try {
+      if (v.addr !== undefined) data.vaultAddr = validateVaultAddr(v.addr);
+    } catch (err) {
+      return NextResponse.json({ error: (err as Error).message }, { status: 400 });
+    }
+    if (v.namespace !== undefined) data.vaultNamespace = String(v.namespace).trim().slice(0, 200);
+    if (v.auth !== undefined) {
+      if (v.auth !== "token" && v.auth !== "approle") return NextResponse.json({ error: "Vault login must be token or approle" }, { status: 400 });
+      data.vaultAuth = v.auth;
+    }
+    if (typeof v.token === "string" && v.token !== MASK) data.vaultToken = v.token ? encryptSecret(v.token.trim().slice(0, 1000)) : "";
+    if (v.roleId !== undefined) data.vaultRoleId = String(v.roleId).trim().slice(0, 200);
+    if (typeof v.secretId === "string" && v.secretId !== MASK) data.vaultSecretId = v.secretId ? encryptSecret(v.secretId.trim().slice(0, 1000)) : "";
+    if (v.caCert !== undefined) {
+      const ca = String(v.caCert).trim();
+      if (ca && !ca.includes("BEGIN CERTIFICATE")) return NextResponse.json({ error: "The CA certificate must be PEM" }, { status: 400 });
+      data.vaultCaCert = ca.slice(0, 20_000);
+    }
   }
 
   await prisma.settings.upsert({

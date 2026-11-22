@@ -10,6 +10,9 @@ export async function register() {
     const { startWsServer } = await import("./lib/wsServer");
     startWsServer();
 
+    const { startWorker } = await import("./lib/jobs");
+    startWorker();
+
     const { startBackgroundPolling, startHealthMonitorSchedule } = await import("./lib/backgroundPoller");
     startBackgroundPolling();
     startHealthMonitorSchedule();

@@ -32,6 +32,8 @@ async function syncEndpoint(endpoint: Endpoint, docker: Docker): Promise<void> {
   const imageCache = new Map<string, { arch: string; repoDigests: string }>();
 
   for (const c of containers) {
+    // Containers of DeployNow applications are updated by their own deploy pipeline
+    if (c.Labels?.["deploynow.app"] || c.Labels?.["deploynow.role"]) continue;
     const name = c.Names?.[0]?.replace(/^\//, "") || c.Id.slice(0, 12);
     const parsed = parseImageRef(c.Image);
     // Containers started from an image id or pinned to a digest have no tag to follow
@@ -68,7 +70,10 @@ async function syncEndpoint(endpoint: Endpoint, docker: Docker): Promise<void> {
   }
 
   await prisma.service.deleteMany({
-    where: { endpointId: endpoint.id, containerId: { notIn: containers.map((c) => c.Id) } },
+    where: {
+      endpointId: endpoint.id,
+      containerId: { notIn: containers.filter((c) => !c.Labels?.["deploynow.app"] && !c.Labels?.["deploynow.role"]).map((c) => c.Id) },
+    },
   });
 }
 

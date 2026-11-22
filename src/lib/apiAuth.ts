@@ -47,7 +47,7 @@ export async function getCurrentUser(): Promise<CurrentUser | null> {
 
 export async function requireUser(
   permission?: Permission,
-  scope?: { endpointId?: string },
+  scope?: { endpointId?: string; projectId?: string },
 ): Promise<Gate> {
   const user = await getCurrentUser();
   if (!user) return { ok: false, response: NextResponse.json({ error: "Unauthorized" }, { status: 401 }) };

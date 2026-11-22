@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Encorp Deployer",
+  title: "DeployNow",
   description: "Self-hosted Docker deployment and management",
 };
 

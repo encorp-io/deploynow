@@ -82,7 +82,7 @@ export default function OnboardingPage() {
           <div className="w-14 h-14 rounded-2xl bg-accent/20 flex items-center justify-center mx-auto mb-3">
             <Container className="w-7 h-7 text-accent" />
           </div>
-          <h1 className="text-2xl font-bold text-text-primary">Set up Encorp Deployer</h1>
+          <h1 className="text-2xl font-bold text-text-primary">Set up DeployNow</h1>
           <p className="text-sm text-text-muted mt-1">Connect a Docker machine and, optionally, GitHub Container Registry.</p>
         </div>
 

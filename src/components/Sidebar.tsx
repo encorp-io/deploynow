@@ -4,9 +4,10 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { clsx } from "clsx";
-import { LayoutDashboard, Settings, Users, Container, LogOut, History, Server, ShieldCheck } from "lucide-react";
+import { FolderKanban, LayoutDashboard, Settings, Users, Container, LogOut, History, Server, ShieldCheck } from "lucide-react";
 
 const nav = [
+  { href: "/projects", label: "Projects", icon: FolderKanban },
   { href: "/dashboard", label: "Updates", icon: LayoutDashboard },
   { href: "/endpoints", label: "Endpoints", icon: Server },
   { href: "/activity", label: "Audit log", icon: History },
@@ -40,7 +41,7 @@ export default function Sidebar({ onSignOut }: { onSignOut: () => void }) {
             <Container className="w-5 h-5 text-accent" />
           </div>
           <div>
-            <h1 className="text-lg font-bold text-text-primary">Deployer</h1>
+            <h1 className="text-lg font-bold text-text-primary">DeployNow</h1>
             <p className="text-xs text-text-muted">by Encorp · v2</p>
           </div>
         </div>

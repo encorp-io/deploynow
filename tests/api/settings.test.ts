@@ -29,7 +29,8 @@ describe("GET /api/settings", () => {
     signInAs("viewer");
     mockPrisma.settings.findUnique.mockResolvedValue({ githubUser: "me", githubToken: "encrypted:ghp", pollingInterval: 120, autoUpdateLatest: true, require2faForAdmins: true });
     const data = await (await GET()).json();
-    expect(data).toEqual({ githubUser: "me", githubToken: "••••••••", pollingInterval: 120, autoUpdateLatest: true, require2faForAdmins: true });
+    expect(data).toMatchObject({ githubUser: "me", githubToken: "••••••••", pollingInterval: 120, autoUpdateLatest: true, require2faForAdmins: true });
+    expect(data.vault).toMatchObject({ addr: "", auth: "token", token: "" });
   });
 
   it("returns defaults when nothing is saved", async () => {

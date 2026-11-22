@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { clsx } from "clsx";
 import { ArrowLeft, Play, Square, RotateCw, Trash2, Pencil, RefreshCw, Eraser } from "lucide-react";
 import { useApi } from "@/components/AppShell";
+import ProxyCard from "@/components/ProxyCard";
 import EndpointForm, { type EndpointView } from "@/components/EndpointForm";
 import { Badge, Button, Card, ErrorText, Modal, PageHeader, formatBytes, stateTone, timeAgo } from "@/components/ui";
 
@@ -166,6 +167,7 @@ export default function EndpointPage({ params }: { params: Promise<{ id: string 
         </div>
       </div>
 
+      <ProxyCard endpointId={id} />
       <ErrorText>{error}</ErrorText>
 
       <Card className="overflow-hidden mt-2">

@@ -58,7 +58,7 @@ export default function LoginPage() {
           <div className="w-16 h-16 rounded-2xl bg-accent/20 flex items-center justify-center mx-auto mb-4">
             {needsCode ? <ShieldCheck className="w-8 h-8 text-accent" /> : <Container className="w-8 h-8 text-accent" />}
           </div>
-          <h1 className="text-2xl font-bold text-text-primary">Encorp Deployer</h1>
+          <h1 className="text-2xl font-bold text-text-primary">DeployNow</h1>
           <p className="text-sm text-text-muted mt-1">
             {needsCode ? "Enter the code from your authenticator app" : "Sign in to your deployment dashboard"}
           </p>

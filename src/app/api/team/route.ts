@@ -135,26 +135,40 @@ export async function POST(request: Request) {
     }
 
     case "grant": {
-      const endpointId = typeof body.endpointId === "string" ? body.endpointId : "";
-      if (!ID_RE.test(endpointId) || !(await prisma.endpoint.findUnique({ where: { id: endpointId } }))) {
-        return NextResponse.json({ error: "Endpoint not found" }, { status: 404 });
-      }
+      // One endpoint or one project
+      const scopeType = typeof body.projectId === "string" ? "project" : "endpoint";
+      const scopeId = String(scopeType === "project" ? body.projectId : body.endpointId ?? "");
+      const exists =
+        ID_RE.test(scopeId) &&
+        (scopeType === "project"
+          ? await prisma.project.findUnique({ where: { id: scopeId } })
+          : await prisma.endpoint.findUnique({ where: { id: scopeId } }));
+      if (!exists) return NextResponse.json({ error: scopeType === "project" ? "Project not found" : "Endpoint not found" }, { status: 404 });
       if (!(BINDABLE_ROLES as readonly string[]).includes(body.role as string)) {
         return NextResponse.json({ error: "Role must be viewer, operator or admin" }, { status: 400 });
       }
       await prisma.roleBinding.upsert({
-        where: { userId_scopeType_scopeId: { userId, scopeType: "endpoint", scopeId: endpointId } },
-        create: { userId, scopeType: "endpoint", scopeId: endpointId, role: body.role as string },
+        where: { userId_scopeType_scopeId: { userId, scopeType, scopeId } },
+        create: { userId, scopeType, scopeId, role: body.role as string },
         update: { role: body.role as string },
       });
-      await audit({ actor, ip, action: "user.grant", message: `${user.email} gave ${target.email} ${body.role} on an endpoint`, targetType: "user", targetId: userId, endpointId });
+      await audit({
+        actor,
+        ip,
+        action: "user.grant",
+        message: `${user.email} gave ${target.email} ${body.role} on a${scopeType === "project" ? " project" : "n endpoint"}`,
+        targetType: "user",
+        targetId: userId,
+        endpointId: scopeType === "endpoint" ? scopeId : null,
+        details: `${scopeType}:${scopeId}`,
+      });
       return NextResponse.json({ success: true });
     }
 
     case "revokeGrant": {
       const bindingId = typeof body.bindingId === "string" ? body.bindingId : "";
       const res = await prisma.roleBinding.deleteMany({ where: { id: bindingId, userId } });
-      await audit({ actor, ip, action: "user.revoke_grant", message: `${user.email} removed an endpoint grant from ${target.email}`, targetType: "user", targetId: userId });
+      await audit({ actor, ip, action: "user.revoke_grant", message: `${user.email} removed a grant from ${target.email}`, targetType: "user", targetId: userId });
       return NextResponse.json({ success: res.count > 0 });
     }
   }

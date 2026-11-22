@@ -47,7 +47,7 @@ export async function POST(request: Request) {
       headers: {
         Authorization: `token ${ghToken}`,
         Accept: "application/vnd.github+json",
-        "User-Agent": "encorp-deployer",
+        "User-Agent": "deploynow",
         "X-GitHub-Api-Version": "2022-11-28",
       },
     });
