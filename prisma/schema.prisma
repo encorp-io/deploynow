@@ -99,7 +99,7 @@ model LoginThrottle {
 model Endpoint {
   id                 String    @id @default(cuid())
   name               String    @unique
-  type               String // socket, ssh, tls
+  type               String // socket, ssh, tls, agent
   // socket: path to the Docker socket; ssh/tls: hostname or IP
   host               String
   port               Int?
@@ -128,6 +128,18 @@ model Endpoint {
   proxyEmail   String @default("")
   proxyError   String @default("")
 
+  // Agent endpoints (type "agent"): the host runs deploynow-agent, which keeps an
+  // outbound mTLS connection to the hub; Docker is reached through it.
+  agentCertSerial    String    @default("") // serial of the agent's current client certificate; empty = not enrolled or revoked
+  agentJoinTokenHash String    @default("") // sha256 of the one-time join token
+  agentJoinExpiresAt DateTime?
+  agentVersion       String    @default("")
+  agentHostname      String    @default("")
+  agentConnectedAt   DateTime?
+  // Latest host metrics (JSON: cpus, load1, memTotal, memAvailable, diskTotal, diskFree, diskPath)
+  hostMetrics        String    @default("")
+  hostMetricsAt      DateTime?
+
   services     Service[]
   applications Application[]
   environments Environment[]
@@ -151,6 +163,12 @@ model Settings {
   vaultRoleId         String  @default("")
   vaultSecretId       String  @default("") // encrypted
   vaultCaCert         String  @default("") // PEM, for a private CA
+  // Agent hub PKI: a private CA signs each agent's client certificate and the hub's server certificate
+  agentCaCert         String  @default("")
+  agentCaKey          String  @default("") // encrypted
+  agentServerCert     String  @default("")
+  agentServerKey      String  @default("") // encrypted
+  agentPublicUrl      String  @default("") // what agents dial, e.g. https://deploynow.example.com:8444
   // ── v1 legacy (read once by the v2 upgrade step, no longer used) ──
   portainerUrl        String  @default("")
   portainerApiKey     String  @default("")

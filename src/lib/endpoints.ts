@@ -3,6 +3,7 @@ import type Docker from "dockerode";
 import type { Endpoint } from "@prisma/client";
 import { prisma } from "./prisma";
 import { decryptSecret, encryptSecret } from "./secretsCrypto";
+import { AGENT_TYPE, agentSocketPath } from "./agent/hub";
 import {
   createDockerClient,
   dockerErrorMessage,
@@ -33,7 +34,9 @@ export function encryptCredentials(creds: EndpointCredentials): string {
   return Object.keys(clean).length ? encryptSecret(JSON.stringify(clean)) : "";
 }
 
-export function toConnection(e: Pick<Endpoint, "type" | "host" | "port" | "username" | "credentials" | "hostKeyFingerprint">): EndpointConnection {
+export function toConnection(e: Pick<Endpoint, "id" | "type" | "host" | "port" | "username" | "credentials" | "hostKeyFingerprint">): EndpointConnection {
+  // An agent endpoint is reached through the hub's local socket for it
+  if (e.type === AGENT_TYPE) return { type: "socket", host: agentSocketPath(e.id), credentials: {} };
   return {
     type: e.type as EndpointType,
     host: e.host,
@@ -106,13 +109,45 @@ export function serializeEndpoint(e: Endpoint) {
     hostKeyFingerprint: e.hostKeyFingerprint,
     hasPrivateKey: !!creds.privateKey,
     hasTlsCerts: !!(creds.ca && creds.cert && creds.key),
+    agent:
+      e.type === AGENT_TYPE
+        ? {
+            enrolled: !!e.agentCertSerial,
+            joinPending: !!e.agentJoinExpiresAt && e.agentJoinExpiresAt > new Date(),
+            version: e.agentVersion,
+            hostname: e.agentHostname,
+            connectedAt: e.agentConnectedAt,
+          }
+        : null,
+    hostMetrics: parseMetrics(e.hostMetrics),
+    hostMetricsAt: e.hostMetricsAt,
     createdAt: e.createdAt,
   };
 }
 
+export interface HostMetrics {
+  cpus: number;
+  load1: number;
+  load5: number;
+  memTotal: number;
+  memAvailable: number;
+  diskPath: string;
+  diskTotal: number;
+  diskFree: number;
+}
+
+export function parseMetrics(raw: string): HostMetrics | null {
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as HostMetrics;
+  } catch {
+    return null;
+  }
+}
+
 export interface EndpointInput {
   name: string;
-  type: EndpointType;
+  type: EndpointType | typeof AGENT_TYPE;
   host: string;
   port: number | null;
   username: string;
@@ -135,8 +170,12 @@ export function validateEndpointInput(
   const name = str(body.name ?? existing?.name, 64);
   if (!NAME_RE.test(name)) return { error: "Name must be 1–64 letters, numbers, spaces, dots, dashes or underscores" };
 
-  const type = (body.type ?? existing?.type) as EndpointType;
-  if (!ENDPOINT_TYPES.includes(type)) return { error: "Type must be socket, ssh or tls" };
+  const rawType = body.type ?? existing?.type;
+  if (rawType === AGENT_TYPE) {
+    return { data: { name, type: AGENT_TYPE, host: "", port: null, username: "", labels: labels(body, existing), credentials: {} } };
+  }
+  const type = rawType as EndpointType;
+  if (!ENDPOINT_TYPES.includes(type)) return { error: "Type must be socket, ssh, tls or agent" };
 
   const host = str(body.host ?? existing?.host, 255);
   let port: number | null = null;

@@ -15,6 +15,7 @@ export interface TestResult {
  */
 export async function testConnection(input: EndpointInput, pinnedFingerprint = ""): Promise<TestResult> {
   let seen: string | undefined;
+  if (input.type === "agent") return { ok: false, error: "Agent endpoints connect on their own once the agent enrols" };
   try {
     const docker = createDockerClient({
       type: input.type,

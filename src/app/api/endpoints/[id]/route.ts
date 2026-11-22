@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { closeAgentSocket } from "@/lib/agent/hub";
 import { prisma } from "@/lib/prisma";
 import { readJson, requireStepUp } from "@/lib/apiAuth";
 import { encryptCredentials, serializeEndpoint, validateEndpointInput, refreshEndpoint } from "@/lib/endpoints";
@@ -27,6 +28,15 @@ export async function PATCH(request: Request, { params }: Params) {
 
   if (data.name !== endpoint.name && (await prisma.endpoint.findUnique({ where: { name: data.name } }))) {
     return NextResponse.json({ error: "An endpoint with that name already exists" }, { status: 409 });
+  }
+
+  if ((data.type === "agent") !== (endpoint.type === "agent")) {
+    return NextResponse.json({ error: "An agent endpoint can't be switched to another connection type (or back); add a new endpoint instead" }, { status: 400 });
+  }
+  if (endpoint.type === "agent") {
+    const renamed = await prisma.endpoint.update({ where: { id }, data: { name: data.name, labels: data.labels } });
+    await audit({ actor: { id: user.id, email: user.email }, ip: clientIp(request), action: "endpoint.update", message: `${user.email} updated endpoint ${renamed.name}`, targetType: "endpoint", targetId: id, endpointId: id });
+    return NextResponse.json(serializeEndpoint(renamed));
   }
 
   // A new address means a new host key; keep the pin only for the same host
@@ -77,6 +87,7 @@ export async function DELETE(request: Request, { params }: Params) {
     prisma.roleBinding.deleteMany({ where: { scopeType: "endpoint", scopeId: id } }),
     prisma.endpoint.delete({ where: { id } }),
   ]);
+  if (endpoint.type === "agent") closeAgentSocket(id);
 
   await audit({
     actor: { id: user.id, email: user.email },

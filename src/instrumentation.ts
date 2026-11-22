@@ -10,6 +10,9 @@ export async function register() {
     const { startWsServer } = await import("./lib/wsServer");
     startWsServer();
 
+    const { startAgentHub } = await import("./lib/agent/hub");
+    startAgentHub().catch((err) => console.error("[deployer] Agent hub failed to start:", err instanceof Error ? err.message : err));
+
     const { startWorker } = await import("./lib/jobs");
     startWorker();
 
