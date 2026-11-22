@@ -1,0 +1,10 @@
+{
+  "name": "deploynow-cli",
+  "version": "2.0.0",
+  "description": "Command-line client for DeployNow",
+  "type": "module",
+  "bin": { "deploynow": "./deploynow.mjs" },
+  "files": ["deploynow.mjs", "lib.mjs"],
+  "engines": { "node": ">=20" },
+  "license": "MIT"
+}
