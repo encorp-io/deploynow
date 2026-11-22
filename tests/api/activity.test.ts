@@ -1,118 +1,56 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-vi.mock("@/lib/auth", () => ({
-  auth: vi.fn(),
+const mockPrisma = vi.hoisted(() => ({
+  auditEvent: { findMany: vi.fn(), count: vi.fn() },
+  endpoint: { findMany: vi.fn() },
 }));
+vi.mock("@/lib/prisma", () => ({ prisma: mockPrisma }));
+vi.mock("@/lib/apiAuth", () => import("../helpers/apiAuthMock"));
 
-const mockPrisma = {
-  activityLog: {
-    findMany: vi.fn(),
-    count: vi.fn(),
-  },
-};
-vi.mock("@/lib/prisma", () => ({
-  prisma: mockPrisma,
-}));
+import { signInAs, signOut } from "../helpers/apiAuthMock";
+import { GET } from "@/app/api/activity/route";
 
-import { auth } from "@/lib/auth";
+const get = (qs = "") => GET(new Request(`http://x/api/activity${qs}`));
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  signOut();
+  mockPrisma.auditEvent.findMany.mockImplementation((args: { distinct?: string[] }) =>
+    Promise.resolve(args.distinct ? [{ action: "auth.login" }, { action: "service.update" }] : [{ id: "e1" }]),
+  );
+  mockPrisma.auditEvent.count.mockResolvedValue(120);
+  mockPrisma.endpoint.findMany.mockResolvedValue([{ id: "ep", name: "local" }]);
+});
 
 describe("GET /api/activity", () => {
-  beforeEach(() => vi.clearAllMocks());
-
-  it("returns 401 when not authenticated", async () => {
-    vi.mocked(auth).mockResolvedValue(null as any);
-    const { GET } = await import("@/app/api/activity/route");
-    const req = new Request("http://localhost/api/activity");
-    const res = await GET(req);
-    expect(res.status).toBe(401);
+  it("needs audit.view (operator and up)", async () => {
+    expect((await get()).status).toBe(401);
+    signInAs("viewer");
+    expect((await get()).status).toBe(403);
   });
 
-  it("returns paginated logs", async () => {
-    vi.mocked(auth).mockResolvedValue({ user: { role: "member" } } as any);
-    const logs = [
-      { id: "1", action: "update", message: "Updated app", details: "", createdAt: new Date() },
-    ];
-    mockPrisma.activityLog.findMany
-      .mockResolvedValueOnce(logs) // main query
-      .mockResolvedValueOnce([{ action: "update" }, { action: "error" }]); // distinct actions
-    mockPrisma.activityLog.count.mockResolvedValue(1);
-
-    const { GET } = await import("@/app/api/activity/route");
-    const req = new Request("http://localhost/api/activity?page=1&limit=10");
-    const res = await GET(req);
-    const data = await res.json();
-
-    expect(res.status).toBe(200);
-    expect(data.logs).toHaveLength(1);
-    expect(data.total).toBe(1);
-    expect(data.page).toBe(1);
-    expect(data.actionTypes).toEqual(["update", "error"]);
+  it("returns a page with filters and endpoint names", async () => {
+    signInAs("operator");
+    const data = await (await get("?page=2&limit=50")).json();
+    expect(data).toMatchObject({ total: 120, page: 2, limit: 50, totalPages: 3, actionTypes: ["auth.login", "service.update"], endpoints: [{ id: "ep", name: "local" }] });
+    const args = mockPrisma.auditEvent.findMany.mock.calls[0][0];
+    expect(args.skip).toBe(50);
+    expect(args.orderBy).toEqual({ createdAt: "desc" });
   });
 
-  it("supports search parameter", async () => {
-    vi.mocked(auth).mockResolvedValue({ user: { role: "member" } } as any);
-    mockPrisma.activityLog.findMany.mockResolvedValue([]);
-    mockPrisma.activityLog.count.mockResolvedValue(0);
-
-    const { GET } = await import("@/app/api/activity/route");
-    const req = new Request("http://localhost/api/activity?search=nginx");
-    const res = await GET(req);
-    expect(res.status).toBe(200);
-
-    // Verify the OR clause was passed to prisma
-    const findCall = mockPrisma.activityLog.findMany.mock.calls[0][0];
-    expect(findCall.where.OR).toBeDefined();
+  it("applies search, action, outcome and endpoint filters", async () => {
+    signInAs("admin");
+    await get("?search=deploy&action=service.update&outcome=failure&endpointId=ep&sort=asc");
+    const args = mockPrisma.auditEvent.findMany.mock.calls[0][0];
+    expect(args.where).toMatchObject({ action: "service.update", outcome: "failure", endpointId: "ep" });
+    expect(args.where.OR).toHaveLength(3);
+    expect(args.orderBy).toEqual({ createdAt: "asc" });
   });
 
-  it("supports action filter", async () => {
-    vi.mocked(auth).mockResolvedValue({ user: { role: "member" } } as any);
-    mockPrisma.activityLog.findMany.mockResolvedValue([]);
-    mockPrisma.activityLog.count.mockResolvedValue(0);
-
-    const { GET } = await import("@/app/api/activity/route");
-    const req = new Request("http://localhost/api/activity?action=error");
-    const res = await GET(req);
-
-    const findCall = mockPrisma.activityLog.findMany.mock.calls[0][0];
-    expect(findCall.where.action).toBe("error");
-  });
-
-  it("defaults sort to desc", async () => {
-    vi.mocked(auth).mockResolvedValue({ user: { role: "member" } } as any);
-    mockPrisma.activityLog.findMany.mockResolvedValue([]);
-    mockPrisma.activityLog.count.mockResolvedValue(0);
-
-    const { GET } = await import("@/app/api/activity/route");
-    const req = new Request("http://localhost/api/activity");
-    await GET(req);
-
-    const findCall = mockPrisma.activityLog.findMany.mock.calls[0][0];
-    expect(findCall.orderBy.createdAt).toBe("desc");
-  });
-
-  it("supports sort=asc", async () => {
-    vi.mocked(auth).mockResolvedValue({ user: { role: "member" } } as any);
-    mockPrisma.activityLog.findMany.mockResolvedValue([]);
-    mockPrisma.activityLog.count.mockResolvedValue(0);
-
-    const { GET } = await import("@/app/api/activity/route");
-    const req = new Request("http://localhost/api/activity?sort=asc");
-    await GET(req);
-
-    const findCall = mockPrisma.activityLog.findMany.mock.calls[0][0];
-    expect(findCall.orderBy.createdAt).toBe("asc");
-  });
-
-  it("clamps limit to 100 max", async () => {
-    vi.mocked(auth).mockResolvedValue({ user: { role: "member" } } as any);
-    mockPrisma.activityLog.findMany.mockResolvedValue([]);
-    mockPrisma.activityLog.count.mockResolvedValue(0);
-
-    const { GET } = await import("@/app/api/activity/route");
-    const req = new Request("http://localhost/api/activity?limit=500");
-    await GET(req);
-
-    const findCall = mockPrisma.activityLog.findMany.mock.calls[0][0];
-    expect(findCall.take).toBe(100);
+  it("ignores an unknown outcome and clamps the limit", async () => {
+    signInAs("admin");
+    const data = await (await get("?outcome=maybe&limit=999")).json();
+    expect(data.limit).toBe(100);
+    expect(mockPrisma.auditEvent.findMany.mock.calls[0][0].where).not.toHaveProperty("outcome");
   });
 });

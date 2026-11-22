@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
+import { requireUser } from "@/lib/apiAuth";
 import { decryptSecret } from "@/lib/secretsCrypto";
 import { prisma } from "@/lib/prisma";
 
@@ -11,8 +11,9 @@ import { prisma } from "@/lib/prisma";
  * directly without requiring a save first. Falls back to DB values.
  */
 export async function POST(request: Request) {
-  const session = await auth();
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  // Testing a token can be used to probe arbitrary tokens, so keep it to admins
+  const gate = await requireUser("settings.manage");
+  if (!gate.ok) return gate.response;
 
   let bodyUser = "";
   let bodyToken = "";

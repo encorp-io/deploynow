@@ -1,85 +1,101 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-vi.mock("@/lib/auth", () => ({ auth: vi.fn() }));
-
-const mockPrisma = {
-  service: { findMany: vi.fn() },
-};
+const mockPrisma = vi.hoisted(() => ({ service: { findMany: vi.fn(), findUnique: vi.fn() } }));
 vi.mock("@/lib/prisma", () => ({ prisma: mockPrisma }));
+vi.mock("@/lib/apiAuth", () => import("../helpers/apiAuthMock"));
+vi.mock("@/lib/audit", () => ({ audit: vi.fn(), clientIp: () => "1.2.3.4" }));
+vi.mock("@/lib/polling", () => ({ syncServices: vi.fn(), checkForUpdates: vi.fn(), performUpdate: vi.fn() }));
 
-vi.mock("@/lib/polling", () => ({
-  syncServicesFromPortainer: vi.fn(),
-  initializeDigests: vi.fn(),
-}));
+import { signInAs, signOut } from "../helpers/apiAuthMock";
+import { syncServices, performUpdate } from "@/lib/polling";
+import { GET, POST } from "@/app/api/services/route";
+import { POST as UPDATE } from "@/app/api/services/update/route";
 
-vi.mock("@/lib/sessionHelpers", () => ({
-  isAdmin: vi.fn((s: any) => s?.user?.role === "admin"),
-}));
+const EP_A = "c" + "a".repeat(24);
+const EP_B = "c" + "b".repeat(24);
+const SVC = "c" + "s".repeat(24);
+const services = [
+  { id: "s1", containerName: "a", endpointId: EP_A },
+  { id: "s2", containerName: "b", endpointId: EP_B },
+];
+const post = (fn: (r: Request) => Promise<Response>, body: unknown) => fn(new Request("http://x", { method: "POST", body: JSON.stringify(body) }));
 
-import { auth } from "@/lib/auth";
+beforeEach(() => {
+  vi.clearAllMocks();
+  signOut();
+  mockPrisma.service.findMany.mockResolvedValue(services);
+});
 
 describe("GET /api/services", () => {
-  beforeEach(() => vi.clearAllMocks());
-
-  it("returns 401 when not authenticated", async () => {
-    vi.mocked(auth).mockResolvedValue(null as any);
-    const { GET } = await import("@/app/api/services/route");
-    const res = await GET();
-    expect(res.status).toBe(401);
+  it("returns 401 when signed out", async () => {
+    expect((await GET()).status).toBe(401);
   });
 
-  it("returns services list", async () => {
-    vi.mocked(auth).mockResolvedValue({ user: { role: "member" } } as any);
-    const services = [
-      { id: "1", containerName: "app", image: "ghcr.io/org/app:latest", status: "running" },
-    ];
-    mockPrisma.service.findMany.mockResolvedValue(services);
-
-    const { GET } = await import("@/app/api/services/route");
-    const res = await GET();
-    const data = await res.json();
-
-    expect(res.status).toBe(200);
-    expect(data).toHaveLength(1);
-    expect(data[0].containerName).toBe("app");
+  it("returns every service to an instance viewer", async () => {
+    signInAs("viewer");
+    expect(await (await GET()).json()).toHaveLength(2);
   });
 });
 
 describe("POST /api/services", () => {
-  beforeEach(() => vi.clearAllMocks());
-
-  it("returns 403 for non-admin", async () => {
-    vi.mocked(auth).mockResolvedValue({ user: { role: "member" } } as any);
-    const { POST } = await import("@/app/api/services/route");
-    const req = new Request("http://localhost/api/services", {
-      method: "POST",
-      body: JSON.stringify({ action: "sync" }),
-    });
-    const res = await POST(req);
-    expect(res.status).toBe(403);
+  it("is admin only", async () => {
+    signInAs("operator");
+    expect((await post(POST, { action: "sync" })).status).toBe(403);
   });
 
-  it("returns 400 for invalid action", async () => {
-    vi.mocked(auth).mockResolvedValue({ user: { role: "admin" } } as any);
-    const { POST } = await import("@/app/api/services/route");
-    const req = new Request("http://localhost/api/services", {
-      method: "POST",
-      body: JSON.stringify({ action: "invalid" }),
-    });
-    const res = await POST(req);
-    expect(res.status).toBe(400);
-  });
-
-  it("syncs services for admin", async () => {
-    vi.mocked(auth).mockResolvedValue({ user: { role: "admin" } } as any);
-    mockPrisma.service.findMany.mockResolvedValue([]);
-
-    const { POST } = await import("@/app/api/services/route");
-    const req = new Request("http://localhost/api/services", {
-      method: "POST",
-      body: JSON.stringify({ action: "sync" }),
-    });
-    const res = await POST(req);
+  it("syncs and returns the list", async () => {
+    signInAs("admin");
+    const res = await post(POST, { action: "sync" });
     expect(res.status).toBe(200);
+    expect(syncServices).toHaveBeenCalled();
+  });
+
+  it("rejects an unknown action", async () => {
+    signInAs("admin");
+    expect((await post(POST, { action: "nope" })).status).toBe(400);
+  });
+});
+
+describe("POST /api/services/update", () => {
+  it("validates the service id", async () => {
+    signInAs("operator");
+    expect((await post(UPDATE, {})).status).toBe(400);
+    expect((await post(UPDATE, { serviceId: "../etc" })).status).toBe(400);
+  });
+
+  it("returns 404 for an unknown service", async () => {
+    signInAs("operator");
+    mockPrisma.service.findUnique.mockResolvedValue(null);
+    expect((await post(UPDATE, { serviceId: SVC })).status).toBe(404);
+  });
+
+  it("refuses a viewer", async () => {
+    signInAs("viewer");
+    mockPrisma.service.findUnique.mockResolvedValue({ id: SVC, endpointId: EP_A });
+    expect((await post(UPDATE, { serviceId: SVC })).status).toBe(403);
+    expect(performUpdate).not.toHaveBeenCalled();
+  });
+
+  it("lets a viewer with an operator grant on that endpoint update", async () => {
+    signInAs("viewer", { bindings: [{ role: "operator", scopeType: "endpoint", scopeId: EP_A }] });
+    mockPrisma.service.findUnique.mockResolvedValue({ id: SVC, endpointId: EP_A });
+    const res = await post(UPDATE, { serviceId: SVC });
+    expect(res.status).toBe(200);
+    expect(performUpdate).toHaveBeenCalledWith(SVC, expect.objectContaining({ email: "viewer@test.local" }), "1.2.3.4");
+  });
+
+  it("does not extend an endpoint grant to other endpoints", async () => {
+    signInAs("viewer", { bindings: [{ role: "operator", scopeType: "endpoint", scopeId: EP_A }] });
+    mockPrisma.service.findUnique.mockResolvedValue({ id: SVC, endpointId: EP_B });
+    expect((await post(UPDATE, { serviceId: SVC })).status).toBe(403);
+  });
+
+  it("returns 500 when the update fails", async () => {
+    signInAs("operator");
+    mockPrisma.service.findUnique.mockResolvedValue({ id: SVC, endpointId: EP_A });
+    vi.mocked(performUpdate).mockRejectedValue(new Error("pull failed"));
+    const res = await post(UPDATE, { serviceId: SVC });
+    expect(res.status).toBe(500);
+    expect((await res.json()).error).toBe("pull failed");
   });
 });

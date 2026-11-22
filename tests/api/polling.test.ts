@@ -1,107 +1,50 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-vi.mock("@/lib/auth", () => ({ auth: vi.fn() }));
-
-const mockPrisma = {
-  activityLog: {
-    findMany: vi.fn(),
-  },
-};
+const mockPrisma = vi.hoisted(() => ({ auditEvent: { findMany: vi.fn() } }));
 vi.mock("@/lib/prisma", () => ({ prisma: mockPrisma }));
+vi.mock("@/lib/apiAuth", () => import("../helpers/apiAuthMock"));
+vi.mock("@/lib/polling", () => ({ syncServices: vi.fn(), checkForUpdates: vi.fn() }));
 
-vi.mock("@/lib/polling", () => ({
-  syncServicesFromPortainer: vi.fn(),
-  checkForUpdates: vi.fn(),
-  initializeDigests: vi.fn(),
-}));
+import { signInAs, signOut } from "../helpers/apiAuthMock";
+import { syncServices, checkForUpdates } from "@/lib/polling";
+import { GET, POST } from "@/app/api/polling/route";
 
-vi.mock("@/lib/sessionHelpers", () => ({
-  isAdmin: vi.fn((s: any) => s?.user?.role === "admin"),
-}));
+const post = (body: unknown) => POST(new Request("http://x", { method: "POST", body: JSON.stringify(body) }));
 
-import { auth } from "@/lib/auth";
-
-describe("POST /api/polling", () => {
-  beforeEach(() => vi.clearAllMocks());
-
-  it("returns 401 when not authenticated", async () => {
-    vi.mocked(auth).mockResolvedValue(null as any);
-    const { POST } = await import("@/app/api/polling/route");
-    const req = new Request("http://localhost/api/polling", {
-      method: "POST",
-      body: JSON.stringify({ action: "check" }),
-    });
-    const res = await POST(req);
-    expect(res.status).toBe(401);
-  });
-
-  it("returns 403 for non-admin", async () => {
-    vi.mocked(auth).mockResolvedValue({ user: { role: "member" } } as any);
-    const { POST } = await import("@/app/api/polling/route");
-    const req = new Request("http://localhost/api/polling", {
-      method: "POST",
-      body: JSON.stringify({ action: "check" }),
-    });
-    const res = await POST(req);
-    expect(res.status).toBe(403);
-  });
-
-  it("handles check action", async () => {
-    vi.mocked(auth).mockResolvedValue({ user: { role: "admin" } } as any);
-    const { POST } = await import("@/app/api/polling/route");
-    const req = new Request("http://localhost/api/polling", {
-      method: "POST",
-      body: JSON.stringify({ action: "check" }),
-    });
-    const res = await POST(req);
-    expect(res.status).toBe(200);
-    const data = await res.json();
-    expect(data.success).toBe(true);
-  });
-
-  it("handles init action", async () => {
-    vi.mocked(auth).mockResolvedValue({ user: { role: "admin" } } as any);
-    const { POST } = await import("@/app/api/polling/route");
-    const req = new Request("http://localhost/api/polling", {
-      method: "POST",
-      body: JSON.stringify({ action: "init" }),
-    });
-    const res = await POST(req);
-    expect(res.status).toBe(200);
-  });
-
-  it("returns 400 for invalid action", async () => {
-    vi.mocked(auth).mockResolvedValue({ user: { role: "admin" } } as any);
-    const { POST } = await import("@/app/api/polling/route");
-    const req = new Request("http://localhost/api/polling", {
-      method: "POST",
-      body: JSON.stringify({ action: "invalid" }),
-    });
-    const res = await POST(req);
-    expect(res.status).toBe(400);
-  });
+beforeEach(() => {
+  vi.clearAllMocks();
+  signOut();
 });
 
-describe("GET /api/polling", () => {
-  beforeEach(() => vi.clearAllMocks());
-
-  it("returns 401 when not authenticated", async () => {
-    vi.mocked(auth).mockResolvedValue(null as any);
-    const { GET } = await import("@/app/api/polling/route");
-    const res = await GET();
-    expect(res.status).toBe(401);
+describe("/api/polling", () => {
+  it("POST is admin only", async () => {
+    signInAs("operator");
+    expect((await post({ action: "check" })).status).toBe(403);
   });
 
-  it("returns activity logs for any authenticated user", async () => {
-    vi.mocked(auth).mockResolvedValue({ user: { role: "member" } } as any);
-    const logs = [{ id: "1", action: "check", message: "Checked", createdAt: new Date() }];
-    mockPrisma.activityLog.findMany.mockResolvedValue(logs);
+  it("check syncs then checks for updates", async () => {
+    signInAs("admin");
+    expect((await post({ action: "check" })).status).toBe(200);
+    expect(syncServices).toHaveBeenCalled();
+    expect(checkForUpdates).toHaveBeenCalled();
+  });
 
-    const { GET } = await import("@/app/api/polling/route");
-    const res = await GET();
-    const data = await res.json();
+  it("init only syncs", async () => {
+    signInAs("owner");
+    expect((await post({ action: "init" })).status).toBe(200);
+    expect(checkForUpdates).not.toHaveBeenCalled();
+  });
 
-    expect(res.status).toBe(200);
-    expect(data).toHaveLength(1);
+  it("rejects an unknown action", async () => {
+    signInAs("admin");
+    expect((await post({ action: "x" })).status).toBe(400);
+  });
+
+  it("GET returns recent service events to any signed-in user", async () => {
+    expect((await GET()).status).toBe(401);
+    signInAs("viewer");
+    mockPrisma.auditEvent.findMany.mockResolvedValue([{ id: "1" }]);
+    expect(await (await GET()).json()).toEqual([{ id: "1" }]);
+    expect(mockPrisma.auditEvent.findMany.mock.calls[0][0].where).toEqual({ action: { startsWith: "service." } });
   });
 });

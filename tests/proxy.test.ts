@@ -1,59 +1,56 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { NextRequest } from "next/server";
 
-// Mock auth to return the callback wrapper
-const mockAuthCallback = vi.fn();
-vi.mock("@/lib/auth", () => ({
-  auth: (fn: (...args: any[]) => any) => {
-    mockAuthCallback.mockImplementation(fn);
-    return mockAuthCallback;
-  },
-}));
+// auth(handler) returns the handler itself, so the test can call it with `auth` set
+vi.mock("@/lib/auth", () => ({ auth: (fn: unknown) => fn }));
 
-// We test the getPublicOrigin logic and CSRF/auth gate logic by testing
-// the exported middleware config and the redirect behavior.
+import proxy, { config } from "@/proxy";
+
+type Handler = (req: NextRequest & { auth: unknown }) => Response;
+const handler = proxy as unknown as Handler;
+
+function call(path: string, { method = "GET", auth = null as unknown, origin = "" } = {}) {
+  const req = new NextRequest(`http://127.0.0.1:3001${path}`, {
+    method,
+    headers: { host: "deploy.example.com:9444", "x-forwarded-proto": "https", ...(origin ? { origin } : {}) },
+  }) as NextRequest & { auth: unknown };
+  req.auth = auth;
+  return handler(req);
+}
+
+const signedIn = { user: { id: "u", mfaSetupRequired: false } };
+const mustEnrol = { user: { id: "u", mfaSetupRequired: true } };
 
 describe("proxy", () => {
-  describe("getPublicOrigin reconstruction", () => {
-    it("reconstructs origin from X-Forwarded-Proto + Host", () => {
-      // The getPublicOrigin function is not exported, but we can test it
-      // indirectly by checking redirect URLs
-
-      // We need to import the module to register the auth callback
-      import("@/proxy");
-    });
+  it("matches everything except static assets", () => {
+    expect(config.matcher[0]).toContain("_next/static");
   });
 
-  describe("config", () => {
-    it("exports matcher config", async () => {
-      const proxyModule = await import("@/proxy");
-      expect(proxyModule.config).toBeDefined();
-      expect(proxyModule.config.matcher).toBeDefined();
-      expect(proxyModule.config.matcher[0]).toContain("_next/static");
-    });
+  it("blocks cross-origin writes and allows same-origin ones", () => {
+    expect(call("/api/settings", { method: "PUT", auth: signedIn, origin: "https://evil.example" }).status).toBe(403);
+    expect(call("/api/settings", { method: "PUT", auth: signedIn, origin: "https://deploy.example.com:9444" }).status).toBe(200);
   });
 
-  describe("CSRF protection logic", () => {
-    it("blocks cross-origin POST requests", async () => {
-      await import("@/proxy");
-      const handler = mockAuthCallback.mock.calls[0]?.[0] || mockAuthCallback;
-
-      // We test the logic conceptually: if requestOrigin !== publicOrigin, return 403
-      // This is a unit test of the pattern, not an integration test
-    });
+  it("sends signed-out visitors to login, and APIs get 401", () => {
+    const page = call("/dashboard");
+    expect(page.status).toBe(307);
+    expect(page.headers.get("location")).toBe("https://deploy.example.com:9444/login");
+    expect(call("/api/services").status).toBe(401);
   });
 
-  describe("auth gate routes", () => {
-    it("has correct public routes defined", async () => {
-      // Read the source to verify public route patterns
-      const fs = await import("fs");
-      const source = fs.readFileSync("src/proxy.ts", "utf-8");
+  it("keeps login, invite setup and invite registration public", () => {
+    expect(call("/login").status).toBe(200);
+    expect(call("/setup?token=x").status).toBe(200);
+    expect(call("/api/team", { method: "PUT" }).status).toBe(200);
+    expect(call("/api/team", { method: "POST" }).status).toBe(401);
+  });
 
-      expect(source).toContain('/api/auth');
-      expect(source).toContain('/login');
-      expect(source).toContain('/setup');
-      expect(source).toContain('/api/team');
-      expect(source).toContain('PUT');
-    });
+  it("holds admins without 2FA on the account page", () => {
+    const page = call("/endpoints", { auth: mustEnrol });
+    expect(page.headers.get("location")).toBe("https://deploy.example.com:9444/account?setup=2fa");
+    expect(call("/api/endpoints", { auth: mustEnrol }).status).toBe(403);
+    expect(call("/account", { auth: mustEnrol }).status).toBe(200);
+    expect(call("/api/account/2fa", { method: "POST", auth: mustEnrol }).status).toBe(200);
+    expect(call("/endpoints", { auth: signedIn }).status).toBe(200);
   });
 });

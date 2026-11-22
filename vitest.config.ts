@@ -14,7 +14,8 @@ export default defineConfig({
         "src/lib/auth.ts",            // NextAuth config — integration tested
         "src/lib/backgroundPoller.ts", // timer loop — tested via polling.ts
         "src/app/api/auth/**",         // NextAuth handler re-export
-        "src/lib/portainer.ts",        // heavy HTTP I/O — tested via integration
+        "src/lib/wsServer.ts",         // WebSocket + Docker exec — checked against a real daemon
+        "src/instrumentation.ts",
       ],
       thresholds: {
         statements: 80,

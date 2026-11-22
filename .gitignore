@@ -28,4 +28,5 @@ Thumbs.db
 npm-debug.log*
 
 # Test coverage
-coverage/tsconfig.tsbuildinfo
+coverage/
+tsconfig.tsbuildinfo

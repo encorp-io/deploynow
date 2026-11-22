@@ -147,6 +147,7 @@ model Service {
   image               String    // full image ref e.g. ghcr.io/org/repo:tag
   registry            String    @default("ghcr.io")
   currentDigest       String    @default("")
+  repoDigests         String    @default("") // comma-separated RepoDigests of the local image
   remoteDigest        String    @default("")
   tag                 String    @default("latest")
   isFloatingTag       Boolean   @default(true) // true = auto-update, false = notify only

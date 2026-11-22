@@ -10,7 +10,7 @@ import os from "os";
 import type Docker from "dockerode";
 import type { Endpoint } from "@prisma/client";
 import { prisma } from "./prisma";
-import { getRemoteDigest } from "./ghcr";
+import { getRemoteDigests } from "./ghcr";
 import { isFloatingTag, parseImageRef } from "./imageRef";
 import { dockerFor, refreshEndpoint } from "./endpoints";
 import { recreateContainer } from "./docker/recreate";
@@ -29,7 +29,7 @@ export function isProtectedContainer(image: string, containerId: string, labels:
 
 async function syncEndpoint(endpoint: Endpoint, docker: Docker): Promise<void> {
   const containers = await withTimeout(docker.listContainers({ all: true }), 20_000, "Listing containers");
-  const archCache = new Map<string, string>();
+  const imageCache = new Map<string, { arch: string; repoDigests: string }>();
 
   for (const c of containers) {
     const name = c.Names?.[0]?.replace(/^\//, "") || c.Id.slice(0, 12);
@@ -37,14 +37,15 @@ async function syncEndpoint(endpoint: Endpoint, docker: Docker): Promise<void> {
     // Containers started from an image id (no tag) can't be tracked for updates
     if (/^sha256:/.test(c.Image) || /^[0-9a-f]{12,64}$/.test(c.Image)) continue;
 
-    let arch = archCache.get(c.ImageID);
-    if (!arch) {
+    let img = imageCache.get(c.ImageID);
+    if (!img) {
       try {
-        arch = (await docker.getImage(c.ImageID).inspect()).Architecture || "amd64";
+        const info = await docker.getImage(c.ImageID).inspect();
+        img = { arch: info.Architecture || "amd64", repoDigests: (info.RepoDigests ?? []).join(",") };
       } catch {
-        arch = "amd64";
+        img = { arch: "amd64", repoDigests: "" };
       }
-      archCache.set(c.ImageID, arch);
+      imageCache.set(c.ImageID, img);
     }
 
     const data = {
@@ -55,7 +56,8 @@ async function syncEndpoint(endpoint: Endpoint, docker: Docker): Promise<void> {
       status: c.State?.toLowerCase() || "unknown",
       isFloatingTag: isFloatingTag(parsed.tag),
       currentDigest: c.ImageID || "",
-      arch,
+      repoDigests: img.repoDigests,
+      arch: img.arch,
       endpointId: endpoint.id,
     };
     await prisma.service.upsert({
@@ -83,6 +85,19 @@ export async function syncServices(): Promise<void> {
   }
 }
 
+/**
+ * Is the local image the one the tag points to now? The classic image store's
+ * ImageID is the config digest; the containerd store (Docker 29+ default) uses
+ * the index digest, which also appears in RepoDigests.
+ */
+export function isCurrent(local: { currentDigest: string; repoDigests?: string }, remote: { config: string; manifest: string }): boolean {
+  if (!local.currentDigest) return true; // nothing to compare yet
+  if (local.currentDigest === remote.config) return true;
+  if (!remote.manifest) return false;
+  if (local.currentDigest === remote.manifest) return true;
+  return (local.repoDigests ?? "").split(",").some((d) => d.endsWith(`@${remote.manifest}`));
+}
+
 export async function checkForUpdates(): Promise<void> {
   const services = await prisma.service.findMany({ where: { endpointId: { not: null } } });
   const settings = await prisma.settings.findUnique({ where: { id: "singleton" } });
@@ -90,14 +105,15 @@ export async function checkForUpdates(): Promise<void> {
   for (const service of services) {
     try {
       const parsed = parseImageRef(service.image);
-      const remoteDigest = await getRemoteDigest(parsed.registry, parsed.repository, parsed.tag, service.arch);
+      const remote = await getRemoteDigests(parsed.registry, parsed.repository, parsed.tag, service.arch);
 
-      if (!remoteDigest) {
+      if (!remote) {
         await prisma.service.update({ where: { id: service.id }, data: { lastChecked: new Date() } });
         continue;
       }
 
-      const hasUpdate = service.currentDigest !== "" && service.currentDigest !== remoteDigest;
+      const remoteDigest = remote.config;
+      const hasUpdate = !isCurrent(service, remote);
       const wasKnown = service.updateAvailable && service.remoteDigest === remoteDigest;
 
       await prisma.service.update({
@@ -151,13 +167,20 @@ export async function performUpdate(serviceId: string, actor?: AuditActor | null
     const authconfig = await registryAuthFor(service.image);
     const newContainerId = await recreateContainer(docker, service.containerId, { pull: true, authconfig });
     const newInfo = await docker.getContainer(newContainerId).inspect();
+    const repoDigests = await docker
+      .getImage(newInfo.Image)
+      .inspect()
+      .then((i) => (i.RepoDigests ?? []).join(","))
+      .catch(() => "");
 
     await prisma.service.update({
       where: { id: serviceId },
       data: {
         containerId: newContainerId,
         currentDigest: newInfo.Image,
-        updateAvailable: service.remoteDigest !== "" && service.remoteDigest !== newInfo.Image,
+        repoDigests,
+        // We just pulled what the tag points to
+        updateAvailable: false,
         status: newInfo.State.Running ? "running" : newInfo.State.Status,
         lastUpdated: new Date(),
       },

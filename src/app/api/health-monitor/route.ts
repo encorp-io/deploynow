@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { isAdmin } from "@/lib/sessionHelpers";
+import { requireUser } from "@/lib/apiAuth";
+import { audit, clientIp } from "@/lib/audit";
 
 const DEFAULT_PATTERNS = [
   // connection failures
@@ -36,8 +36,8 @@ const DEFAULT_PATTERNS = [
 ].join("\n");
 
 export async function GET() {
-  const session = await auth();
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const gate = await requireUser();
+  if (!gate.ok) return gate.response;
 
   const config = await prisma.healthMonitor.findUnique({ where: { id: "singleton" } });
 
@@ -51,9 +51,8 @@ export async function GET() {
 }
 
 export async function PUT(request: Request) {
-  const session = await auth();
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (!isAdmin(session)) return NextResponse.json({ error: "Admin only" }, { status: 403 });
+  const gate = await requireUser("settings.manage");
+  if (!gate.ok) return gate.response;
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let body: any;
@@ -127,5 +126,11 @@ export async function PUT(request: Request) {
     return NextResponse.json({ error: "Failed to save settings" }, { status: 500 });
   }
 
+  await audit({
+    actor: { id: gate.user.id, email: gate.user.email },
+    ip: clientIp(request),
+    action: "settings.health_monitor",
+    message: `${gate.user.email} changed health monitor settings: ${Object.keys(data).join(", ") || "nothing"}`,
+  });
   return NextResponse.json({ success: true });
 }

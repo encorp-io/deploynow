@@ -24,6 +24,8 @@ let server: WebSocketServer | null = null;
 export function originAllowed(req: Pick<IncomingMessage, "headers">): boolean {
   const origin = req.headers.origin;
   if (!origin) return true; // non-browser clients still need a valid ticket
+  // Dev only: the page (e.g. :3000) and the socket (:3002) are on different ports
+  if (process.env.WS_ALLOWED_ORIGIN && origin === process.env.WS_ALLOWED_ORIGIN) return true;
   const host = (req.headers["x-forwarded-host"] as string) || req.headers.host;
   try {
     return new URL(origin).host === host;
@@ -33,6 +35,11 @@ export function originAllowed(req: Pick<IncomingMessage, "headers">): boolean {
 }
 
 async function handleConnection(ws: WebSocket, req: IncomingMessage) {
+  // Hold early messages (the first resize, fast typing) until the shell is attached
+  const early: Buffer[] = [];
+  const holdEarly = (raw: Buffer) => early.length < 100 && early.push(raw);
+  ws.on("message", holdEarly);
+
   const url = new URL(req.url ?? "", "http://localhost");
   const ticket = redeemExecTicket(url.searchParams.get("ticket") ?? "");
   if (!ticket || !originAllowed(req) || !(ALLOWED_SHELLS as readonly string[]).includes(ticket.shell)) {
@@ -55,7 +62,7 @@ async function handleConnection(ws: WebSocket, req: IncomingMessage) {
     return;
   }
 
-  const ip = ((req.headers["x-forwarded-for"] as string) || "").split(",")[0].trim();
+  const ip = ((req.headers["x-real-ip"] as string) || (req.headers["x-forwarded-for"] as string) || "").split(",")[0].trim().slice(0, 64);
   const actor = { id: user.id, email: user.email };
   const started = Date.now();
   let stream: Duplex | null = null;
@@ -88,7 +95,7 @@ async function handleConnection(ws: WebSocket, req: IncomingMessage) {
     stream.on("end", () => ws.close(1000, "Session ended"));
     stream.on("error", () => ws.close(1011, "Stream error"));
 
-    ws.on("message", (raw) => {
+    const onMessage = (raw: Buffer) => {
       let msg: { t?: string; d?: string; c?: number; r?: number };
       try {
         msg = JSON.parse(raw.toString());
@@ -96,10 +103,13 @@ async function handleConnection(ws: WebSocket, req: IncomingMessage) {
         return;
       }
       if (msg.t === "i" && typeof msg.d === "string") stream?.write(msg.d);
-      if (msg.t === "r" && Number.isInteger(msg.c) && Number.isInteger(msg.r)) {
+      if (msg.t === "r" && Number.isInteger(msg.c) && Number.isInteger(msg.r) && msg.c! > 0 && msg.r! > 0) {
         exec.resize({ w: Math.min(500, msg.c!), h: Math.min(200, msg.r!) }).catch(() => {});
       }
-    });
+    };
+    ws.off("message", holdEarly);
+    ws.on("message", onMessage);
+    for (const raw of early.splice(0)) onMessage(raw);
   } catch (err) {
     if (ws.readyState === ws.OPEN) ws.send(Buffer.from(`\r\nCould not start a shell: ${dockerErrorMessage(err)}\r\n`));
     ws.close(1011, "Exec failed");

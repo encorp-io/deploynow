@@ -1,229 +1,98 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-vi.mock("@/lib/portainer", () => ({
-  getContainerLogs: vi.fn(),
-  restartContainer: vi.fn(),
-}));
-
-const mockPrisma = {
+const mockPrisma = vi.hoisted(() => ({
   healthMonitor: { findUnique: vi.fn() },
-  settings: { findUnique: vi.fn() },
   service: { findMany: vi.fn(), update: vi.fn() },
-  activityLog: { create: vi.fn() },
-};
+}));
+const container = vi.hoisted(() => ({ logs: vi.fn(), restart: vi.fn() }));
 vi.mock("@/lib/prisma", () => ({ prisma: mockPrisma }));
+vi.mock("@/lib/audit", () => ({ audit: vi.fn() }));
+vi.mock("@/lib/endpoints", () => ({ dockerFor: vi.fn(() => ({ getContainer: () => container })) }));
 
-import { getContainerLogs, restartContainer } from "@/lib/portainer";
+import { audit } from "@/lib/audit";
+import { runHealthMonitor } from "@/lib/healthMonitor";
 
-const defaultConfig = {
-  id: "singleton",
-  enabled: true,
-  prefixes: "n8n-worker",
-  logWindow: 300,
-  cooldown: 10,
-  logPatterns: "timeout exceeded when trying to connect\ndatabase connection timed out",
-};
-const defaultSettings = {
-  portainerUrl: "https://portainer.test:9443",
-  portainerApiKey: "key",
-  portainerEndpointId: 1,
-};
-const runningWorker = {
-  id: "svc1",
-  containerId: "abc123",
-  containerName: "n8n-worker-1",
-  status: "running",
-  lastHealthRestart: null,
-};
+const EP = { id: "ep1", name: "local" };
+const svc = (name: string, extra = {}) => ({ id: `s-${name}`, containerId: `c-${name}`, containerName: name, endpointId: "ep1", endpoint: EP, lastHealthRestart: null, ...extra });
+const config = (extra = {}) => mockPrisma.healthMonitor.findUnique.mockResolvedValue({ enabled: true, prefixes: "", logPatterns: "connection timeout\nout of memory", logWindow: 300, cooldown: 10, ...extra });
+const logs = (text: string) => container.logs.mockResolvedValue(Buffer.from(text));
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  vi.spyOn(console, "log").mockImplementation(() => {});
+  vi.spyOn(console, "error").mockImplementation(() => {});
+});
 
 describe("runHealthMonitor", () => {
-  beforeEach(() => vi.clearAllMocks());
-
-  it("returns early when config not found", async () => {
+  it("does nothing when disabled, missing or without patterns", async () => {
     mockPrisma.healthMonitor.findUnique.mockResolvedValue(null);
-    const { runHealthMonitor } = await import("@/lib/healthMonitor");
     await runHealthMonitor();
-    expect(mockPrisma.settings.findUnique).not.toHaveBeenCalled();
-  });
-
-  it("returns early when disabled", async () => {
-    mockPrisma.healthMonitor.findUnique.mockResolvedValue({ ...defaultConfig, enabled: false });
-    const { runHealthMonitor } = await import("@/lib/healthMonitor");
+    config({ enabled: false });
     await runHealthMonitor();
-    expect(mockPrisma.settings.findUnique).not.toHaveBeenCalled();
-  });
-
-  it("returns early when Portainer URL is not configured", async () => {
-    mockPrisma.healthMonitor.findUnique.mockResolvedValue(defaultConfig);
-    mockPrisma.settings.findUnique.mockResolvedValue({ portainerUrl: "", portainerApiKey: "" });
-    const { runHealthMonitor } = await import("@/lib/healthMonitor");
+    config({ logPatterns: "\n  \n" });
     await runHealthMonitor();
     expect(mockPrisma.service.findMany).not.toHaveBeenCalled();
   });
 
-  it("returns early when logPatterns is empty", async () => {
-    mockPrisma.healthMonitor.findUnique.mockResolvedValue({ ...defaultConfig, logPatterns: "   \n  " });
-    mockPrisma.settings.findUnique.mockResolvedValue(defaultSettings);
-    const { runHealthMonitor } = await import("@/lib/healthMonitor");
+  it("only looks at running services on online endpoints", async () => {
+    config();
+    mockPrisma.service.findMany.mockResolvedValue([]);
     await runHealthMonitor();
-    expect(mockPrisma.service.findMany).not.toHaveBeenCalled();
+    expect(mockPrisma.service.findMany.mock.calls[0][0].where).toEqual({ status: "running", endpoint: { status: "online" } });
   });
 
-  it("skips containers whose names do not match any prefix", async () => {
-    mockPrisma.healthMonitor.findUnique.mockResolvedValue(defaultConfig);
-    mockPrisma.settings.findUnique.mockResolvedValue(defaultSettings);
-    mockPrisma.service.findMany.mockResolvedValue([
-      { ...runningWorker, containerName: "postgres" },
-      { ...runningWorker, containerName: "redis-cache" },
-    ]);
-    const { runHealthMonitor } = await import("@/lib/healthMonitor");
+  it("filters by prefix, case-insensitively", async () => {
+    config({ prefixes: "N8N-\nworker" });
+    mockPrisma.service.findMany.mockResolvedValue([svc("n8n-main"), svc("Worker-1"), svc("postgres")]);
+    logs("all good");
     await runHealthMonitor();
-    expect(getContainerLogs).not.toHaveBeenCalled();
+    expect(container.logs).toHaveBeenCalledTimes(2);
   });
 
-  it("monitors all containers when prefixes is empty", async () => {
-    mockPrisma.healthMonitor.findUnique.mockResolvedValue({ ...defaultConfig, prefixes: "" });
-    mockPrisma.settings.findUnique.mockResolvedValue(defaultSettings);
-    mockPrisma.service.findMany.mockResolvedValue([
-      { ...runningWorker, containerName: "postgres" },
-      { ...runningWorker, id: "svc2", containerId: "def456", containerName: "redis-cache" },
-    ]);
-    vi.mocked(getContainerLogs).mockResolvedValue("all good");
-    const { runHealthMonitor } = await import("@/lib/healthMonitor");
+  it("restarts on a matching pattern and audits it", async () => {
+    config();
+    mockPrisma.service.findMany.mockResolvedValue([svc("app")]);
+    logs("2024 ERROR Connection Timeout to db");
     await runHealthMonitor();
-    expect(getContainerLogs).toHaveBeenCalledTimes(2);
+    expect(container.restart).toHaveBeenCalledWith({ t: 10 });
+    expect(mockPrisma.service.update).toHaveBeenCalledWith({ where: { id: "s-app" }, data: { lastHealthRestart: expect.any(Date) } });
+    expect(audit).toHaveBeenCalledWith(expect.objectContaining({ action: "health.restart", endpointId: "ep1" }));
   });
 
-  it("matches multiple prefixes — skips containers that match none", async () => {
-    mockPrisma.healthMonitor.findUnique.mockResolvedValue({
-      ...defaultConfig,
-      prefixes: "n8n-worker\nglances",
-    });
-    mockPrisma.settings.findUnique.mockResolvedValue(defaultSettings);
-    mockPrisma.service.findMany.mockResolvedValue([
-      { ...runningWorker, containerName: "n8n-worker-1" },
-      { ...runningWorker, id: "svc2", containerId: "def456", containerName: "glances-monitor" },
-      { ...runningWorker, id: "svc3", containerId: "ghi789", containerName: "postgres" },
-    ]);
-    vi.mocked(getContainerLogs).mockResolvedValue("clean logs");
-    const { runHealthMonitor } = await import("@/lib/healthMonitor");
+  it("reads multiplexed Docker log frames", async () => {
+    config();
+    mockPrisma.service.findMany.mockResolvedValue([svc("app")]);
+    const payload = Buffer.from("fatal: out of memory\n");
+    const header = Buffer.alloc(8);
+    header[0] = 2;
+    header.writeUInt32BE(payload.length, 4);
+    container.logs.mockResolvedValue(Buffer.concat([header, payload]));
     await runHealthMonitor();
-    expect(getContainerLogs).toHaveBeenCalledTimes(2);
+    expect(container.restart).toHaveBeenCalled();
   });
 
-  it("skips a container that is still within the cooldown window", async () => {
-    const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
-    mockPrisma.healthMonitor.findUnique.mockResolvedValue(defaultConfig); // cooldown: 10 min
-    mockPrisma.settings.findUnique.mockResolvedValue(defaultSettings);
-    mockPrisma.service.findMany.mockResolvedValue([
-      { ...runningWorker, lastHealthRestart: fiveMinutesAgo },
-    ]);
-    const { runHealthMonitor } = await import("@/lib/healthMonitor");
+  it("does not restart without a match", async () => {
+    config();
+    mockPrisma.service.findMany.mockResolvedValue([svc("app")]);
+    logs("fine");
     await runHealthMonitor();
-    expect(getContainerLogs).not.toHaveBeenCalled();
+    expect(container.restart).not.toHaveBeenCalled();
   });
 
-  it("processes a container after the cooldown has elapsed", async () => {
-    const elevenMinutesAgo = new Date(Date.now() - 11 * 60 * 1000);
-    mockPrisma.healthMonitor.findUnique.mockResolvedValue(defaultConfig); // cooldown: 10 min
-    mockPrisma.settings.findUnique.mockResolvedValue(defaultSettings);
-    mockPrisma.service.findMany.mockResolvedValue([
-      { ...runningWorker, lastHealthRestart: elevenMinutesAgo },
-    ]);
-    vi.mocked(getContainerLogs).mockResolvedValue("normal log output");
-    const { runHealthMonitor } = await import("@/lib/healthMonitor");
+  it("respects the cooldown", async () => {
+    config({ cooldown: 10 });
+    mockPrisma.service.findMany.mockResolvedValue([svc("recent", { lastHealthRestart: new Date(Date.now() - 60_000) }), svc("old", { lastHealthRestart: new Date(Date.now() - 3_600_000) })]);
+    logs("connection timeout");
     await runHealthMonitor();
-    expect(getContainerLogs).toHaveBeenCalled();
+    expect(container.restart).toHaveBeenCalledTimes(1);
   });
 
-  it("does not restart when no pattern is present in logs", async () => {
-    mockPrisma.healthMonitor.findUnique.mockResolvedValue(defaultConfig);
-    mockPrisma.settings.findUnique.mockResolvedValue(defaultSettings);
-    mockPrisma.service.findMany.mockResolvedValue([runningWorker]);
-    vi.mocked(getContainerLogs).mockResolvedValue("Worker finished job 123 successfully");
-    const { runHealthMonitor } = await import("@/lib/healthMonitor");
+  it("audits a failure and keeps going", async () => {
+    config();
+    mockPrisma.service.findMany.mockResolvedValue([svc("a"), svc("b")]);
+    container.logs.mockRejectedValueOnce(new Error("no such container")).mockResolvedValueOnce(Buffer.from("connection timeout"));
     await runHealthMonitor();
-    expect(restartContainer).not.toHaveBeenCalled();
-    expect(mockPrisma.activityLog.create).not.toHaveBeenCalled();
-  });
-
-  it("restarts when a configured pattern is detected in logs", async () => {
-    mockPrisma.healthMonitor.findUnique.mockResolvedValue(defaultConfig);
-    mockPrisma.settings.findUnique.mockResolvedValue(defaultSettings);
-    mockPrisma.service.findMany.mockResolvedValue([runningWorker]);
-    vi.mocked(getContainerLogs).mockResolvedValue(
-      "timeout exceeded when trying to connect (execution 6912767)"
-    );
-    vi.mocked(restartContainer).mockResolvedValue(undefined);
-    mockPrisma.service.update.mockResolvedValue({});
-    mockPrisma.activityLog.create.mockResolvedValue({});
-
-    const { runHealthMonitor } = await import("@/lib/healthMonitor");
-    await runHealthMonitor();
-
-    expect(restartContainer).toHaveBeenCalledWith(1, "abc123");
-    expect(mockPrisma.service.update).toHaveBeenCalledWith({
-      where: { id: "svc1" },
-      data: { lastHealthRestart: expect.any(Date) },
-    });
-    expect(mockPrisma.activityLog.create).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: expect.objectContaining({ action: "health_restart", serviceId: "svc1" }),
-      })
-    );
-  });
-
-  it("restarts when a custom log pattern is detected", async () => {
-    mockPrisma.healthMonitor.findUnique.mockResolvedValue({
-      ...defaultConfig,
-      logPatterns: "out of memory\nkilled process",
-    });
-    mockPrisma.settings.findUnique.mockResolvedValue(defaultSettings);
-    mockPrisma.service.findMany.mockResolvedValue([runningWorker]);
-    vi.mocked(getContainerLogs).mockResolvedValue("OOM killer: killed process 1234");
-    vi.mocked(restartContainer).mockResolvedValue(undefined);
-    mockPrisma.service.update.mockResolvedValue({});
-    mockPrisma.activityLog.create.mockResolvedValue({});
-
-    const { runHealthMonitor } = await import("@/lib/healthMonitor");
-    await runHealthMonitor();
-
-    expect(restartContainer).toHaveBeenCalled();
-  });
-
-  it("matches prefixes case-insensitively", async () => {
-    mockPrisma.healthMonitor.findUnique.mockResolvedValue({ ...defaultConfig, prefixes: "N8N-Worker" });
-    mockPrisma.settings.findUnique.mockResolvedValue(defaultSettings);
-    mockPrisma.service.findMany.mockResolvedValue([runningWorker]); // "n8n-worker-1"
-    vi.mocked(getContainerLogs).mockResolvedValue("normal logs");
-
-    const { runHealthMonitor } = await import("@/lib/healthMonitor");
-    await runHealthMonitor();
-
-    expect(getContainerLogs).toHaveBeenCalled();
-  });
-
-  it("logs error per container and continues processing remaining containers", async () => {
-    mockPrisma.healthMonitor.findUnique.mockResolvedValue(defaultConfig);
-    mockPrisma.settings.findUnique.mockResolvedValue(defaultSettings);
-    mockPrisma.service.findMany.mockResolvedValue([
-      runningWorker,
-      { ...runningWorker, id: "svc2", containerId: "def456", containerName: "n8n-worker-2" },
-    ]);
-    vi.mocked(getContainerLogs)
-      .mockRejectedValueOnce(new Error("network error"))
-      .mockResolvedValueOnce("no issues here");
-    mockPrisma.activityLog.create.mockResolvedValue({});
-
-    const { runHealthMonitor } = await import("@/lib/healthMonitor");
-    await runHealthMonitor();
-
-    expect(mockPrisma.activityLog.create).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: expect.objectContaining({ action: "error", serviceId: "svc1" }),
-      })
-    );
-    expect(restartContainer).not.toHaveBeenCalled();
-    expect(getContainerLogs).toHaveBeenCalledTimes(2);
+    expect(audit).toHaveBeenCalledWith(expect.objectContaining({ action: "health.check", outcome: "failure" }));
+    expect(container.restart).toHaveBeenCalledTimes(1);
   });
 });

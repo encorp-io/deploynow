@@ -13,6 +13,8 @@
 
 </div>
 
+> **v2.0 branch.** This branch is turning the deployer into a standalone Docker manager that no longer needs Portainer: 2FA, roles, multiple machines over SSH or TLS, and a container explorer with logs and a console. See [docs/v2.md](docs/v2.md) for what changed and how to upgrade. The rest of this README still describes v1.
+
 ---
 
 ## What is this?

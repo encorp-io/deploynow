@@ -196,7 +196,7 @@ export default function DashboardPage() {
             ) : (
               <RefreshCw className="w-4 h-4" />
             )}
-            Sync Portainer
+            Sync containers
           </button>
         </div>
       </div>
@@ -236,8 +236,8 @@ export default function DashboardPage() {
                 No services found
               </h3>
               <p className="text-sm text-text-muted mb-6">
-                Configure your Portainer connection in Settings, then click
-                &ldquo;Sync Portainer&rdquo; to discover your services.
+                Add an endpoint under Endpoints, then click
+                &ldquo;Sync containers&rdquo; to discover your services.
               </p>
               <button
                 onClick={handleSync}
