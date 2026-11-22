@@ -8,6 +8,7 @@ import { ArrowLeft, Play, Square, RotateCw, Trash2, Pencil, RefreshCw, Eraser } 
 import { useApi } from "@/components/AppShell";
 import ProxyCard from "@/components/ProxyCard";
 import AgentCard from "@/components/AgentCard";
+import MetricsChart from "@/components/MetricsChart";
 import EndpointForm, { type EndpointView } from "@/components/EndpointForm";
 import { Badge, Button, Card, ErrorText, Modal, PageHeader, formatBytes, stateTone, timeAgo } from "@/components/ui";
 
@@ -169,6 +170,7 @@ export default function EndpointPage({ params }: { params: Promise<{ id: string 
       </div>
 
       {endpoint.type === "agent" && <AgentCard api={api} endpoint={endpoint} onChange={loadEndpoint} />}
+      <MetricsChart api={api} endpointId={id} />
       <ProxyCard endpointId={id} />
       <ErrorText>{error}</ErrorText>
 

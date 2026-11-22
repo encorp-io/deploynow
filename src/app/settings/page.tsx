@@ -1,6 +1,7 @@
 "use client";
 
 import { NotificationSettings, VaultSettings } from "@/components/IntegrationSettings";
+import { RegistrySettings, SsoSettings } from "@/components/AccessSettings";
 import { useState, useEffect } from "react";
 import { Save, Loader2, CheckCircle, Wifi, AlertCircle } from "lucide-react";
 
@@ -489,6 +490,8 @@ export default function SettingsPage() {
       </form>
 
       <div className="space-y-8 mt-8">
+        <SsoSettings />
+        <RegistrySettings />
         <VaultSettings />
         <NotificationSettings />
       </div>

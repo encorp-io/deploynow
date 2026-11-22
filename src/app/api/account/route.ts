@@ -9,9 +9,10 @@ export async function GET() {
   if (!gate.ok) return gate.response;
   const { user } = gate;
 
-  const [codesLeft, settings] = await Promise.all([
+  const [codesLeft, settings, passkeys] = await Promise.all([
     prisma.recoveryCode.count({ where: { userId: user.id, usedAt: null } }),
     prisma.settings.findUnique({ where: { id: "singleton" } }),
+    prisma.passkey.count({ where: { userId: user.id } }),
   ]);
   const require2fa = settings?.require2faForAdmins ?? true;
 
@@ -22,7 +23,9 @@ export async function GET() {
     role: user.role,
     totpEnabled: user.totpEnabled,
     recoveryCodesLeft: codesLeft,
-    mfaSetupRequired: mustEnrolTwoFactor(user.role, user.totpEnabled, require2fa),
+    passkeys,
+    // A passkey satisfies the "2FA for admins" policy too
+    mfaSetupRequired: mustEnrolTwoFactor(user.role, user.totpEnabled || passkeys > 0, require2fa),
     twoFactorRequiredForRole: require2fa && (user.role === "admin" || user.role === "owner"),
     stepUpActive: hasRecentStepUp(user.stepUpAt),
   });

@@ -5,12 +5,14 @@ import { useSearchParams } from "next/navigation";
 import { ShieldCheck, ShieldAlert, Monitor, KeyRound, Copy } from "lucide-react";
 import { useApi } from "@/components/AppShell";
 import { Badge, Button, Card, ErrorText, Field, Input, PageHeader, timeAgo } from "@/components/ui";
+import { ApiTokensCard, PasskeysCard } from "@/components/AccountSecurity";
 
 interface Account {
   email: string;
   name: string;
   role: string;
   totpEnabled: boolean;
+  passkeys: number;
   recoveryCodesLeft: number;
   mfaSetupRequired: boolean;
   twoFactorRequiredForRole: boolean;
@@ -147,12 +149,12 @@ function AccountPage() {
     <div className="max-w-3xl space-y-6">
       <PageHeader title="Account" subtitle={`${account.email} · ${account.role}`} />
 
-      {(account.mfaSetupRequired || params.get("setup") === "2fa") && !account.totpEnabled && (
+      {(account.mfaSetupRequired || params.get("setup") === "2fa") && !account.totpEnabled && !account.passkeys && (
         <div className="flex gap-3 items-start bg-warning/10 border border-warning/30 rounded-xl p-4 text-sm text-text-primary">
           <ShieldAlert className="w-5 h-5 text-warning flex-shrink-0" />
           <p>
             {account.mfaSetupRequired
-              ? "Your role requires two-factor authentication. Set it up below to continue using the deployer."
+              ? "Your role requires two-factor authentication. Set up an authenticator app or add a passkey below to continue."
               : "Set up two-factor authentication to protect your account."}
           </p>
         </div>
@@ -211,6 +213,10 @@ function AccountPage() {
         )}
         <ErrorText>{tfaError}</ErrorText>
       </Card>
+
+      <PasskeysCard onChange={load} />
+
+      {!account.mfaSetupRequired && <ApiTokensCard role={account.role} />}
 
       <Card className="p-6">
         <h2 className="font-semibold text-text-primary mb-4">Password</h2>

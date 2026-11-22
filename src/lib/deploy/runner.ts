@@ -18,7 +18,7 @@ import { prisma } from "../prisma";
 import { dockerFor, toConnection } from "../endpoints";
 import { dockerErrorMessage } from "../docker/client";
 import { pullImage } from "../docker/recreate";
-import { registryAuthFor } from "../registryAuth";
+import { allRegistryLogins, registryAuthFor } from "../registryAuth";
 import { withDockerCli, runCommand, type RegistryLogin } from "../docker/cliBridge";
 import { decryptSecret } from "../secretsCrypto";
 import { audit } from "../audit";
@@ -49,8 +49,7 @@ async function githubToken(): Promise<string> {
 }
 
 async function registryLogins(): Promise<RegistryLogin[]> {
-  const auth = await registryAuthFor("ghcr.io/x/y");
-  return auth ? [{ serveraddress: "ghcr.io", username: auth.username, password: auth.password }] : [];
+  return allRegistryLogins();
 }
 
 function insideDir(root: string, rel: string): string {

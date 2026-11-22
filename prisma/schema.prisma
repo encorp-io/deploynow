@@ -30,6 +30,9 @@ model User {
   sessions      Session[]
   recoveryCodes RecoveryCode[]
   roleBindings  RoleBinding[]
+  apiTokens     ApiToken[]
+  passkeys      Passkey[]
+  identities    UserIdentity[]
 }
 
 model RecoveryCode {
@@ -123,10 +126,13 @@ model Endpoint {
   // managed = DeployNow runs its own Traefik; external = an existing Traefik
   // (e.g. Dokploy's) on proxyNetwork with entrypoints web/websecure and a
   // "letsencrypt" resolver; none = no domains on this endpoint.
-  proxyMode    String @default("none")
-  proxyNetwork String @default("deploynow")
-  proxyEmail   String @default("")
-  proxyError   String @default("")
+  proxyMode      String @default("none")
+  proxyNetwork   String @default("deploynow")
+  proxyEmail     String @default("")
+  proxyError     String @default("")
+  // Certificates: http (HTTP-01) or cloudflare (DNS-01, needed for wildcards such as preview domains)
+  proxyChallenge String @default("http")
+  proxyDnsToken  String @default("") // encrypted Cloudflare API token (Zone:DNS:Edit)
 
   // Agent endpoints (type "agent"): the host runs deploynow-agent, which keeps an
   // outbound mTLS connection to the hub; Docker is reached through it.
@@ -307,6 +313,14 @@ model Application {
   restartPolicy       String      @default("unless-stopped")
   updatePolicy        String      @default("manual") // manual, auto-digest, on-push
   webhookSecret       String      @default("") // encrypted; GitHub push webhook HMAC secret
+  // Pull request previews: each open PR gets its own copy of the app at pr-<n>.<previewDomain>
+  previewsEnabled     Boolean     @default(false)
+  previewDomain       String      @default("") // e.g. preview.example.com (needs *.preview.example.com in DNS)
+  previewOfId         String? // set on a preview: the app it was copied from
+  prNumber            Int?
+  // Build somewhere else and ship through a registry
+  buildEndpointId     String? // build on this endpoint instead of the target
+  registryId          String? // push the built image here; the target pulls it
   status              String      @default("new") // new, deploying, running, failed, stopped
   currentDeploymentId String?
   createdAt           DateTime    @default(now())
@@ -352,6 +366,11 @@ model Domain {
   containerPort Int
   service       String      @default("") // compose apps: which service receives the traffic
   https         Boolean     @default(true) // Let's Encrypt via HTTP challenge
+  // Send this host elsewhere instead of to the app, e.g. www → apex
+  redirectTo    String      @default("") // https://example.com
+  redirectCode  Int         @default(308) // 301, 302, 307 or 308
+  // Basic auth in front of the app: htpasswd lines user:$2a$… (bcrypt)
+  basicAuth     String      @default("")
   createdAt     DateTime    @default(now())
 
   @@unique([host, path])
@@ -545,4 +564,96 @@ model TaskRun {
   finishedAt DateTime?
 
   @@index([taskId, startedAt])
+}
+
+// ─── Phase 4: access ───────────────────────────────────────────────────────────
+
+// Personal API tokens for the REST API and the CLI. Only a hash is stored.
+model ApiToken {
+  id         String    @id @default(cuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name       String
+  prefix     String // first characters, to recognise it in lists
+  hash       String    @unique // sha256 of the token
+  scope      String    @default("viewer") // highest role the token acts with: viewer, operator, admin, owner
+  expiresAt  DateTime?
+  lastUsedAt DateTime?
+  lastUsedIp String    @default("")
+  revokedAt  DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([userId])
+}
+
+// WebAuthn credentials (passkeys).
+model Passkey {
+  id           String    @id @default(cuid())
+  userId       String
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  credentialId String    @unique // base64url
+  publicKey    String // base64url COSE key
+  counter      Int       @default(0)
+  transports   String    @default("") // comma-separated
+  name         String    @default("Passkey")
+  createdAt    DateTime  @default(now())
+  lastUsedAt   DateTime?
+}
+
+// Google, Microsoft or any OpenID Connect provider for single sign-on.
+model SsoProvider {
+  id             String   @id @default(cuid())
+  type           String // google, microsoft, oidc
+  name           String // shown on the login button
+  clientId       String
+  clientSecret   String // encrypted
+  tenant         String   @default("") // microsoft: tenant id or domain (organizations / common allowed)
+  issuer         String   @default("") // oidc: issuer URL
+  allowedDomains String   @default("") // comma-separated email domains; empty = any verified email of an existing user
+  autoCreate     Boolean  @default(false) // create users on first sign-in (needs allowedDomains)
+  defaultRole    String   @default("viewer")
+  enabled        Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  identities UserIdentity[]
+}
+
+model UserIdentity {
+  id         String      @id @default(cuid())
+  providerId String
+  provider   SsoProvider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  subject    String // the provider's "sub"
+  userId     String
+  user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  email      String      @default("")
+  createdAt  DateTime    @default(now())
+  lastUsedAt DateTime?
+
+  @@unique([providerId, subject])
+}
+
+// Short-lived state for sign-in flows: OIDC state/nonce/PKCE, WebAuthn challenges, login tickets.
+model AuthChallenge {
+  id        String   @id // random, or sha256 of a ticket
+  kind      String // oidc, webauthn-register, webauthn-login, ticket
+  userId    String   @default("")
+  data      String   @default("") // JSON
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([expiresAt])
+}
+
+// ─── Phase 4: registries ───────────────────────────────────────────────────────
+
+model Registry {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  host      String // ghcr.io, registry.example.com:5000, docker.io
+  username  String
+  password  String // encrypted
+  namespace String   @default("") // where built images are pushed, e.g. ghcr.io/acme
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }

@@ -7,6 +7,7 @@ import { createSession, loadActiveSession, SESSION_TTL_MS } from "./sessions";
 import { mustEnrolTwoFactor, verifySecondFactor } from "./twoFactor";
 import { normalizeRole } from "./rbac";
 import { audit, clientIp } from "./audit";
+import { consumeTicket, peekTicket } from "./sso";
 
 /** Password was right, the account has 2FA, and no code was sent yet. */
 class TwoFactorRequired extends CredentialsSignin {
@@ -112,6 +113,52 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         return { id: user.id, email: user.email, name: user.name, role: normalizeRole(user.role), sid };
       },
     }),
+    // Single sign-on and passkeys end in a one-time ticket (see sso.ts) that is
+    // exchanged here for a normal session.
+    Credentials({
+      id: "ticket",
+      name: "ticket",
+      credentials: {
+        ticket: { label: "Ticket", type: "text" },
+        code: { label: "Authentication code", type: "text" },
+      },
+      async authorize(credentials, request) {
+        const ticket = typeof credentials?.ticket === "string" ? credentials.ticket : "";
+        const code = typeof credentials?.code === "string" ? credentials.code.trim() : "";
+        const ip = request ? clientIp(request) : "";
+        const userAgent = request?.headers.get("user-agent") ?? "";
+        if (ip && (await isRateLimited(`ip:${ip}`))) throw new TooManyAttempts();
+        const t = await peekTicket(ticket);
+        if (!t) {
+          if (ip) await recordFailure(`ip:${ip}`);
+          return null;
+        }
+        const user = await prisma.user.findUnique({ where: { id: t.userId } });
+        if (!user || user.disabledAt) return null;
+        // A passkey is already two factors (possession plus the device's own check).
+        // SSO is one factor, so an account with an authenticator app still needs its code.
+        if (t.method === "sso" && user.totpEnabledAt) {
+          if (await isRateLimited(`email:${user.email}`)) throw new TooManyAttempts();
+          if (!code) throw new TwoFactorRequired();
+          const result = await verifySecondFactor(user, code);
+          if (!result.ok) {
+            await recordFailure(`email:${user.email}`);
+            await audit({ action: "auth.login", outcome: "failure", message: `Failed sign-in for ${user.email}: wrong 2FA code after ${t.detail}`, targetType: "user", targetId: user.email, ip });
+            throw new InvalidTwoFactorCode();
+          }
+        }
+        if (!(await consumeTicket(ticket))) return null;
+        await prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
+        const sid = await createSession(user.id, ip, userAgent);
+        await audit({
+          actor: { id: user.id, email: user.email },
+          action: "auth.login",
+          message: `${user.email} signed in with ${t.method === "sso" ? t.detail : `a passkey (${t.detail})`}`,
+          ip,
+        });
+        return { id: user.id, email: user.email, name: user.name, role: normalizeRole(user.role), sid };
+      },
+    }),
   ],
   callbacks: {
     async jwt({ token, user }) {
@@ -127,7 +174,12 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       token.role = role;
       token.name = s.user.name;
       token.email = s.user.email;
-      token.mfaSetupRequired = mustEnrolTwoFactor(role, !!s.user.totpEnabledAt, await requireTwoFactorForAdmins());
+      let secondFactor = !!s.user.totpEnabledAt;
+      if (!secondFactor && (role === "admin" || role === "owner")) {
+        // A passkey counts as two-factor for the "require 2FA for admins" policy
+        secondFactor = (await prisma.passkey.count({ where: { userId: s.user.id } })) > 0;
+      }
+      token.mfaSetupRequired = mustEnrolTwoFactor(role, secondFactor, await requireTwoFactorForAdmins());
       return token;
     },
     async session({ session, token }) {

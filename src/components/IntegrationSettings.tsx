@@ -100,7 +100,7 @@ const EVENT_LABELS: Record<string, string> = {
 export function NotificationSettings() {
   const api = useApi();
   const [data, setData] = useState<{ channels: Channel[]; events: string[] } | null>(null);
-  const [form, setForm] = useState<{ name: string; type: string; url: string; botToken: string; chatId: string; events: string[] } | null>(null);
+  const [form, setForm] = useState<{ name: string; type: string; url: string; botToken: string; chatId: string; host?: string; port?: string; security?: string; user?: string; pass?: string; from?: string; to?: string; events: string[] } | null>(null);
   const [error, setError] = useState("");
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState("");
@@ -150,7 +150,7 @@ export function NotificationSettings() {
   return (
     <section className={section}>
       <h2 className="text-sm font-semibold text-text-primary mb-1 flex items-center gap-2"><Bell className="w-4 h-4" /> Notifications</h2>
-      <p className="text-xs text-text-muted mb-4">Where DeployNow reports deployments: Slack, Discord, Telegram or a signed webhook.</p>
+      <p className="text-xs text-text-muted mb-4">Where DeployNow reports deployments, backups and alerts: Slack, Discord, Telegram, email or a signed webhook.</p>
       <div className="space-y-2">
         {data.channels.length === 0 && <p className="text-sm text-text-muted">No channels yet.</p>}
         {data.channels.map((c) => (
@@ -176,11 +176,28 @@ export function NotificationSettings() {
                 <option value="slack">Slack</option>
                 <option value="discord">Discord</option>
                 <option value="telegram">Telegram</option>
+                <option value="email">Email (SMTP)</option>
                 <option value="webhook">Webhook</option>
               </select>
             </Field>
           </div>
-          {form.type === "telegram" ? (
+          {form.type === "email" ? (
+            <div className="grid grid-cols-3 gap-3">
+              <Field label="SMTP server"><Input value={form.host ?? ""} onChange={(e) => setForm({ ...form, host: e.target.value })} placeholder="smtp.example.com" /></Field>
+              <Field label="Security">
+                <select value={form.security ?? "starttls"} onChange={(e) => setForm({ ...form, security: e.target.value, port: e.target.value === "tls" ? "465" : e.target.value === "none" ? "25" : "587" })} className={selectClass}>
+                  <option value="starttls">STARTTLS</option>
+                  <option value="tls">TLS</option>
+                  <option value="none">None</option>
+                </select>
+              </Field>
+              <Field label="Port"><Input value={form.port ?? "587"} onChange={(e) => setForm({ ...form, port: e.target.value })} inputMode="numeric" /></Field>
+              <Field label="User name"><Input value={form.user ?? ""} onChange={(e) => setForm({ ...form, user: e.target.value })} autoComplete="off" /></Field>
+              <Field label="Password"><Input type="password" value={form.pass ?? ""} onChange={(e) => setForm({ ...form, pass: e.target.value })} autoComplete="new-password" /></Field>
+              <Field label="From"><Input value={form.from ?? ""} onChange={(e) => setForm({ ...form, from: e.target.value })} placeholder="DeployNow <ops@example.com>" /></Field>
+              <div className="col-span-3"><Field label="To (comma-separated)"><Input value={form.to ?? ""} onChange={(e) => setForm({ ...form, to: e.target.value })} placeholder="oncall@example.com, ops@example.com" /></Field></div>
+            </div>
+          ) : form.type === "telegram" ? (
             <div className="grid grid-cols-2 gap-3">
               <Field label="Bot token"><Input type="password" value={form.botToken} onChange={(e) => setForm({ ...form, botToken: e.target.value })} /></Field>
               <Field label="Chat id"><Input value={form.chatId} onChange={(e) => setForm({ ...form, chatId: e.target.value })} placeholder="-1001234567890" /></Field>
@@ -190,7 +207,7 @@ export function NotificationSettings() {
               <Input type="password" value={form.url} onChange={(e) => setForm({ ...form, url: e.target.value })} placeholder="https://hooks.slack.com/services/…" />
             </Field>
           )}
-          <div className="flex gap-4">
+          <div className="flex flex-wrap gap-x-4 gap-y-1">
             {events.map((e) => (
               <label key={e} className="flex items-center gap-1.5 text-xs text-text-secondary">
                 <input type="checkbox" checked={form.events.includes(e)} onChange={(x) => setForm({ ...form, events: x.target.checked ? [...form.events, e] : form.events.filter((y) => y !== e) })} />

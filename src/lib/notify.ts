@@ -1,12 +1,13 @@
 /**
- * Notification channels: Slack, Discord, Telegram, or a generic webhook
- * (JSON body signed with HMAC-SHA256 in X-DeployNow-Signature).
+ * Notification channels: Slack, Discord, Telegram, email (SMTP), or a generic
+ * webhook (JSON body signed with HMAC-SHA256 in X-DeployNow-Signature).
  */
 import crypto from "crypto";
+import nodemailer from "nodemailer";
 import { prisma } from "./prisma";
 import { decryptSecret, encryptSecret } from "./secretsCrypto";
 
-export const CHANNEL_TYPES = ["slack", "discord", "telegram", "webhook"] as const;
+export const CHANNEL_TYPES = ["slack", "discord", "telegram", "email", "webhook"] as const;
 export type ChannelType = (typeof CHANNEL_TYPES)[number];
 export const EVENTS = [
   "deploy.success",
@@ -26,7 +27,17 @@ export interface ChannelConfig {
   botToken?: string;
   chatId?: string;
   secret?: string;
+  // email
+  host?: string;
+  port?: string;
+  security?: string; // tls (implicit, 465), starttls (587) or none
+  user?: string;
+  pass?: string;
+  from?: string;
+  to?: string;
 }
+
+const EMAIL_RE = /^[^@\s<>,]+@[^@\s<>,]+\.[^@\s<>,]+$/;
 
 export interface Notification {
   event: NotifyEvent;
@@ -66,8 +77,22 @@ export function validateChannel(type: unknown, raw: Record<string, unknown>, exi
     }
     case "webhook":
       return { url: httpsUrl(str("url"), "webhook"), secret: str("secret") || crypto.randomBytes(24).toString("hex") };
+    case "email": {
+      const host = str("host").toLowerCase();
+      if (!/^[a-z0-9.-]+$/.test(host) || host.length > 253) throw new Error("Enter the SMTP server's host name");
+      const security = ["tls", "starttls", "none"].includes(str("security")) ? str("security") : "starttls";
+      const port = str("port") || (security === "tls" ? "465" : "587");
+      if (!/^\d{1,5}$/.test(port) || Number(port) < 1 || Number(port) > 65535) throw new Error("Enter the SMTP port");
+      const from = str("from");
+      if (!EMAIL_RE.test(from.replace(/^.*<(.+)>$/, "$1"))) throw new Error("Enter the sender address");
+      const to = str("to").split(/[,;\s]+/).filter(Boolean);
+      if (!to.length || to.length > 20 || !to.every((a) => EMAIL_RE.test(a))) throw new Error("Enter one or more recipient addresses");
+      const user = str("user");
+      const pass = typeof raw.pass === "string" && raw.pass && raw.pass !== "••••••••" ? raw.pass : existing?.pass ?? "";
+      return { host, port, security, user, pass, from, to: to.join(",") };
+    }
     default:
-      throw new Error("Choose Slack, Discord, Telegram or webhook");
+      throw new Error("Choose Slack, Discord, Telegram, email or webhook");
   }
 }
 
@@ -88,7 +113,7 @@ function plain(n: Notification): string {
   return [`${n.ok ? "✅" : "❌"} ${n.title}`, n.text, ...fields, n.link ?? ""].filter(Boolean).join("\n");
 }
 
-export function buildRequest(type: ChannelType, cfg: ChannelConfig, n: Notification): { url: string; init: RequestInit } {
+export function buildRequest(type: Exclude<ChannelType, "email">, cfg: ChannelConfig, n: Notification): { url: string; init: RequestInit } {
   const json = (body: unknown, headers: Record<string, string> = {}) => ({
     method: "POST",
     headers: { "Content-Type": "application/json", ...headers },
@@ -115,8 +140,52 @@ export function buildRequest(type: ChannelType, cfg: ChannelConfig, n: Notificat
   }
 }
 
+function escapeHtml(s: string) {
+  return s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
+}
+
+export function buildEmail(cfg: ChannelConfig, n: Notification) {
+  const rows = Object.entries(n.fields ?? {})
+    .map(([k, v]) => `<tr><td style="padding:2px 12px 2px 0;color:#666">${escapeHtml(k)}</td><td>${escapeHtml(v)}</td></tr>`)
+    .join("");
+  const html =
+    `<div style="font-family:system-ui,sans-serif;font-size:14px">` +
+    `<h2 style="font-size:16px;margin:0 0 8px">${n.ok ? "✅" : "❌"} ${escapeHtml(n.title)}</h2>` +
+    `<p style="white-space:pre-wrap">${escapeHtml(n.text)}</p>` +
+    (rows ? `<table style="font-size:13px">${rows}</table>` : "") +
+    (n.link && /^https?:\/\//.test(n.link) ? `<p><a href="${escapeHtml(n.link)}">Open in DeployNow</a></p>` : "") +
+    `</div>`;
+  return {
+    from: cfg.from!,
+    to: cfg.to!,
+    subject: `[DeployNow] ${n.title}`.replace(/[\r\n]+/g, " ").slice(0, 200),
+    text: plain(n),
+    html,
+    headers: { "X-DeployNow-Event": n.event },
+  };
+}
+
+export function smtpTransport(cfg: ChannelConfig) {
+  return nodemailer.createTransport({
+    host: cfg.host,
+    port: Number(cfg.port),
+    secure: cfg.security === "tls",
+    requireTLS: cfg.security === "starttls",
+    ignoreTLS: cfg.security === "none",
+    auth: cfg.user ? { user: cfg.user, pass: cfg.pass ?? "" } : undefined,
+    connectionTimeout: 10_000,
+    greetingTimeout: 10_000,
+    socketTimeout: 20_000,
+  });
+}
+
 export async function sendTo(channel: { id: string; type: string; config: string }, n: Notification): Promise<void> {
-  const { url, init } = buildRequest(channel.type as ChannelType, decryptConfig(channel.config), n);
+  if (channel.type === "email") {
+    const cfg = decryptConfig(channel.config);
+    await smtpTransport(cfg).sendMail(buildEmail(cfg, n));
+    return;
+  }
+  const { url, init } = buildRequest(channel.type as Exclude<ChannelType, "email">, decryptConfig(channel.config), n);
   const res = await fetch(url, { ...init, redirect: "error", signal: AbortSignal.timeout(10_000) });
   if (!res.ok) throw new Error(`The channel answered ${res.status}`);
 }
