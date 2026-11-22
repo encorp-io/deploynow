@@ -5,6 +5,7 @@ const mockPrisma = vi.hoisted(() => ({
   recoveryCode: { count: vi.fn(), deleteMany: vi.fn(), createMany: vi.fn() },
   session: { findMany: vi.fn() },
   settings: { findUnique: vi.fn() },
+  passkey: { count: vi.fn(async () => 0) },
   $transaction: vi.fn(async () => []),
 }));
 vi.mock("@/lib/prisma", () => ({ prisma: mockPrisma }));

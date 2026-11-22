@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createTicket, finishLogin, SsoError } from "@/lib/sso";
-import { publicOrigin } from "@/lib/apps/access";
+import { publicOrigin } from "@/lib/publicOrigin";
 import { audit, clientIp } from "@/lib/audit";
 import { recordFailure } from "@/lib/rateLimit";
 

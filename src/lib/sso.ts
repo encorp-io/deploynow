@@ -119,8 +119,8 @@ export function callbackUrl(origin: string) {
 }
 
 /** Start a sign-in: returns the URL to send the browser to. */
-export async function startLogin(provider: SsoProvider, origin: string): Promise<string> {
-  const doc = await discover(issuerFor(provider));
+export async function startLogin(provider: SsoProvider, origin: string, fetchImpl: typeof fetch = fetch): Promise<string> {
+  const doc = await discover(issuerFor(provider), fetchImpl);
   const state = b64url(crypto.randomBytes(24));
   const nonce = b64url(crypto.randomBytes(24));
   const verifier = b64url(crypto.randomBytes(32));
@@ -152,7 +152,9 @@ export interface Claims extends JWTPayload {
 }
 
 /** Verify an ID token from the provider. */
-export async function verifyIdToken(provider: SsoProvider, idToken: string, nonce: string, keys?: Parameters<typeof jwtVerify>[1]): Promise<Claims> {
+export type KeySource = Parameters<typeof jwtVerify>[1];
+
+export async function verifyIdToken(provider: SsoProvider, idToken: string, nonce: string, keys?: KeySource): Promise<Claims> {
   const doc = await discover(issuerFor(provider));
   const { payload } = await jwtVerify<Claims>(idToken, (keys as never) ?? jwks(doc.jwks_uri), { audience: provider.clientId, clockTolerance: 60 });
   // Microsoft's multi-tenant issuer is a template: https://login.microsoftonline.com/{tenantid}/v2.0
@@ -212,7 +214,7 @@ export async function resolveUser(provider: SsoProvider, claims: Claims): Promis
 }
 
 /** Exchange the code for tokens and verify the ID token. Returns the user and where to go next. */
-export async function finishLogin(params: { state: string; code: string }, fetchImpl: typeof fetch = fetch) {
+export async function finishLogin(params: { state: string; code: string }, fetchImpl: typeof fetch = fetch, keys?: KeySource) {
   const flow = await prisma.authChallenge.findUnique({ where: { id: `oidc:${params.state}` } });
   if (flow) await prisma.authChallenge.delete({ where: { id: flow.id } }).catch(() => {});
   if (!flow || flow.kind !== "oidc" || flow.expiresAt.getTime() < Date.now()) throw new SsoError("The sign-in expired or was already used; try again");
@@ -230,7 +232,7 @@ export async function finishLogin(params: { state: string; code: string }, fetch
   });
   const body = (await res.json().catch(() => ({}))) as { id_token?: string; error?: string; error_description?: string };
   if (!res.ok || !body.id_token) throw new SsoError(`${provider.name} refused the sign-in: ${body.error_description || body.error || res.status}`);
-  const claims = await verifyIdToken(provider, body.id_token, nonce);
+  const claims = await verifyIdToken(provider, body.id_token, nonce, keys);
   const user = await resolveUser(provider, claims);
   if (user.disabledAt) throw new SsoError("This account is disabled");
   return { user, provider, origin };

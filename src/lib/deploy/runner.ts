@@ -225,10 +225,10 @@ export async function runDeployment(deploymentId: string, ctx: RunContext = {}):
           }
         });
         if (buildEndpoint) {
+          // The build server doesn't need to keep it (removed before the pull, in case both are one daemon)
+          await dockerFor(buildEndpoint).getImage(image).remove().catch(() => {});
           log(`Pulling ${image} on ${app.endpoint.name}`);
           await pullImage(docker, image, await registryAuthFor(image));
-          // The build server doesn't need to keep it
-          await dockerFor(buildEndpoint).getImage(image).remove().catch(() => {});
         }
         const info = await docker.getImage(image).inspect();
         result.imageRef = image;

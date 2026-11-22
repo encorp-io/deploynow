@@ -53,6 +53,7 @@ let teardownApplication: typeof import("@/lib/deploy/runner").teardownApplicatio
 let readLog: typeof import("@/lib/deploy/log").readLog;
 let parseEnvInput: typeof import("@/lib/apps/env").parseEnvInput;
 let installProxy: typeof import("@/lib/deploy/proxy").installProxy;
+let basicAuthLine: typeof import("@/lib/apps/config").basicAuthLine;
 let removeProxy: typeof import("@/lib/deploy/proxy").removeProxy;
 
 let endpointId = "";
@@ -82,6 +83,19 @@ function getWithHost(host: string): Promise<string> {
   });
 }
 
+/** Status, headers and body for a request to Traefik on port 80 with this Host. */
+function hit(host: string, headers: Record<string, string> = {}, urlPath = "/"): Promise<{ status: number; location: string; body: string }> {
+  return new Promise((resolve) => {
+    const req = http.get({ host: "127.0.0.1", port: 80, path: urlPath, headers: { Host: host, ...headers }, timeout: 3000 }, (res) => {
+      let b = "";
+      res.on("data", (c) => (b += c));
+      res.on("end", () => resolve({ status: res.statusCode ?? 0, location: String(res.headers.location ?? ""), body: b }));
+    });
+    req.on("error", () => resolve({ status: 0, location: "", body: "" }));
+    req.on("timeout", () => req.destroy());
+  });
+}
+
 async function envOf(containerId: string) {
   return (await docker.getContainer(containerId).inspect()).Config.Env;
 }
@@ -96,6 +110,7 @@ describe.skipIf(!up)("deploy pipeline (real Docker)", () => {
     ({ readLog } = await import("@/lib/deploy/log"));
     ({ parseEnvInput } = await import("@/lib/apps/env"));
     ({ installProxy, removeProxy } = await import("@/lib/deploy/proxy"));
+    ({ basicAuthLine } = await import("@/lib/apps/config"));
 
     const ep = await prisma.endpoint.create({ data: { name: "local", type: "socket", host: SOCKET } });
     endpointId = ep.id;
@@ -214,6 +229,41 @@ describe.skipIf(!up)("deploy pipeline (real Docker)", () => {
     expect(img.Config.Labels?.["deploynow.app"]).toBe(app.id);
   }, 300_000);
 
+  it("builds on a separate build server, pushes to a registry and pulls on the target", async () => {
+    const REG = `dn-it-registry-${tag}`;
+    const regImage = process.env.CI ? "registry:2" : "mirror.gcr.io/library/registry:2";
+    if (!(await ready(regImage))) return;
+    await docker.getContainer(REG).remove({ force: true }).catch(() => {});
+    const reg = await docker.createContainer({ name: REG, Image: regImage, HostConfig: { PortBindings: { "5000/tcp": [{ HostIp: "127.0.0.1", HostPort: "5055" }] } }, ExposedPorts: { "5000/tcp": {} } });
+    await reg.start();
+    try {
+      const repo = path.join(dir, "repo2");
+      fs.mkdirSync(repo, { recursive: true });
+      fs.writeFileSync(path.join(repo, "Dockerfile"), `FROM ${BUSYBOX}\nCMD ["sleep", "600"]\n`);
+      const git = (args: string) => execSync(`git -c user.email=it@test -c user.name=it ${args}`, { cwd: repo, stdio: "pipe" }).toString().trim();
+      git("init -q -b main");
+      git("add .");
+      git("commit -q -m 'remote build'");
+      // A second endpoint record for the same daemon stands in for the build server
+      const builder = await prisma.endpoint.create({ data: { name: "builder", type: "socket", host: SOCKET } });
+      const registry = await prisma.registry.create({ data: { name: "local", host: "localhost:5055", username: "u", password: "", namespace: "localhost:5055/acme" } });
+      const app = await createApp({ name: "remote", slug: `${tag}-remote`, sourceType: "git-dockerfile", gitRepo: `file://${repo}`, gitBranch: "main", buildEndpointId: builder.id, registryId: registry.id });
+      const done = await runDeployment((await newDeployment(app.id)).id, { settleMs: 1000 });
+      const log = readLog(done.id).text;
+      expect(done.status, done.error + "\n" + log).toBe("success");
+      expect(done.imageRef).toBe(`localhost:5055/acme/${tag}-remote:${done.id.slice(-10)}`);
+      expect(log).toContain("on builder");
+      expect(log).toContain("Pushing");
+      expect(log).toContain(`Pulling localhost:5055/acme/${tag}-remote`);
+      // The registry has it
+      const tags = await (await fetch(`http://127.0.0.1:5055/v2/acme/${tag}-remote/tags/list`)).json();
+      expect(tags.tags).toContain(done.id.slice(-10));
+      await docker.getImage(done.imageRef).remove({ force: true }).catch(() => {});
+    } finally {
+      await docker.getContainer(REG).remove({ force: true }).catch(() => {});
+    }
+  }, 300_000);
+
   it("deploys an inline compose app, passing env vars for ${VAR} interpolation", async () => {
     const env = JSON.stringify(parseEnvInput([{ key: "DB_PASSWORD", value: "compose-secret-789", kind: "secret" }]));
     const compose = [
@@ -258,7 +308,13 @@ describe.skipIf(!up)("deploy pipeline (real Docker)", () => {
         sourceType: "image",
         image: BUSYBOX,
         command: `sh -c 'mkdir -p /www && echo hello-from-deploynow > /www/index.html && exec httpd -f -p 8080 -h /www'`,
-        domains: { create: [{ host: `${tag}.example.test`, path: "/", containerPort: 8080, https: false }] },
+        domains: {
+          create: [
+            { host: `${tag}.example.test`, path: "/", containerPort: 8080, https: false },
+            { host: `www.${tag}.example.test`, path: "/", containerPort: 8080, https: false, redirectTo: `https://${tag}.example.test`, redirectCode: 301 },
+            { host: `admin.${tag}.example.test`, path: "/", containerPort: 8080, https: false, basicAuth: await basicAuthLine("ops", "correct horse") },
+          ],
+        },
       });
       const done = await runDeployment((await newDeployment(app.id)).id, { settleMs: 1000 });
       expect(done.status, done.error).toBe("success");
@@ -268,6 +324,17 @@ describe.skipIf(!up)("deploy pipeline (real Docker)", () => {
         body = await getWithHost(`${tag}.example.test`);
       }
       expect(body).toContain("hello-from-deploynow");
+
+      // www redirects, keeping the path
+      const r = await hit(`www.${tag}.example.test`, {}, "/a/b?c=1");
+      expect(r.status).toBe(301);
+      expect(r.location).toBe(`https://${tag}.example.test/a/b?c=1`);
+      // admin needs the password
+      expect((await hit(`admin.${tag}.example.test`)).status).toBe(401);
+      expect((await hit(`admin.${tag}.example.test`, { Authorization: "Basic " + Buffer.from("ops:wrong").toString("base64") })).status).toBe(401);
+      const ok = await hit(`admin.${tag}.example.test`, { Authorization: "Basic " + Buffer.from("ops:correct horse").toString("base64") });
+      expect(ok.status).toBe(200);
+      expect(ok.body).toContain("hello-from-deploynow");
     } finally {
       await removeProxy(docker);
       await prisma.endpoint.update({ where: { id: endpointId }, data: { proxyMode: "none" } });

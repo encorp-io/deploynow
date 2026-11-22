@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { startLogin } from "@/lib/sso";
-import { publicOrigin } from "@/lib/apps/access";
+import { publicOrigin } from "@/lib/publicOrigin";
 import { isRateLimited } from "@/lib/rateLimit";
 import { clientIp } from "@/lib/audit";
 

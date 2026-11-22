@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { readJson, requireUser } from "@/lib/apiAuth";
 import { audit, clientIp } from "@/lib/audit";
 import { serializeProvider, SsoError, validateProvider, callbackUrl } from "@/lib/sso";
-import { publicOrigin } from "@/lib/apps/access";
+import { publicOrigin } from "@/lib/publicOrigin";
 
 export async function GET(request: Request) {
   const gate = await requireUser("settings.manage");

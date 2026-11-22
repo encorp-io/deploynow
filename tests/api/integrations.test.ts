@@ -14,6 +14,7 @@ vi.mock("@/lib/apiAuth", () => import("../helpers/apiAuthMock"));
 vi.mock("@/lib/audit", () => ({ audit: vi.fn(), clientIp: () => "1.2.3.4" }));
 vi.mock("@/lib/endpoints", () => ({ dockerFor: vi.fn(() => ({})) }));
 vi.mock("@/lib/deploy/proxy", () => ({
+  CHALLENGES: ["http", "cloudflare"],
   installProxy: vi.fn(async () => {}),
   removeProxy: vi.fn(async () => {}),
   proxyStatus: vi.fn(async () => ({ running: true, image: "traefik:v3.6", startedAt: "t", error: "" })),
@@ -119,7 +120,7 @@ describe("edge proxy", () => {
     expect((await proxy.POST(req("POST", { mode: "magic" }), p(ep.id))).status).toBe(400);
 
     expect((await json(await proxy.POST(req("POST", { mode: "managed", email: "ops@example.com" }), p(ep.id)))).body.mode).toBe("managed");
-    expect(installProxy).toHaveBeenCalledWith(expect.anything(), { email: "ops@example.com", network: "deploynow" });
+    expect(installProxy).toHaveBeenCalledWith(expect.anything(), { email: "ops@example.com", network: "deploynow", challenge: "http", dnsToken: "" });
     expect((await json(await proxy.GET(req("GET"), p(ep.id)))).body.status.running).toBe(true);
 
     const ext = await json(await proxy.POST(req("POST", { mode: "external", network: "dokploy-network" }), p(ep.id)));

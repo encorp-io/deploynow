@@ -23,6 +23,7 @@ interface Me {
   email: string;
   role: string;
   totpEnabled: boolean;
+  passkeys?: number;
 }
 
 export default function Sidebar({ onSignOut }: { onSignOut: () => void }) {
@@ -76,7 +77,7 @@ export default function Sidebar({ onSignOut }: { onSignOut: () => void }) {
             <p className="text-text-primary truncate">{me.email}</p>
             <p className="text-text-muted capitalize">
               {me.role}
-              {!me.totpEnabled && <span className="text-warning normal-case"> · 2FA off</span>}
+              {!me.totpEnabled && !me.passkeys && <span className="text-warning normal-case"> · 2FA off</span>}
             </p>
           </div>
         )}

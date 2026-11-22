@@ -63,20 +63,8 @@ export function visibleProjectFilter(user: CurrentUser) {
   return { id: { in: ids } };
 }
 
-/** The URL GitHub should call: the configured public URL, else the request's host. */
-export function publicOrigin(request: Request): string {
-  const configured = process.env.AUTH_URL || process.env.NEXTAUTH_URL;
-  if (configured) {
-    try {
-      return new URL(configured).origin;
-    } catch {
-      /* fall through */
-    }
-  }
-  const proto = request.headers.get("x-forwarded-proto") || "https";
-  const host = request.headers.get("x-forwarded-host") || request.headers.get("host") || "localhost";
-  return `${proto}://${host}`;
-}
+export { publicOrigin } from "../publicOrigin";
+import { publicOrigin } from "../publicOrigin";
 
 export function serializeApp(app: AppWithRelations, request?: Request) {
   return {

@@ -84,7 +84,7 @@ export function PasskeysCard({ onChange }: { onChange?: () => void }) {
       {supported ? (
         <div className="flex gap-2">
           <Input placeholder="Name, like MacBook or YubiKey" value={name} onChange={(e) => setName(e.target.value)} maxLength={60} />
-          <Button loading={busy} onClick={add}><Plus className="w-4 h-4" /> Add a passkey</Button>
+          <Button loading={busy} onClick={add} className="whitespace-nowrap"><Plus className="w-4 h-4" /> Add a passkey</Button>
         </div>
       ) : (
         <p className="text-xs text-text-muted">This browser can&apos;t create passkeys here. Passkeys need HTTPS and a domain name.</p>

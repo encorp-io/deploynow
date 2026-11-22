@@ -11,7 +11,7 @@ import {
 } from "@simplewebauthn/server";
 import type { Passkey } from "@prisma/client";
 import { prisma } from "./prisma";
-import { publicOrigin } from "./apps/access";
+import { publicOrigin } from "./publicOrigin";
 
 const CHALLENGE_TTL_MS = 5 * 60_000;
 const MAX_PASSKEYS = 20;

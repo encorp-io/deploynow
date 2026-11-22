@@ -69,8 +69,8 @@ describe.skipIf(!ready)("tasks and monitoring (real Docker)", () => {
     expect(r2?.exitCode).toBe(3);
     expect(r2?.log).toContain("hello");
     expect((await prisma.scheduledTask.findUniqueOrThrow({ where: { id: b.id } })).lastStatus).toBe("failed");
-    // No leftover task containers
-    expect((await docker.listContainers({ all: true, filters: { label: ["deploynow.helper=true"] } })).length).toBe(0);
+    // No leftover task containers (other test files may be running backup helpers meanwhile)
+    expect((await docker.listContainers({ all: true, filters: { label: ["deploynow.helper=true"], name: ["deploynow-task-"] } })).length).toBe(0);
 
     const c = await prisma.scheduledTask.create({ data: { name: "slow", endpointId, schedule: "0 4 * * *", mode: "exec", container: WORKER, command: "sleep 30", timeoutSec: 5 } });
     const r3 = await runTask(c.id, "manual");

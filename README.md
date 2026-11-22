@@ -13,7 +13,7 @@
 
 </div>
 
-> **v2.0 branch: DeployNow.** This branch turns the deployer into DeployNow, a standalone replacement for Portainer and Dokploy: 2FA, roles, multiple machines over SSH or TLS, a container explorer with logs and a console, and projects with apps deployed from images, Dockerfiles or compose files in Git, with domains and SSL, encrypted secrets, rollbacks and notifications. See [docs/v2.md](docs/v2.md) for what changed and how to upgrade. The rest of this README still describes v1.
+> **v2.0 branch: DeployNow.** This branch turns the deployer into DeployNow, a standalone replacement for Portainer and Dokploy: 2FA, passkeys and single sign-on (Google, Microsoft, OIDC), roles, machines over SSH, TLS or an outbound agent, a container explorer with logs and a console, and projects with apps deployed from images, Dockerfiles or compose files in Git, with domains and SSL, encrypted secrets, rollbacks, pull request previews, encrypted restic backups to R2 or S3 with restore drills, scheduled tasks, monitoring and alerts, API tokens and a CLI. See [docs/v2.md](docs/v2.md) for what changed and how to upgrade, and [docs/backups.md](docs/backups.md) for backups. The rest of this README still describes v1.
 
 ---
 
@@ -218,6 +218,10 @@ From this point, the background poller runs every 60 seconds (configurable) and 
 | `ADMIN_PASSWORD` | No | `admin` | Admin password created on first boot. **Change this.** |
 | `PORT` | No | `3000` | HTTP port |
 | `DEPLOYNOW_DATA_DIR` | No | the database's folder | Where deploy logs and build checkouts are kept (v2) |
+| `AGENT_PORT` | No | `8444` | Port agents connect to; `off` disables it (v2) |
+| `AGENT_PUBLIC_URL` | No | `NEXTAUTH_URL`'s host on `AGENT_PORT` | Address agents dial (v2) |
+| `AGENT_IMAGE` | No | `ghcr.io/encorp-io/deploynow-agent:latest` | Agent image in the join command (v2) |
+| `RESTIC_IMAGE` | No | `restic/restic:0.18.1` | restic image used for backups on endpoints (v2) |
 
 > **Security note:** `ADMIN_EMAIL` and `ADMIN_PASSWORD` are only used if no users exist in the database (first boot). After the first login, change the password from your account settings.
 

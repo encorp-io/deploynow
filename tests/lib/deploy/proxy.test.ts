@@ -89,3 +89,16 @@ describe("checkExternalProxy", () => {
     expect((await checkExternalProxy(fakeDocker().docker, "n")).message).toMatch(/doesn't exist/);
   });
 });
+
+describe("Cloudflare DNS challenge", () => {
+  it("switches the resolver to DNS-01 and passes the token as an env var", async () => {
+    const a = proxyArgs("ops@example.com", "deploynow", "cloudflare");
+    expect(a).toContain("--certificatesresolvers.letsencrypt.acme.dnschallenge.provider=cloudflare");
+    expect(a.some((x) => x.includes("httpchallenge"))).toBe(false);
+    const f = fakeDocker({ network: true });
+    await expect(installProxy(f.docker, { email: "ops@example.com", network: "deploynow", challenge: "cloudflare", dnsToken: "short" })).rejects.toThrow(/Cloudflare API token/);
+    await installProxy(f.docker, { email: "ops@example.com", network: "deploynow", challenge: "cloudflare", dnsToken: "cf_token_abcdefghijklmnopqrstuvwxyz" });
+    const c = f.created.find((x) => "Image" in x) as { Env: string[]; Cmd: string[] };
+    expect(c.Env).toEqual(["CF_DNS_API_TOKEN=cf_token_abcdefghijklmnopqrstuvwxyz"]);
+  });
+});

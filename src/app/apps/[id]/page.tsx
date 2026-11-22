@@ -462,7 +462,7 @@ export default function AppPage({ params }: { params: Promise<{ id: string }> })
             <Card className="p-5">
               <h3 className="text-sm font-semibold text-text-primary mb-1 flex items-center gap-2"><Webhook className="w-4 h-4" /> GitHub webhook</h3>
               <p className="text-sm text-text-muted mb-3">
-                In the repository: Settings → Webhooks → Add webhook, content type <code>application/json</code>, just the push event. Then set Updates to &quot;Deploy on every push&quot;. DeployNow must be reachable from GitHub.
+                In the repository: Settings → Webhooks → Add webhook, content type <code>application/json</code>, with the push event (and pull request events for previews). Then set Updates to &quot;Deploy on every push&quot;. DeployNow must be reachable from GitHub.
               </p>
               {webhook ? (
                 <div className="space-y-2">
