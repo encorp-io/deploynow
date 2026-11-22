@@ -60,6 +60,15 @@ export default auth((req: NextRequest & { auth: unknown }) => {
     return NextResponse.redirect(new URL("/login", publicOrigin));
   }
 
+  // ── Admins and owners must set up 2FA before doing anything else ──────────
+  const user = (req.auth as { user?: { mfaSetupRequired?: boolean } } | null)?.user;
+  if (user?.mfaSetupRequired && !pathname.startsWith("/account") && !pathname.startsWith("/api/account")) {
+    if (pathname.startsWith("/api/")) {
+      return NextResponse.json({ error: "Set up two-factor authentication first", mfaSetupRequired: true }, { status: 403 });
+    }
+    return NextResponse.redirect(new URL("/account?setup=2fa", getPublicOrigin(req)));
+  }
+
   return NextResponse.next();
 });
 

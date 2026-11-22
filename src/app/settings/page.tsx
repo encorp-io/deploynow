@@ -4,12 +4,11 @@ import { useState, useEffect } from "react";
 import { Save, Loader2, CheckCircle, Wifi, AlertCircle } from "lucide-react";
 
 interface SettingsData {
-  portainerUrl: string;
-  portainerApiKey: string;
   githubUser: string;
   githubToken: string;
   pollingInterval: number;
   autoUpdateLatest: boolean;
+  require2faForAdmins: boolean;
 }
 
 interface HealthMonitorData {
@@ -22,12 +21,11 @@ interface HealthMonitorData {
 
 export default function SettingsPage() {
   const [settings, setSettings] = useState<SettingsData>({
-    portainerUrl: "",
-    portainerApiKey: "",
     githubUser: "",
     githubToken: "",
     pollingInterval: 60,
     autoUpdateLatest: false,
+    require2faForAdmins: true,
   });
   const [healthMonitor, setHealthMonitor] = useState<HealthMonitorData>({
     enabled: false,
@@ -39,11 +37,6 @@ export default function SettingsPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
-  const [testing, setTesting] = useState(false);
-  const [testResult, setTestResult] = useState<{
-    success: boolean;
-    message: string;
-  } | null>(null);
   const [testingGithub, setTestingGithub] = useState(false);
   const [githubTestResult, setGithubTestResult] = useState<{
     success: boolean;
@@ -106,37 +99,7 @@ export default function SettingsPage() {
     }
   }
 
-  async function handleTestConnection() {
-    setTesting(true);
-    setTestResult(null);
 
-    // Save first so the test uses current values
-    await fetch("/api/settings", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(settings),
-    });
-
-    try {
-      const res = await fetch("/api/portainer/test", { method: "POST" });
-      const data = await res.json();
-      if (data.success) {
-        setTestResult({
-          success: true,
-          message: `Connected! Found ${data.endpoints.length} endpoint(s): ${data.endpoints.map((e: { name: string }) => e.name).join(", ")}`,
-        });
-      } else {
-        setTestResult({ success: false, message: data.error });
-      }
-    } catch (err) {
-      setTestResult({
-        success: false,
-        message: err instanceof Error ? err.message : "Connection failed",
-      });
-    } finally {
-      setTesting(false);
-    }
-  }
 
   async function handleTestGithub() {
     setTestingGithub(true);
@@ -185,81 +148,28 @@ export default function SettingsPage() {
       <div className="mb-8">
         <h1 className="text-2xl font-bold text-text-primary">Settings</h1>
         <p className="text-sm text-text-muted mt-1">
-          Configure your Portainer and GitHub connections
+          Registry access, update checks, health monitor and security
         </p>
       </div>
 
       <form onSubmit={handleSave} className="space-y-8">
-        {/* Portainer */}
+        {/* Security */}
         <section className="bg-bg-card border border-border rounded-xl p-6">
-          <h2 className="text-sm font-semibold text-text-primary mb-4">
-            Portainer Connection
-          </h2>
-          <div className="space-y-4">
-            <div>
-              <label className="block text-xs font-medium text-text-secondary mb-1.5">
-                Portainer URL
-              </label>
-              <input
-                type="url"
-                value={settings.portainerUrl}
-                onChange={(e) =>
-                  setSettings({ ...settings, portainerUrl: e.target.value })
-                }
-                className="w-full px-3 py-2.5 bg-bg-secondary border border-border rounded-lg text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent/30 transition-colors"
-                placeholder="https://portainer.example.com"
-              />
-              <p className="text-xs text-text-muted mt-1">
-                The URL of your Portainer CE instance (without /api)
-              </p>
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-text-secondary mb-1.5">
-                API Key
-              </label>
-              <input
-                type="password"
-                value={settings.portainerApiKey}
-                onChange={(e) =>
-                  setSettings({ ...settings, portainerApiKey: e.target.value })
-                }
-                className="w-full px-3 py-2.5 bg-bg-secondary border border-border rounded-lg text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent/30 transition-colors"
-                placeholder="ptr_xxxxxxxxxxxx"
-              />
-              <p className="text-xs text-text-muted mt-1">
-                Generate an API key in Portainer under Settings → API Keys
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={handleTestConnection}
-              disabled={testing}
-              className="flex items-center gap-2 px-4 py-2 bg-bg-secondary border border-border rounded-lg text-sm font-medium text-text-secondary hover:text-text-primary hover:border-border-bright transition-all disabled:opacity-50"
-            >
-              {testing ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : (
-                <Wifi className="w-4 h-4" />
-              )}
-              Test Connection
-            </button>
-            {testResult && (
-              <div
-                className={`flex items-start gap-2 px-3 py-2 rounded-lg text-xs ${
-                  testResult.success
-                    ? "bg-success/10 text-success"
-                    : "bg-danger/10 text-danger"
-                }`}
-              >
-                {testResult.success ? (
-                  <CheckCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
-                ) : (
-                  <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
-                )}
-                <span>{testResult.message}</span>
-              </div>
-            )}
-          </div>
+          <h2 className="text-sm font-semibold text-text-primary mb-4">Security</h2>
+          <label className="flex items-start gap-3 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={settings.require2faForAdmins}
+              onChange={(e) => setSettings({ ...settings, require2faForAdmins: e.target.checked })}
+              className="mt-0.5"
+            />
+            <span>
+              <span className="block text-sm text-text-primary">Require two-factor authentication for admins and owners</span>
+              <span className="block text-xs text-text-muted mt-0.5">
+                Admins without 2FA are sent to set it up before they can do anything else. Only an owner can turn this off.
+              </span>
+            </span>
+          </label>
         </section>
 
         {/* GitHub */}

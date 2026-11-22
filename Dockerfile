@@ -72,7 +72,7 @@ COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
 COPY --from=builder /app/prisma              ./prisma
 COPY --from=builder /app/node_modules/prisma ./node_modules/prisma
-# bcryptjs — used by seed script in docker-entrypoint.sh
+# bcryptjs — verifies v1 password hashes until they are rehashed on login
 COPY --from=builder /app/node_modules/bcryptjs ./node_modules/bcryptjs
 
 # ── Entrypoint ────────────────────────────────────────────────────────────────

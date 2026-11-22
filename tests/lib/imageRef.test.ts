@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parseImageRef, isFloatingTag } from "@/lib/portainer";
+import { parseImageRef, isFloatingTag } from "@/lib/imageRef";
 
 describe("parseImageRef", () => {
   it("parses ghcr.io image with tag", () => {

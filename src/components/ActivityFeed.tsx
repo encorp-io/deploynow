@@ -14,18 +14,19 @@ interface LogEntry {
   id: string;
   serviceId: string | null;
   action: string;
+  outcome?: string;
   message: string;
   details: string;
   createdAt: string;
 }
 
 const actionConfig: Record<string, { icon: typeof CheckCircle; color: string }> = {
-  check: { icon: Search, color: "text-text-muted" },
-  update: { icon: CheckCircle, color: "text-success" },
-  update_available: { icon: ArrowUpCircle, color: "text-warning" },
-  error: { icon: AlertCircle, color: "text-danger" },
-  manual_update: { icon: AlertTriangle, color: "text-accent" },
-  health_restart: { icon: RefreshCw, color: "text-warning" },
+  "service.check": { icon: Search, color: "text-text-muted" },
+  "service.update": { icon: CheckCircle, color: "text-success" },
+  "service.update_available": { icon: ArrowUpCircle, color: "text-warning" },
+  "system.error": { icon: AlertCircle, color: "text-danger" },
+  "health.restart": { icon: RefreshCw, color: "text-warning" },
+  failure: { icon: AlertTriangle, color: "text-danger" },
 };
 
 function formatTime(date: string): string {
@@ -48,7 +49,7 @@ export default function ActivityFeed({ logs }: { logs: LogEntry[] }) {
   return (
     <div className="space-y-1">
       {logs.map((log) => {
-        const config = actionConfig[log.action] || actionConfig.check;
+        const config = log.outcome === "failure" ? actionConfig.failure : actionConfig[log.action] || actionConfig["service.check"];
         const Icon = config.icon;
 
         return (

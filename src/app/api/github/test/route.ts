@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { getDecryptedSettings } from "@/app/api/settings/route";
+import { decryptSecret } from "@/lib/secretsCrypto";
 import { prisma } from "@/lib/prisma";
 
 /**
@@ -29,7 +29,8 @@ export async function POST(request: Request) {
   let ghToken = bodyToken;
 
   if (!ghToken || ghToken === "••••••••") {
-    const settings = await getDecryptedSettings();
+    const stored = await prisma.settings.findUnique({ where: { id: "singleton" } });
+    const settings = stored ? { ...stored, githubToken: decryptSecret(stored.githubToken) } : null;
     if (!settings?.githubToken) {
       return NextResponse.json({ success: false, error: "GitHub token not configured" }, { status: 400 });
     }

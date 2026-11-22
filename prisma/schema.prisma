@@ -7,23 +7,78 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model User {
-  id        String   @id @default(cuid())
-  email     String   @unique
-  name      String
-  password  String
-  role      String   @default("member") // admin, member
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+// ─── Identity & access ────────────────────────────────────────────────────────
 
-  invites TeamInvite[]
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  name          String
+  password      String    // scrypt$… (v2) or bcrypt (v1, rehashed on next login)
+  // Instance-wide role: owner, admin, operator, viewer.
+  // v1 values (admin, member) are remapped by the v2 upgrade step.
+  role          String    @default("operator")
+  totpSecret    String    @default("") // AES-256-GCM encrypted base32 secret
+  totpPending   String    @default("") // encrypted secret during enrolment, before first code is confirmed
+  totpEnabledAt DateTime?
+  totpLastStep  Int       @default(0)  // last accepted TOTP time step (replay protection)
+  disabledAt    DateTime?
+  lastLoginAt   DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  invites       TeamInvite[]
+  sessions      Session[]
+  recoveryCodes RecoveryCode[]
+  roleBindings  RoleBinding[]
+}
+
+model RecoveryCode {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  codeHash  String    // sha256 of the normalised code
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+}
+
+// Server-side session record. The NextAuth JWT carries only its id (sid), so a
+// session can be listed and revoked, and role changes apply on the next request.
+model Session {
+  id         String    @id @default(cuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  ip         String    @default("")
+  userAgent  String    @default("")
+  createdAt  DateTime  @default(now())
+  lastSeenAt DateTime  @default(now())
+  expiresAt  DateTime
+  revokedAt  DateTime?
+  stepUpAt   DateTime? // last time the user re-confirmed a 2FA code for a sensitive action
+
+  @@index([userId])
+}
+
+// Extra grant on top of the user's instance role, scoped to one endpoint
+// (and, from phase 2, one project). The effective role is the higher of the two.
+model RoleBinding {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role      String   // admin, operator, viewer
+  scopeType String   // endpoint, project
+  scopeId   String
+  createdAt DateTime @default(now())
+
+  @@unique([userId, scopeType, scopeId])
 }
 
 model TeamInvite {
   id        String   @id @default(cuid())
   email     String
   token     String   @unique
-  role      String   @default("member")
+  role      String   @default("operator")
   expiresAt DateTime
   used      Boolean  @default(false)
   createdBy String
@@ -31,36 +86,83 @@ model TeamInvite {
   createdAt DateTime @default(now())
 }
 
+// Persistent login throttle (survives restarts, unlike the v1 in-memory map)
+model LoginThrottle {
+  key          String    @id
+  count        Int       @default(0)
+  firstAttempt DateTime  @default(now())
+  lockedUntil  DateTime?
+}
+
+// ─── Machines ─────────────────────────────────────────────────────────────────
+
+model Endpoint {
+  id            String    @id @default(cuid())
+  name          String    @unique
+  type          String    // socket, ssh, tls
+  // socket: path to the Docker socket; ssh/tls: hostname or IP
+  host          String
+  port          Int?
+  username      String    @default("") // ssh user
+  credentials   String    @default("") // AES-256-GCM encrypted JSON: privateKey, passphrase, ca, cert, key
+  // ssh: SHA256 fingerprint of the host key, pinned on first successful connect
+  hostKeyFingerprint String @default("")
+  labels        String    @default("") // comma-separated, e.g. "prod,client-a"
+  status        String    @default("unknown") // online, offline, unknown
+  dockerVersion String    @default("")
+  os            String    @default("")
+  cpus          Int       @default(0)
+  memoryBytes   Float     @default(0)
+  containers    Int       @default(0)
+  lastSeenAt    DateTime?
+  lastError     String    @default("")
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  services      Service[]
+}
+
+// ─── Settings ─────────────────────────────────────────────────────────────────
+
 model Settings {
   id                  String  @id @default("singleton")
-  portainerUrl        String  @default("")
-  portainerApiKey     String  @default("") // AES-256-GCM encrypted at rest
+  schemaVersion       Int     @default(1)
   githubUser          String  @default("") // GitHub username for GHCR auth
   githubToken         String  @default("") // AES-256-GCM encrypted at rest
   pollingInterval     Int     @default(60) // seconds, range 30–3600
   autoUpdateLatest    Boolean @default(false)
-  portainerEndpointId Int     @default(1)  // which Portainer environment to manage
+  require2faForAdmins Boolean @default(true)
+  // ── v1 legacy (read once by the v2 upgrade step, no longer used) ──
+  portainerUrl        String  @default("")
+  portainerApiKey     String  @default("")
+  portainerEndpointId Int     @default(1)
 }
 
+// A container tracked for image updates (v1 concept, kept until phase 2
+// introduces Applications).
 model Service {
-  id              String   @id @default(cuid())
-  containerId     String   @unique
-  containerName   String
-  image           String   // full image ref e.g. ghcr.io/org/repo:tag
-  registry        String   @default("ghcr.io")
-  currentDigest   String   @default("")
-  remoteDigest    String   @default("")
-  tag             String   @default("latest")
-  isFloatingTag   Boolean  @default(true) // true = auto-update, false = notify only
-  arch            String   @default("amd64")   // image architecture: amd64, arm64, etc.
-  status          String   @default("unknown") // running, stopped, updating, error
-  updateAvailable Boolean  @default(false)
-  portainerEndpointId Int      @default(1)
-  lastChecked       DateTime?
-  lastUpdated       DateTime?
-  lastHealthRestart DateTime?
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  id                  String    @id @default(cuid())
+  containerId         String    @unique
+  containerName       String
+  image               String    // full image ref e.g. ghcr.io/org/repo:tag
+  registry            String    @default("ghcr.io")
+  currentDigest       String    @default("")
+  remoteDigest        String    @default("")
+  tag                 String    @default("latest")
+  isFloatingTag       Boolean   @default(true) // true = auto-update, false = notify only
+  arch                String    @default("amd64")
+  status              String    @default("unknown") // running, stopped, updating, error
+  updateAvailable     Boolean   @default(false)
+  endpointId          String?
+  endpoint            Endpoint? @relation(fields: [endpointId], references: [id], onDelete: Cascade)
+  portainerEndpointId Int       @default(1) // v1 legacy
+  lastChecked         DateTime?
+  lastUpdated         DateTime?
+  lastHealthRestart   DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  @@index([endpointId])
 }
 
 model HealthMonitor {
@@ -72,10 +174,35 @@ model HealthMonitor {
   logPatterns String  @default("connection timeout\nconnection refused\nconnection reset\nconnection timed out\nunable to connect\npool exhausted\ntoo many connections\nout of memory\nheap out of memory\noom killer\nkilled process\nmemory limit exceeded\nfatal error\npanic:\nsegfault\nsegmentation fault\ncore dumped\nunhandled exception\ndeadlock detected\nhealth check failed\nno space left\ni/o error\nread-only file system")
 }
 
+// ─── Audit ────────────────────────────────────────────────────────────────────
+
+// Who did what, where. Replaces ActivityLog (kept below for the one-time copy).
+model AuditEvent {
+  id         String   @id @default(cuid())
+  createdAt  DateTime @default(now())
+  actorType  String   @default("system") // user, system
+  actorId    String?
+  actorEmail String   @default("")
+  action     String   // e.g. auth.login, container.restart, service.update
+  targetType String   @default("")
+  targetId   String   @default("")
+  endpointId String?
+  serviceId  String?
+  ip         String   @default("")
+  outcome    String   @default("success") // success, failure
+  message    String
+  details    String   @default("")
+
+  @@index([createdAt])
+  @@index([action])
+  @@index([endpointId])
+}
+
+// v1 legacy — copied into AuditEvent by the v2 upgrade step, no longer written
 model ActivityLog {
   id        String   @id @default(cuid())
   serviceId String?
-  action    String   // check, update, error, manual_update
+  action    String
   message   String
   details   String   @default("")
   createdAt DateTime @default(now())
