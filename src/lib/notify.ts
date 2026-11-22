@@ -8,7 +8,17 @@ import { decryptSecret, encryptSecret } from "./secretsCrypto";
 
 export const CHANNEL_TYPES = ["slack", "discord", "telegram", "webhook"] as const;
 export type ChannelType = (typeof CHANNEL_TYPES)[number];
-export const EVENTS = ["deploy.success", "deploy.failure"] as const;
+export const EVENTS = [
+  "deploy.success",
+  "deploy.failure",
+  "backup.success",
+  "backup.failure",
+  "restore.success",
+  "restore.failure",
+  "task.failure",
+  "alert.firing",
+  "alert.resolved",
+] as const;
 export type NotifyEvent = (typeof EVENTS)[number];
 
 export interface ChannelConfig {

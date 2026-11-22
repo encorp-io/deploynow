@@ -140,9 +140,12 @@ model Endpoint {
   hostMetrics        String    @default("")
   hostMetricsAt      DateTime?
 
-  services     Service[]
-  applications Application[]
-  environments Environment[]
+  services       Service[]
+  applications   Application[]
+  environments   Environment[]
+  backupPolicies BackupPolicy[]
+  scheduledTasks ScheduledTask[]
+  metricSamples  MetricSample[]
 }
 
 // ─── Settings ─────────────────────────────────────────────────────────────────
@@ -169,6 +172,10 @@ model Settings {
   agentServerCert     String  @default("")
   agentServerKey      String  @default("") // encrypted
   agentPublicUrl      String  @default("") // what agents dial, e.g. https://deploynow.example.com:8444
+  // Alerts
+  alertDiskPercent    Int     @default(90) // alert when a host disk is this full
+  alertMemPercent     Int     @default(95)
+  alertCrashRestarts  Int     @default(3) // restarts within 10 minutes that count as a crash loop
   // ── v1 legacy (read once by the v2 upgrade step, no longer used) ──
   portainerUrl        String  @default("")
   portainerApiKey     String  @default("")
@@ -378,4 +385,164 @@ model NotificationChannel {
   lastError String   @default("")
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+// ─── Backups (phase 3) ─────────────────────────────────────────────────────────
+
+// Where backups go: an S3-compatible bucket (Cloudflare R2 by default).
+model BackupDestination {
+  id             String   @id @default(cuid())
+  name           String   @unique
+  provider       String   @default("r2") // r2, s3, b2, other
+  endpointUrl    String // https://<account>.r2.cloudflarestorage.com
+  bucket         String
+  prefix         String   @default("deploynow")
+  region         String   @default("auto")
+  accessKeyId    String // backup key: write, no delete
+  secretKey      String // encrypted
+  pruneKeyId     String   @default("") // optional key with delete rights, used only by prune
+  pruneSecretKey String   @default("") // encrypted
+  objectLock     Boolean  @default(false) // bucket has Object Lock; prune keeps locked objects
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  repos    BackupRepo[]
+  policies BackupPolicy[]
+}
+
+// One restic repository per endpoint and destination ("instance" for DeployNow itself).
+model BackupRepo {
+  id            String            @id @default(cuid())
+  destinationId String
+  destination   BackupDestination @relation(fields: [destinationId], references: [id], onDelete: Cascade)
+  scope         String // endpoint id, or "instance"
+  password      String // encrypted restic password
+  initializedAt DateTime?
+  kitShownAt    DateTime? // the recovery kit is shown once
+  lastCheckAt   DateTime?
+  lastCheckOk   Boolean?
+  lastDrillAt   DateTime?
+  lastDrillOk   Boolean?
+  createdAt     DateTime          @default(now())
+
+  @@unique([destinationId, scope])
+}
+
+model BackupPolicy {
+  id            String            @id @default(cuid())
+  name          String
+  endpointId    String? // null = DeployNow itself
+  endpoint      Endpoint?         @relation(fields: [endpointId], references: [id], onDelete: Cascade)
+  destinationId String
+  destination   BackupDestination @relation(fields: [destinationId], references: [id], onDelete: Cascade)
+  // JSON list of sources: {type:"volume",name} | {type:"bind",path} | {type:"db",engine,container,database?}
+  //   | {type:"app",applicationId} | {type:"instance"}
+  sources       String            @default("[]")
+  mode          String            @default("live") // stop, dump, live
+  preHook       String            @default("") // JSON {container, command} run before
+  postHook      String            @default("") // JSON {container, command} run after
+  schedule      String            @default("0 3 * * *") // cron, in the server's time zone
+  keepDaily     Int               @default(7)
+  keepWeekly    Int               @default(4)
+  keepMonthly   Int               @default(6)
+  enabled       Boolean           @default(true)
+  nextRunAt     DateTime?
+  lastRunAt     DateTime?
+  lastStatus    String            @default("") // success, failed
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  runs BackupRun[]
+
+  @@index([nextRunAt])
+}
+
+model BackupRun {
+  id         String        @id @default(cuid())
+  policyId   String?
+  policy     BackupPolicy? @relation(fields: [policyId], references: [id], onDelete: Cascade)
+  repoId     String
+  kind       String // backup, prune, check, drill, restore
+  status     String        @default("queued") // queued, running, success, failed
+  trigger    String        @default("schedule") // schedule, manual
+  params     String        @default("") // JSON, e.g. restore target
+  snapshots  String        @default("") // JSON list of {source, id}
+  bytes      Int           @default(0)
+  log        String        @default("")
+  error      String        @default("")
+  actorEmail String        @default("")
+  startedAt  DateTime?
+  finishedAt DateTime?
+  createdAt  DateTime      @default(now())
+
+  @@index([repoId, createdAt])
+  @@index([policyId, createdAt])
+}
+
+// ─── Monitoring (phase 3) ──────────────────────────────────────────────────────
+
+model MetricSample {
+  id         String   @id @default(cuid())
+  endpointId String
+  endpoint   Endpoint @relation(fields: [endpointId], references: [id], onDelete: Cascade)
+  at         DateTime @default(now())
+  cpus       Int      @default(0)
+  load1      Float    @default(0)
+  memTotal   Float    @default(0)
+  memUsed    Float    @default(0)
+  diskTotal  Float    @default(0)
+  diskUsed   Float    @default(0)
+
+  @@index([endpointId, at])
+}
+
+// An alert that is currently firing, so it is sent once and cleared when it recovers.
+model Alert {
+  id         String    @id @default(cuid())
+  key        String    @unique // e.g. disk:<endpointId>, crash:<endpointId>:<container>
+  kind       String // disk, memory, crash_loop, agent_offline, backup_failed, task_failed
+  endpointId String    @default("")
+  message    String
+  firedAt    DateTime  @default(now())
+  resolvedAt DateTime?
+}
+
+// ─── Scheduled tasks (phase 3) ─────────────────────────────────────────────────
+
+model ScheduledTask {
+  id         String    @id @default(cuid())
+  name       String
+  endpointId String
+  endpoint   Endpoint  @relation(fields: [endpointId], references: [id], onDelete: Cascade)
+  schedule   String // cron
+  mode       String    @default("exec") // exec (in a running container) or run (one-off container)
+  container  String    @default("") // exec: container name
+  image      String    @default("") // run: image
+  command    String // shell command, run with sh -c
+  env        String    @default("") // run: KEY=value lines
+  timeoutSec Int       @default(3600)
+  enabled    Boolean   @default(true)
+  nextRunAt  DateTime?
+  lastRunAt  DateTime?
+  lastStatus String    @default("")
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  runs TaskRun[]
+
+  @@index([nextRunAt])
+}
+
+model TaskRun {
+  id         String        @id @default(cuid())
+  taskId     String
+  task       ScheduledTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  status     String        @default("running") // running, success, failed
+  trigger    String        @default("schedule")
+  exitCode   Int?
+  log        String        @default("")
+  startedAt  DateTime      @default(now())
+  finishedAt DateTime?
+
+  @@index([taskId, startedAt])
 }
