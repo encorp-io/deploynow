@@ -3,7 +3,7 @@
  * image app with an encrypted env secret, Dockerfile from Git, compose,
  * rollback, and a domain routed by the managed Traefik.
  *
- * Skipped when no daemon is reachable. Needs busybox:1.37 locally (or pullable);
+ * Skipped when no daemon is reachable. Pulls busybox:1.37 if it's missing;
  * the Traefik case also needs traefik:v3.6 and free ports 80/443.
  */
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
@@ -18,14 +18,26 @@ const SOCKET = "/var/run/docker.sock";
 const docker = new Docker({ socketPath: SOCKET });
 const BUSYBOX = "busybox:1.37";
 
+/** True when the daemon answers and the image is present, pulling it if needed (CI runners start empty). */
 async function ready(image: string) {
   if (!fs.existsSync(SOCKET)) return false;
   try {
     await docker.ping();
+  } catch {
+    return false;
+  }
+  try {
     await docker.getImage(image).inspect();
     return true;
   } catch {
-    return false;
+    try {
+      await new Promise<void>((resolve, reject) =>
+        docker.pull(image, (err: Error | null, stream: NodeJS.ReadableStream) => (err ? reject(err) : docker.modem.followProgress(stream, (e) => (e ? reject(e) : resolve())))),
+      );
+      return true;
+    } catch {
+      return false;
+    }
   }
 }
 const up = await ready(BUSYBOX);
