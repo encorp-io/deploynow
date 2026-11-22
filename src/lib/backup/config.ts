@@ -27,7 +27,7 @@ const CONTAINER_RE = /^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,254}$/;
 const DB_RE = /^[a-zA-Z0-9_.$-]{1,128}$/;
 // Bind paths: absolute, no .., no shell-special characters
 const PATH_RE = /^\/[a-zA-Z0-9_.@/ +-]*$/;
-const FORBIDDEN_BINDS = ["/", "/proc", "/sys", "/dev", "/etc", "/root", "/boot", "/run", "/var/run"];
+export const FORBIDDEN_BINDS = ["/", "/proc", "/sys", "/dev", "/etc", "/root", "/boot", "/run", "/var/run"];
 
 /** A stable key for a source, used as a restic tag and to match snapshots back to it. */
 export function sourceKey(s: Source): string {
@@ -81,8 +81,8 @@ export function validateSources(raw: unknown, forInstance: boolean): Source[] {
       }
       case "bind": {
         const p = String(s.path ?? "").trim().replace(/\/+$/, "");
-        if (!PATH_RE.test(p) || p.split("/").includes("..") || p.length > 500) throw new BackupConfigError(`Invalid path: ${p || "(empty)"}`);
         if (FORBIDDEN_BINDS.includes(p || "/")) throw new BackupConfigError(`${p || "/"} can't be backed up as a bind path; pick a data directory`);
+        if (!PATH_RE.test(p) || p.split("/").includes("..") || p.length > 500) throw new BackupConfigError(`Invalid path: ${p}`);
         out.push({ type: "bind", path: p });
         break;
       }

@@ -4,12 +4,15 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { clsx } from "clsx";
-import { FolderKanban, LayoutDashboard, Settings, Users, Container, LogOut, History, Server, ShieldCheck } from "lucide-react";
+import { FolderKanban, LayoutDashboard, Settings, Users, Container, LogOut, History, Server, ShieldCheck, Archive, CalendarClock, Activity } from "lucide-react";
 
 const nav = [
   { href: "/projects", label: "Projects", icon: FolderKanban },
   { href: "/dashboard", label: "Updates", icon: LayoutDashboard },
   { href: "/endpoints", label: "Endpoints", icon: Server },
+  { href: "/monitoring", label: "Monitoring", icon: Activity },
+  { href: "/backups", label: "Backups", icon: Archive },
+  { href: "/tasks", label: "Scheduled tasks", icon: CalendarClock },
   { href: "/activity", label: "Audit log", icon: History },
   { href: "/team", label: "Team", icon: Users },
   { href: "/settings", label: "Settings", icon: Settings },

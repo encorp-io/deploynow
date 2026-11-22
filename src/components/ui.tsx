@@ -2,6 +2,7 @@
 
 import { clsx } from "clsx";
 import { Loader2 } from "lucide-react";
+import type React from "react";
 import type { ButtonHTMLAttributes, ReactNode, InputHTMLAttributes, TextareaHTMLAttributes } from "react";
 
 export function Button({
@@ -125,4 +126,30 @@ export function timeAgo(date: string | number | null | undefined): string {
   if (s < 3600) return `${Math.floor(s / 60)} min ago`;
   if (s < 86400) return `${Math.floor(s / 3600)} h ago`;
   return `${Math.floor(s / 86400)} d ago`;
+}
+
+export function Select(props: React.SelectHTMLAttributes<HTMLSelectElement>) {
+  return <select {...props} className={clsx(inputClass, "pr-8", props.className)} />;
+}
+
+export function formatTime(date: string | null | undefined): string {
+  if (!date) return "";
+  return new Date(date).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+}
+
+export function Tabs<T extends string>({ tabs, value, onChange }: { tabs: readonly { value: T; label: string }[]; value: T; onChange: (v: T) => void }) {
+  return (
+    <div className="flex gap-1 bg-bg-secondary border border-border rounded-lg p-1 w-fit">
+      {tabs.map((t) => (
+        <button
+          key={t.value}
+          type="button"
+          onClick={() => onChange(t.value)}
+          className={clsx("px-3 py-1.5 rounded-md text-sm", value === t.value ? "bg-bg-card text-text-primary" : "text-text-muted hover:text-text-secondary")}
+        >
+          {t.label}
+        </button>
+      ))}
+    </div>
+  );
 }

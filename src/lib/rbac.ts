@@ -57,6 +57,15 @@ export const PERMISSIONS = {
   "app.secrets": { min: "admin", scoped: true },
   "project.manage": { min: "admin", scoped: false },
   "notifications.manage": { min: "admin", scoped: false },
+  // Phase 3
+  "backup.view": { min: "operator", scoped: false },
+  "backup.run": { min: "operator", scoped: false },
+  "backup.manage": { min: "admin", scoped: false },
+  "backup.restore": { min: "admin", scoped: false },
+  "task.view": { min: "operator", scoped: false },
+  "task.run": { min: "operator", scoped: false },
+  "task.manage": { min: "admin", scoped: false },
+  "monitoring.view": { min: "viewer", scoped: false },
 } as const satisfies Record<string, { min: Role; scoped: boolean }>;
 
 export type Permission = keyof typeof PERMISSIONS;

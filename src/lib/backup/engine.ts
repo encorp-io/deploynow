@@ -20,6 +20,7 @@ import { dockerFor } from "../endpoints";
 import { notify } from "../notify";
 import { audit } from "../audit";
 import {
+  FORBIDDEN_BINDS,
   RESTIC_IMAGE,
   type DbEngine,
   type Source,
@@ -418,6 +419,7 @@ async function runRestore(run: RunWith, log: RunLog) {
   if (source.type === "bind") {
     const p = params.target === "same" ? source.path : String(params.name ?? "").trim().replace(/\/+$/, "");
     if (!/^\/[a-zA-Z0-9_.@/ +-]+$/.test(p) || p.split("/").includes("..")) throw new BackupConfigError("Give an absolute path to restore to");
+    if (FORBIDDEN_BINDS.includes(p)) throw new BackupConfigError(`Restoring into ${p} isn't allowed`);
     const stopped = await containersUsing(docker, [{ type: "bind", path: p }]);
     try {
       for (const id of stopped) await docker.getContainer(id).stop({ t: 30 }).catch(() => {});

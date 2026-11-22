@@ -12,6 +12,9 @@ interface SettingsData {
   require2faForAdmins: boolean;
   agentPublicUrl: string;
   agentDefaultUrl?: string;
+  alertDiskPercent: number;
+  alertMemPercent: number;
+  alertCrashRestarts: number;
 }
 
 interface HealthMonitorData {
@@ -30,6 +33,9 @@ export default function SettingsPage() {
     autoUpdateLatest: false,
     require2faForAdmins: true,
     agentPublicUrl: "",
+    alertDiskPercent: 90,
+    alertMemPercent: 95,
+    alertCrashRestarts: 3,
   });
   const [healthMonitor, setHealthMonitor] = useState<HealthMonitorData>({
     enabled: false,
@@ -190,6 +196,29 @@ export default function SettingsPage() {
             placeholder={settings.agentDefaultUrl || "https://deploynow.example.com:8444"}
             className="w-full px-3 py-2 bg-bg-secondary border border-border rounded-lg text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-accent"
           />
+        </section>
+
+        {/* Alerts */}
+        <section className="bg-bg-card border border-border rounded-xl p-6">
+          <h2 className="text-sm font-semibold text-text-primary mb-1">Alerts</h2>
+          <p className="text-xs text-text-muted mb-4">When to alert. Alerts go to the notification channels subscribed to them, below.</p>
+          <div className="grid grid-cols-3 gap-3">
+            {([
+              ["alertDiskPercent", "Disk full at (%)"],
+              ["alertMemPercent", "Memory used at (%)"],
+              ["alertCrashRestarts", "Restarts in 10 min = crash loop"],
+            ] as const).map(([k, label]) => (
+              <label key={k} className="block">
+                <span className="block text-xs font-medium text-text-secondary mb-1.5">{label}</span>
+                <input
+                  type="number"
+                  value={settings[k] ?? ""}
+                  onChange={(e) => setSettings({ ...settings, [k]: Number(e.target.value) })}
+                  className="w-full px-3 py-2 bg-bg-secondary border border-border rounded-lg text-sm text-text-primary focus:outline-none focus:border-accent"
+                />
+              </label>
+            ))}
+          </div>
         </section>
 
         {/* GitHub */}

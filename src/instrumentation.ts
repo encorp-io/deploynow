@@ -16,6 +16,13 @@ export async function register() {
     const { startWorker } = await import("./lib/jobs");
     startWorker();
 
+    const { startBackupWorker } = await import("./lib/backup/worker");
+    startBackupWorker();
+    const { startScheduler } = await import("./lib/scheduler");
+    startScheduler();
+    const { startMonitor } = await import("./lib/monitor");
+    startMonitor();
+
     const { startBackgroundPolling, startHealthMonitorSchedule } = await import("./lib/backgroundPoller");
     startBackgroundPolling();
     startHealthMonitorSchedule();

@@ -14,7 +14,7 @@ export async function GET() {
     include: {
       environments: {
         orderBy: { createdAt: "asc" },
-        include: { applications: { select: { id: true, name: true, status: true, sourceType: true } } },
+        include: { applications: { select: { id: true, name: true, status: true, sourceType: true, endpointId: true } } },
       },
     },
   });

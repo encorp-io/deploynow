@@ -36,7 +36,8 @@ WORKDIR /app
 # openssl  — needed for self-signed cert generation at startup
 # nginx    — SSL termination proxy (port 9444 → internal Next.js on 3001)
 # git, docker CLI with compose and buildx — the deploy pipeline (clone, build, compose up)
-RUN apk add --no-cache openssl nginx git docker-cli docker-cli-compose docker-cli-buildx
+# restic — backs up DeployNow's own data (endpoint data is backed up by a restic container there)
+RUN apk add --no-cache openssl nginx git docker-cli docker-cli-compose docker-cli-buildx restic
 
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1

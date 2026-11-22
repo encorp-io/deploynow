@@ -21,6 +21,9 @@ export async function GET() {
     require2faForAdmins: settings?.require2faForAdmins ?? true,
     agentPublicUrl: settings?.agentPublicUrl ?? "",
     agentDefaultUrl: defaultAgentUrl(),
+    alertDiskPercent: settings?.alertDiskPercent ?? 90,
+    alertMemPercent: settings?.alertMemPercent ?? 95,
+    alertCrashRestarts: settings?.alertCrashRestarts ?? 3,
     vault: {
       addr: settings?.vaultAddr ?? "",
       namespace: settings?.vaultNamespace ?? "",
@@ -60,6 +63,13 @@ export async function PUT(request: Request) {
   }
 
   if (body.autoUpdateLatest !== undefined) data.autoUpdateLatest = Boolean(body.autoUpdateLatest);
+
+  for (const [key, min, max] of [["alertDiskPercent", 50, 100], ["alertMemPercent", 50, 100], ["alertCrashRestarts", 1, 100]] as const) {
+    if (body[key] === undefined) continue;
+    const n = Number(body[key]);
+    if (!Number.isInteger(n) || n < min || n > max) return NextResponse.json({ error: `${key} must be a whole number from ${min} to ${max}` }, { status: 400 });
+    data[key] = n;
+  }
 
   if (typeof body.agentPublicUrl === "string") {
     const v = body.agentPublicUrl.trim().replace(/\/+$/, "");
