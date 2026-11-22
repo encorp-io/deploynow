@@ -87,7 +87,7 @@ export default function TeamPage() {
           <tbody className="divide-y divide-border">
             {data.users.map((u) => {
               const self = u.id === data.me.id;
-              const canEdit = isAdmin && !self && (u.role !== "owner" || data.me.role === "owner");
+              const canEdit = isAdmin && !self && (data.me.role === "owner" || (u.role !== "owner" && u.role !== "admin"));
               return (
                 <tr key={u.id} className={u.disabledAt ? "opacity-50" : ""}>
                   <td className="px-4 py-3 text-sm">

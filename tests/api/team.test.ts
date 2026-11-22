@@ -94,6 +94,15 @@ describe("POST /api/team", () => {
     expect((await post({ action: "updateRole", userId: TARGET, role: "viewer" })).status).toBe(403);
   });
 
+  it("keeps admins away from other admins", async () => {
+    signInAs("admin");
+    target("admin");
+    expect((await post({ action: "disable", userId: TARGET })).status).toBe(403);
+    expect((await post({ action: "updateRole", userId: TARGET, role: "viewer" })).status).toBe(403);
+    signInAs("owner");
+    expect((await post({ action: "disable", userId: TARGET })).status).toBe(200);
+  });
+
   it("keeps at least one owner", async () => {
     signInAs("owner");
     target("owner");

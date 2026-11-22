@@ -85,6 +85,33 @@ export function networkEndpointConfig(
   };
 }
 
+function hasStaticAddress(settings: Record<string, unknown> | undefined): boolean {
+  const ipam = (settings?.IPAMConfig ?? null) as { IPv4Address?: string; IPv6Address?: string } | null;
+  return !!(ipam?.IPv4Address || ipam?.IPv6Address);
+}
+
+/**
+ * Anonymous volumes show up in Mounts but not in HostConfig.Binds, so a plain
+ * create would give the new container fresh empty volumes. Bind the existing
+ * ones by name at the same paths.
+ */
+export function withAnonymousVolumes(info: Pick<Inspect, "HostConfig" | "Mounts">): Inspect["HostConfig"] {
+  const host = { ...info.HostConfig };
+  const binds = [...(host.Binds ?? [])];
+  const covered = new Set<string>([
+    ...binds.map((b) => b.split(":")[1]).filter(Boolean),
+    ...((host as { Mounts?: { Target?: string }[] }).Mounts ?? []).map((m) => m.Target ?? ""),
+  ]);
+  for (const m of info.Mounts ?? []) {
+    if (m.Type === "volume" && m.Name && !covered.has(m.Destination)) {
+      binds.push(`${m.Name}:${m.Destination}${m.RW ? "" : ":ro"}`);
+      covered.add(m.Destination);
+    }
+  }
+  host.Binds = binds;
+  return host;
+}
+
 export interface RecreateOptions {
   /** Image to run; defaults to the container's current image reference */
   image?: string;
@@ -117,18 +144,27 @@ export async function recreateContainer(docker: Docker, containerId: string, opt
   const createOpts = {
     ...containerOnlyConfig(info.Config, oldImageConfig, image, info.Id),
     name,
-    HostConfig: info.HostConfig,
+    HostConfig: withAnonymousVolumes(info),
     ...(primary && !sharesNamespace
       ? { NetworkingConfig: { EndpointsConfig: { [primary[0]]: networkEndpointConfig(primary[1] as Record<string, unknown>, info.Id) } } }
       : {}),
   };
+
+  // Docker keeps a static address reserved for the stopped old container, so
+  // release it first (and give it back on rollback)
+  const pinned = sharesNamespace ? [] : networks.filter(([, n]) => hasStaticAddress(n as Record<string, unknown>));
 
   const backupName = `${name}-old-${Date.now()}`;
   await old.rename({ name: backupName });
   if (wasRunning) await old.stop({ t: 10 }).catch(() => {});
 
   let created: Docker.Container | undefined;
+  const released: string[] = [];
   try {
+    for (const [net] of pinned) {
+      await docker.getNetwork(net).disconnect({ Container: info.Id, Force: true });
+      released.push(net);
+    }
     created = await docker.createContainer(createOpts as Docker.ContainerCreateOptions);
     if (!sharesNamespace) {
       for (const [net, settings] of extra) {
@@ -142,6 +178,12 @@ export async function recreateContainer(docker: Docker, containerId: string, opt
   } catch (err) {
     // Roll back to the old container
     if (created) await created.remove({ force: true }).catch(() => {});
+    for (const [net, settings] of pinned.filter(([n]) => released.includes(n))) {
+      await docker
+        .getNetwork(net)
+        .connect({ Container: info.Id, EndpointConfig: networkEndpointConfig(settings as Record<string, unknown>, info.Id) })
+        .catch(() => {});
+    }
     await old.rename({ name }).catch(() => {});
     if (wasRunning) await old.start().catch(() => {});
     throw err;

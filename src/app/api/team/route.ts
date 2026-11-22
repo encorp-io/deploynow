@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import crypto from "crypto";
 import { prisma } from "@/lib/prisma";
 import { requireUser, requireStepUp, readJson } from "@/lib/apiAuth";
-import { BINDABLE_ROLES, canAssignRole, isRole, normalizeRole, type Role } from "@/lib/rbac";
+import { BINDABLE_ROLES, canAssignRole, isRole, normalizeRole, roleAtLeast, type Role } from "@/lib/rbac";
 import { hashPassword, validatePasswordStrength } from "@/lib/password";
 import { revokeAllSessions } from "@/lib/sessions";
 import { audit, clientIp } from "@/lib/audit";
@@ -79,8 +79,9 @@ export async function POST(request: Request) {
   const target = await prisma.user.findUnique({ where: { id: userId } });
   if (!target) return NextResponse.json({ error: "User not found" }, { status: 404 });
   const targetRole = normalizeRole(target.role);
-  if (targetRole === "owner" && user.role !== "owner") {
-    return NextResponse.json({ error: "Only an owner can change another owner" }, { status: 403 });
+  // Admins manage people below them; only owners manage admins and owners
+  if (user.role !== "owner" && roleAtLeast(targetRole, user.role)) {
+    return NextResponse.json({ error: "Only an owner can change an admin or owner" }, { status: 403 });
   }
   const ownerCount = () => prisma.user.count({ where: { role: "owner", disabledAt: null } });
 

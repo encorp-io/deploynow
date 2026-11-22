@@ -34,8 +34,8 @@ async function syncEndpoint(endpoint: Endpoint, docker: Docker): Promise<void> {
   for (const c of containers) {
     const name = c.Names?.[0]?.replace(/^\//, "") || c.Id.slice(0, 12);
     const parsed = parseImageRef(c.Image);
-    // Containers started from an image id (no tag) can't be tracked for updates
-    if (/^sha256:/.test(c.Image) || /^[0-9a-f]{12,64}$/.test(c.Image)) continue;
+    // Containers started from an image id or pinned to a digest have no tag to follow
+    if (/^sha256:/.test(c.Image) || /^[0-9a-f]{12,64}$/.test(c.Image) || c.Image.includes("@sha256:")) continue;
 
     let img = imageCache.get(c.ImageID);
     if (!img) {

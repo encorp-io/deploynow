@@ -72,13 +72,14 @@ describe("syncServices", () => {
     docker.listContainers.mockResolvedValue([
       { Id: "c1", Names: ["/web"], Image: "ghcr.io/acme/web:latest", ImageID: "sha256:aaa", State: "running" },
       { Id: "c2", Names: ["/raw"], Image: "sha256:deadbeef", ImageID: "sha256:bbb", State: "running" },
+      { Id: "c3", Names: ["/pinned"], Image: "ghcr.io/acme/web@sha256:" + "a".repeat(64), ImageID: "sha256:ccc", State: "running" },
     ]);
     await syncServices();
     expect(mockPrisma.service.upsert).toHaveBeenCalledTimes(1);
     const { where, create } = mockPrisma.service.upsert.mock.calls[0][0];
     expect(where).toEqual({ containerId: "c1" });
     expect(create).toMatchObject({ containerName: "web", registry: "ghcr.io", tag: "latest", isFloatingTag: true, arch: "arm64", endpointId: "ep1", currentDigest: "sha256:aaa", repoDigests: "ghcr.io/acme/web@sha256:idx" });
-    expect(mockPrisma.service.deleteMany).toHaveBeenCalledWith({ where: { endpointId: "ep1", containerId: { notIn: ["c1", "c2"] } } });
+    expect(mockPrisma.service.deleteMany).toHaveBeenCalledWith({ where: { endpointId: "ep1", containerId: { notIn: ["c1", "c2", "c3"] } } });
   });
 
   it("keeps going when one endpoint fails", async () => {

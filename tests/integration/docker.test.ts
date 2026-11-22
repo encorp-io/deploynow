@@ -210,6 +210,34 @@ describe.skipIf(!up)("against a real Docker daemon", () => {
     expect(leftovers).toHaveLength(0);
   }, 60_000);
 
+  it("keeps anonymous volume data and a static IP across a recreate", async () => {
+    const netName = `deploynow-it-net-${process.pid}`;
+    const net = await docker.createNetwork({ Name: netName, Labels: { "it.test": "1" }, IPAM: { Config: [{ Subnet: "172.31.250.0/24" }] } });
+    try {
+      const c = await docker.createContainer({
+        name: `${NAME}-vol`,
+        Image: IMAGE,
+        Cmd: ["sh", "-c", "[ -f /data/keep ] || echo first > /data/keep; sleep 600"],
+        Labels: { "it.test": "1" },
+        Volumes: { "/data": {} },
+        HostConfig: { NetworkMode: netName },
+        NetworkingConfig: { EndpointsConfig: { [netName]: { IPAMConfig: { IPv4Address: "172.31.250.10" } } } },
+      });
+      await c.start();
+      const before = await c.inspect();
+      const volName = before.Mounts.find((m) => m.Destination === "/data")!.Name;
+
+      const newId = await recreateContainer(docker, c.id);
+      const after = await docker.getContainer(newId).inspect();
+      expect(after.State.Running).toBe(true);
+      expect(after.Mounts.find((m) => m.Destination === "/data")!.Name).toBe(volName);
+      expect(after.NetworkSettings.Networks[netName].IPAddress).toBe("172.31.250.10");
+      await docker.getContainer(newId).remove({ force: true, v: true });
+    } finally {
+      await net.remove().catch(() => {});
+    }
+  }, 60_000);
+
   it("needs a fresh 2FA code to remove a container", async () => {
     const { DELETE } = await import("@/app/api/endpoints/[id]/containers/[cid]/route");
     signInAs("operator");

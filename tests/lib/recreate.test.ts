@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { containerOnlyConfig, networkEndpointConfig, recreateContainer } from "@/lib/docker/recreate";
+import { containerOnlyConfig, networkEndpointConfig, recreateContainer, withAnonymousVolumes } from "@/lib/docker/recreate";
 
 const OLD_ID = "abcdef123456" + "0".repeat(52);
 
@@ -48,6 +48,22 @@ describe("networkEndpointConfig", () => {
       IPAMConfig: { IPv4Address: "10.0.0.5" },
     });
     expect(networkEndpointConfig(undefined, OLD_ID)).toEqual({});
+  });
+});
+
+describe("withAnonymousVolumes", () => {
+  it("binds anonymous volumes by name and leaves declared mounts alone", () => {
+    const host = withAnonymousVolumes({
+      HostConfig: { Binds: ["/srv/conf:/etc/app:ro"], Mounts: [{ Target: "/named", Source: "named", Type: "volume" }] },
+      Mounts: [
+        { Type: "bind", Source: "/srv/conf", Destination: "/etc/app", RW: false },
+        { Type: "volume", Name: "named", Destination: "/named", RW: true },
+        { Type: "volume", Name: "abc123anon", Destination: "/data", RW: true },
+        { Type: "volume", Name: "def456anon", Destination: "/cache", RW: false },
+      ],
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any);
+    expect(host.Binds).toEqual(["/srv/conf:/etc/app:ro", "abc123anon:/data", "def456anon:/cache:ro"]);
   });
 });
 
