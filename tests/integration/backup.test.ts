@@ -167,6 +167,12 @@ describe.skipIf(!ready)("backups (real Docker, restic, S3 and Postgres)", () => 
     }
     s3?.kill();
     if (prisma) await prisma.$disconnect();
+    // Restores run as root in a helper container, so on CI the restored files aren't ours to delete
+    try {
+      execSync(`docker run --rm -v ${dir}:/d ${BUSYBOX} sh -c 'rm -rf /d/* /d/.[!.]*'`, { stdio: "ignore", timeout: 60_000 });
+    } catch {
+      /* fall through */
+    }
     fs.rmSync(dir, { recursive: true, force: true });
   }, 60_000);
 
