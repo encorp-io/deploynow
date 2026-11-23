@@ -39,7 +39,7 @@ export function PasskeysCard({ onChange }: { onChange?: () => void }) {
     try {
       const options = await api<Record<string, unknown>>("/api/passkeys/register", { body: {} });
       if (!options.ok) throw new Error(String(options.data.error ?? "Could not start"));
-      const response = await startRegistration(options.data as never);
+      const response = await startRegistration({ optionsJSON: options.data as never });
       const res = await api("/api/passkeys/register", { method: "PUT", body: { response, name: name || defaultName() } });
       if (!res.ok) throw new Error(String(res.data.error ?? "Could not save the passkey"));
       setName("");

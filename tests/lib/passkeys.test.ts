@@ -54,12 +54,22 @@ class SoftAuthenticator {
     return { id: b64(this.credentialId), rawId: b64(this.credentialId), type: "public-key" as const, clientExtensionResults: {}, response: { clientDataJSON: b64(clientDataJSON), attestationObject: b64(attestationObject), transports: ["internal", "hybrid"] } };
   }
 
-  login(challenge: string, origin = ORIGIN) {
+  /** `short` keeps signing until r or s is shorter than 32 bytes, which happens to about 1 in 128 real signatures */
+  login(challenge: string, origin = ORIGIN, { short = false } = {}) {
     const clientDataJSON = Buffer.from(JSON.stringify({ type: "webauthn.get", challenge, origin, crossOrigin: false }));
     const authenticatorData = this.authData(false);
-    const signature = crypto.sign("sha256", Buffer.concat([authenticatorData, crypto.createHash("sha256").update(clientDataJSON).digest()]), this.key.privateKey);
+    const data = Buffer.concat([authenticatorData, crypto.createHash("sha256").update(clientDataJSON).digest()]);
+    let signature = crypto.sign("sha256", data, this.key.privateKey);
+    while (short && !hasShortComponent(signature)) signature = crypto.sign("sha256", data, this.key.privateKey);
     return { id: b64(this.credentialId), rawId: b64(this.credentialId), type: "public-key" as const, clientExtensionResults: {}, response: { clientDataJSON: b64(clientDataJSON), authenticatorData: b64(authenticatorData), signature: b64(signature) } };
   }
+}
+
+/** DER ECDSA signature: 30 len 02 rlen r 02 slen s. A component without a leading 00 that is under 32 bytes is "short". */
+function hasShortComponent(der: Buffer) {
+  const rLen = der[3];
+  const sLen = der[5 + rLen];
+  return rLen < 32 || sLen < 32;
 }
 
 let user: { id: string; email: string; name: string };
@@ -113,6 +123,14 @@ describe("passkeys", () => {
     const o3 = await authenticationOptions(req());
     await expect(finishAuthentication(device.login(o3.challenge, "https://evil.example") as never, req())).rejects.toThrow(/couldn't be verified/);
     await expect(finishAuthentication({ id: "x", response: { clientDataJSON: "!!" } } as never, req())).rejects.toThrow(/malformed/);
+  });
+
+  it("accepts signatures whose r or s is shorter than 32 bytes", async () => {
+    for (let i = 0; i < 3; i++) {
+      const options = await authenticationOptions(req());
+      const pk = await finishAuthentication(device.login(options.challenge, ORIGIN, { short: true }) as never, req());
+      expect(pk.userId).toBe(user.id);
+    }
   });
 
   it("refuses a disabled account", async () => {

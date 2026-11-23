@@ -82,7 +82,7 @@ export default function LoginPage() {
     try {
       const options = await fetch("/api/passkeys/login", { method: "POST" }).then((r) => r.json());
       if (options.error) throw new Error(options.error);
-      const response = await startAuthentication(options);
+      const response = await startAuthentication({ optionsJSON: options });
       const res = await fetch("/api/passkeys/login/verify", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ response }) });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Passkey sign-in failed");

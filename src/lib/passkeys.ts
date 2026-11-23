@@ -8,6 +8,9 @@ import {
   generateRegistrationOptions,
   verifyAuthenticationResponse,
   verifyRegistrationResponse,
+  type AuthenticationResponseJSON,
+  type AuthenticatorTransportFuture,
+  type RegistrationResponseJSON,
 } from "@simplewebauthn/server";
 import type { Passkey } from "@prisma/client";
 import { prisma } from "./prisma";
@@ -18,9 +21,9 @@ const MAX_PASSKEYS = 20;
 
 export class PasskeyError extends Error {}
 
-type RegistrationResponse = Parameters<typeof verifyRegistrationResponse>[0]["response"];
-type AuthenticationResponse = Parameters<typeof verifyAuthenticationResponse>[0]["response"];
-type Transport = NonNullable<Parameters<typeof verifyAuthenticationResponse>[0]["authenticator"]["transports"]>[number];
+type RegistrationResponse = RegistrationResponseJSON;
+type AuthenticationResponse = AuthenticationResponseJSON;
+type Transport = AuthenticatorTransportFuture;
 
 /**
  * The relying party: the address the browser is on and its host name. A passkey
@@ -39,6 +42,7 @@ export function serializePasskey(p: Passkey) {
 
 const b64 = (u: Uint8Array) => Buffer.from(u).toString("base64url");
 const unb64 = (s: string) => new Uint8Array(Buffer.from(s, "base64url"));
+const transportsOf = (p: Passkey) => (p.transports ? p.transports.split(",") : []) as Transport[];
 
 async function saveChallenge(id: string, kind: string, userId: string, challenge: string) {
   await prisma.authChallenge.deleteMany({ where: { OR: [{ expiresAt: { lt: new Date() } }, { id }] } });
@@ -60,11 +64,12 @@ export async function registrationOptions(user: { id: string; email: string; nam
   const options = await generateRegistrationOptions({
     rpName: "DeployNow",
     rpID,
-    userID: user.id,
+    // UTF-8 bytes of the user id: the same user handle older versions of the library stored
+    userID: new TextEncoder().encode(user.id),
     userName: user.email,
     userDisplayName: user.name || user.email,
     attestationType: "none",
-    excludeCredentials: existing.map((p) => ({ id: unb64(p.credentialId), type: "public-key" as const, transports: (p.transports ? p.transports.split(",") : []) as Transport[] })),
+    excludeCredentials: existing.map((p) => ({ id: p.credentialId, transports: transportsOf(p) })),
     authenticatorSelection: { residentKey: "required", userVerification: "required" },
   });
   await saveChallenge(`wa-reg:${user.id}`, "webauthn-register", user.id, options.challenge);
@@ -82,16 +87,16 @@ export async function finishRegistration(userId: string, response: RegistrationR
     throw new PasskeyError(`The passkey couldn't be verified: ${(err as Error).message}`);
   }
   if (!result.verified || !result.registrationInfo) throw new PasskeyError("The passkey couldn't be verified");
-  const info = result.registrationInfo;
-  const credentialId = b64(info.credentialID);
+  const { credential } = result.registrationInfo;
+  const credentialId = credential.id;
   if (await prisma.passkey.findUnique({ where: { credentialId } })) throw new PasskeyError("That passkey is already registered");
   const transports = Array.isArray(response.response?.transports) ? response.response.transports.filter((t) => /^[a-z-]{2,20}$/.test(t)).join(",") : "";
   return prisma.passkey.create({
     data: {
       userId,
       credentialId,
-      publicKey: b64(info.credentialPublicKey),
-      counter: info.counter,
+      publicKey: b64(credential.publicKey),
+      counter: credential.counter,
       transports,
       rpId: rpID,
       name: (name || "Passkey").trim().slice(0, 60) || "Passkey",
@@ -131,11 +136,11 @@ export async function finishAuthentication(response: AuthenticationResponse, req
       expectedOrigin: origin,
       expectedRPID: rpID,
       requireUserVerification: true,
-      authenticator: {
-        credentialID: unb64(passkey.credentialId),
-        credentialPublicKey: unb64(passkey.publicKey),
+      credential: {
+        id: passkey.credentialId,
+        publicKey: unb64(passkey.publicKey),
         counter: passkey.counter,
-        transports: (passkey.transports ? passkey.transports.split(",") : []) as Transport[],
+        transports: transportsOf(passkey),
       },
     });
   } catch (err) {
