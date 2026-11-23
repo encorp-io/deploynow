@@ -3,9 +3,10 @@
 import { use, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Globe, Plus, Trash2 } from "lucide-react";
+import { Boxes, Globe, Plus, Trash2 } from "lucide-react";
 import { useApi } from "@/components/AppShell";
-import { Badge, Button, Card, ErrorText, Field, Input, Modal, PageHeader, timeAgo } from "@/components/ui";
+import { Badge, Button, Card, ErrorText, Field, IconButton, Input, Modal, PageHeader, PageSkeleton, timeAgo } from "@/components/ui";
+import { useConfirm, useToast } from "@/components/feedback";
 import { AppForm, appStatusTone, emptyApp, selectClass, SOURCE_LABELS, type AppFormValue } from "@/components/apps";
 
 interface AppRow {
@@ -27,6 +28,8 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
   const { id } = use(params);
   const api = useApi();
   const router = useRouter();
+  const confirm = useConfirm();
+  const toast = useToast();
   const [project, setProject] = useState<ProjectView | null>(null);
   const [endpoints, setEndpoints] = useState<{ id: string; name: string }[]>([]);
   const [error, setError] = useState("");
@@ -67,33 +70,40 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
     load();
   };
 
-  const deleteEnv = async (envId: string) => {
-    const res = await api(`/api/environments/${envId}`, { method: "DELETE" });
-    if (!res.ok) setError(res.data.error ?? "Could not delete");
+  const deleteEnv = async (env: EnvRow) => {
+    if (!(await confirm({ title: `Delete the ${env.name} environment?`, message: "It has no apps, so nothing is stopped.", confirmLabel: "Delete environment" }))) return;
+    const res = await api(`/api/environments/${env.id}`, { method: "DELETE" });
+    if (!res.ok) toast.error(res.data.error ?? "Could not delete");
+    else toast.success(`Deleted ${env.name}`);
     load();
   };
 
   const deleteProject = async () => {
+    if (!project) return;
+    if (!(await confirm({ title: `Delete ${project.name}?`, message: "The project and its environments are removed. It has no apps, so nothing is stopped.", confirmLabel: "Delete project", typeToConfirm: project.name }))) return;
     const res = await api(`/api/projects/${id}`, { method: "DELETE" });
-    if (!res.ok) return setError(res.data.error ?? "Could not delete");
+    if (!res.ok) return toast.error(res.data.error ?? "Could not delete");
+    toast.success(`Deleted ${project.name}`);
     router.push("/projects");
   };
 
-  if (!project) return <div className="max-w-6xl">{error ? <ErrorText>{error}</ErrorText> : <p className="text-sm text-text-muted">Loading…</p>}</div>;
+  if (!project) return error ? <div className="max-w-6xl"><ErrorText>{error}</ErrorText></div> : <PageSkeleton />;
+
+  const appCount = project.environments.reduce((n, e) => n + e.apps.length, 0);
 
   return (
     <div className="max-w-6xl">
-      <Link href="/projects" className="inline-flex items-center gap-1 text-sm text-text-muted hover:text-text-primary mb-3"><ArrowLeft className="w-4 h-4" /> Projects</Link>
       <PageHeader
+        crumbs={[{ label: "Projects", href: "/projects" }, { label: project.name }]}
         title={project.name}
         subtitle={project.description || undefined}
         actions={
           project.canManage && (
             <>
-              <Button variant="secondary" onClick={() => setNewEnv({ name: "", endpointId: endpoints[0]?.id ?? "" })}><Plus className="w-4 h-4" /> Environment</Button>
-              {project.environments.every((e) => e.apps.length === 0) && (
-                <Button variant="danger" onClick={deleteProject}><Trash2 className="w-4 h-4" /> Delete project</Button>
+              {appCount === 0 && (
+                <IconButton label="Delete project" variant="danger" onClick={deleteProject}><Trash2 className="w-4 h-4" /></IconButton>
               )}
+              <Button variant="secondary" onClick={() => setNewEnv({ name: "", endpointId: endpoints[0]?.id ?? "" })}><Plus className="w-4 h-4" /> Environment</Button>
             </>
           )
         }
@@ -103,14 +113,14 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
       <div className="space-y-6 mt-2">
         {project.environments.map((env) => (
           <section key={env.id}>
-            <div className="flex items-center justify-between mb-2">
-              <h2 className="text-sm font-semibold text-text-primary uppercase tracking-wide">
-                {env.name} <span className="text-text-muted font-normal normal-case">{env.defaultEndpoint ? `· on ${env.defaultEndpoint.name}` : ""}</span>
+            <div className="flex items-center justify-between gap-3 mb-2">
+              <h2 className="text-sm font-semibold text-text-primary uppercase tracking-wide min-w-0">
+                {env.name} <span className="text-text-muted font-normal normal-case">{env.defaultEndpoint ? `· runs on ${env.defaultEndpoint.name}` : ""}</span>
               </h2>
               {project.canManage && (
                 <div className="flex gap-2">
                   {env.apps.length === 0 && project.environments.length > 1 && (
-                    <Button variant="ghost" onClick={() => deleteEnv(env.id)}><Trash2 className="w-4 h-4" /></Button>
+                    <IconButton label={`Delete ${env.name}`} onClick={() => deleteEnv(env)}><Trash2 className="w-4 h-4" /></IconButton>
                   )}
                   <Button variant="secondary" onClick={() => setNewApp({ envId: env.id, value: { ...emptyApp, endpointId: env.defaultEndpoint?.id ?? endpoints[0]?.id ?? "" } })}>
                     <Plus className="w-4 h-4" /> New app
@@ -120,10 +130,19 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
             </div>
             <Card className="overflow-hidden">
               {env.apps.length === 0 ? (
-                <p className="text-sm text-text-muted p-6 text-center">No apps in {env.name} yet</p>
+                <div className="p-8 text-center">
+                  <Boxes className="w-8 h-8 text-text-muted mx-auto mb-2" />
+                  <p className="text-sm text-text-primary mb-1">No apps in {env.name} yet</p>
+                  <p className="text-xs text-text-muted mb-4">Deploy a container image, a Dockerfile or a docker-compose file from Git.</p>
+                  {project.canManage && (
+                    <Button onClick={() => setNewApp({ envId: env.id, value: { ...emptyApp, endpointId: env.defaultEndpoint?.id ?? endpoints[0]?.id ?? "" } })}>
+                      <Plus className="w-4 h-4" /> Add an app
+                    </Button>
+                  )}
+                </div>
               ) : (
                 env.apps.map((a, i) => (
-                  <Link key={a.id} href={`/apps/${a.id}`} className={`flex items-center gap-4 px-4 py-3 hover:bg-bg-secondary ${i ? "border-t border-border" : ""}`}>
+                  <Link key={a.id} href={`/apps/${a.id}`} className={`flex flex-wrap sm:flex-nowrap items-center gap-x-4 gap-y-1 px-4 py-3 hover:bg-bg-secondary ${i ? "border-t border-border" : ""}`}>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
                         <span className="font-medium text-text-primary">{a.name}</span>
@@ -136,7 +155,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
                         <span key={d.host + d.path} className="inline-flex items-center gap-1 text-xs text-text-secondary"><Globe className="w-3 h-3" />{d.host}{d.path !== "/" ? d.path : ""}</span>
                       ))}
                     </div>
-                    <div className="text-right text-xs text-text-muted w-32">
+                    <div className="sm:text-right text-xs text-text-muted sm:w-36 flex sm:block gap-2">
                       <p>{a.endpoint.name}</p>
                       <p>{a.lastDeployment ? `deployed ${timeAgo(a.lastDeployment.finishedAt ?? a.lastDeployment.createdAt)}` : "never deployed"}</p>
                     </div>
@@ -149,14 +168,20 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
       </div>
 
       {newApp && (
-        <Modal title="New app" wide onClose={() => setNewApp(null)}>
+        <Modal
+          title="New app"
+          wide
+          onClose={() => setNewApp(null)}
+          footer={
+            <>
+              <span className="mr-auto self-center text-xs text-text-muted hidden sm:block">Next: environment variables, domains, then deploy.</span>
+              <Button variant="secondary" onClick={() => setNewApp(null)}>Cancel</Button>
+              <Button onClick={createApp} loading={busy} disabled={!newApp.value.name.trim()}>Create app</Button>
+            </>
+          }
+        >
           <AppForm value={newApp.value} onChange={(value) => setNewApp({ ...newApp, value })} endpoints={endpoints} isNew />
-          <p className="text-xs text-text-muted mt-3">Add environment variables, secrets and domains on the app page, then deploy.</p>
           <div className="mt-3"><ErrorText>{formError}</ErrorText></div>
-          <div className="flex justify-end gap-2 pt-4">
-            <Button variant="secondary" onClick={() => setNewApp(null)}>Cancel</Button>
-            <Button onClick={createApp} loading={busy}>Create app</Button>
-          </div>
         </Modal>
       )}
 

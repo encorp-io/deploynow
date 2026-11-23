@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { UserPlus, Copy, ShieldCheck, ShieldOff, Trash2, Ban, RotateCcw, KeyRound, Plus, X } from "lucide-react";
 import { useApi } from "@/components/AppShell";
-import { Badge, Button, Card, ErrorText, Field, Input, Modal, PageHeader, timeAgo } from "@/components/ui";
+import { Badge, Button, Card, ErrorText, Field, Input, Modal, PageHeader, timeAgo, IconButton, PageSkeleton, TableWrap } from "@/components/ui";
+import { useConfirm } from "@/components/feedback";
 
 const ROLES = ["viewer", "operator", "admin", "owner"] as const;
 const ROLE_HELP: Record<string, string> = {
@@ -30,6 +31,7 @@ interface TeamData { users: UserRow[]; invites: Invite[]; endpoints: { id: strin
 
 export default function TeamPage() {
   const api = useApi();
+  const confirm = useConfirm();
   const [data, setData] = useState<TeamData | null>(null);
   const [error, setError] = useState("");
   const [invite, setInvite] = useState({ open: false, email: "", role: "operator", link: "" });
@@ -46,7 +48,10 @@ export default function TeamPage() {
   }, [load]);
 
   async function post(body: Record<string, unknown>, confirmText?: string) {
-    if (confirmText && !confirm(confirmText)) return;
+    if (confirmText) {
+      const [title, ...rest] = confirmText.split("? ");
+      if (!(await confirm({ title: rest.length ? `${title}?` : title, message: rest.join("? ") || undefined, confirmLabel: "Confirm" }))) return;
+    }
     setError("");
     const res = await api<{ token?: string }>("/api/team", { body });
     if (!res.ok) setError(res.data.error ?? "Action failed");
@@ -59,12 +64,12 @@ export default function TeamPage() {
     if (res?.ok && res.data.token) setInvite({ ...invite, link: `${window.location.origin}/setup?token=${res.data.token}` });
   }
 
-  if (!data) return <p className="text-sm text-text-muted">Loading…</p>;
+  if (!data) return <PageSkeleton rows={2} />;
   const isAdmin = data.me.role === "admin" || data.me.role === "owner";
   const endpointName = (id: string) => data.endpoints.find((e) => e.id === id)?.name ?? "removed endpoint";
 
   return (
-    <div className="max-w-5xl">
+    <div className="max-w-6xl">
       <PageHeader
         title="Team"
         subtitle="Everyone has an instance role; endpoint grants raise it on one machine"
@@ -73,7 +78,7 @@ export default function TeamPage() {
       <ErrorText>{error}</ErrorText>
 
       <Card className="overflow-hidden mt-2">
-        <table className="w-full">
+        <TableWrap><table className="w-full min-w-[720px]">
           <thead className="border-b border-border">
             <tr className="text-left text-xs text-text-muted">
               <th className="px-4 py-2.5 font-medium">Person</th>
@@ -126,22 +131,22 @@ export default function TeamPage() {
                       )}
                     </div>
                   </td>
-                  <td className="px-4 py-3">{u.totpEnabled ? <ShieldCheck className="w-4 h-4 text-success" /> : <ShieldOff className="w-4 h-4 text-warning" />}</td>
+                  <td className="px-4 py-3">{u.totpEnabled ? <span title="2FA on" className="inline-flex items-center gap-1 text-xs text-success"><ShieldCheck className="w-4 h-4" /> On</span> : <span title="2FA off" className="inline-flex items-center gap-1 text-xs text-warning"><ShieldOff className="w-4 h-4" /> Off</span>}</td>
                   <td className="px-4 py-3 text-xs text-text-muted">{timeAgo(u.lastLoginAt)}</td>
                   <td className="px-4 py-3 text-right whitespace-nowrap">
                     {canEdit && (
                       <>
                         {u.totpEnabled && (
-                          <Button variant="ghost" title="Reset 2FA" onClick={() => post({ action: "reset2fa", userId: u.id }, `Reset 2FA for ${u.email}? They will set it up again at next sign-in.`)}>
+                          <IconButton label="Reset 2FA" onClick={() => post({ action: "reset2fa", userId: u.id }, `Reset 2FA for ${u.email}? They will set it up again at next sign-in.`)}>
                             <KeyRound className="w-4 h-4" />
-                          </Button>
+                          </IconButton>
                         )}
                         {u.disabledAt ? (
-                          <Button variant="ghost" title="Re-enable" onClick={() => post({ action: "enable", userId: u.id })}><RotateCcw className="w-4 h-4" /></Button>
+                          <IconButton label="Re-enable" onClick={() => post({ action: "enable", userId: u.id })}><RotateCcw className="w-4 h-4" /></IconButton>
                         ) : (
-                          <Button variant="ghost" title="Disable and sign out" onClick={() => post({ action: "disable", userId: u.id }, `Disable ${u.email}? They are signed out everywhere.`)}><Ban className="w-4 h-4" /></Button>
+                          <IconButton label="Disable and sign out" onClick={() => post({ action: "disable", userId: u.id }, `Disable ${u.email}? They are signed out everywhere.`)}><Ban className="w-4 h-4" /></IconButton>
                         )}
-                        <Button variant="ghost" title="Remove" onClick={() => post({ action: "remove", userId: u.id }, `Remove ${u.email} permanently?`)}><Trash2 className="w-4 h-4" /></Button>
+                        <IconButton label="Remove" onClick={() => post({ action: "remove", userId: u.id }, `Remove ${u.email} permanently?`)}><Trash2 className="w-4 h-4" /></IconButton>
                       </>
                     )}
                   </td>
@@ -149,7 +154,7 @@ export default function TeamPage() {
               );
             })}
           </tbody>
-        </table>
+        </table></TableWrap>
       </Card>
 
       {data.invites.length > 0 && (
@@ -163,7 +168,7 @@ export default function TeamPage() {
 
       <Card className="p-5 mt-4">
         <h3 className="text-sm font-semibold mb-2">What each role can do</h3>
-        <div className="grid grid-cols-2 gap-2 text-xs">
+        <div className="grid sm:grid-cols-2 gap-2 text-xs">
           {ROLES.map((r) => (
             <p key={r}><span className="capitalize text-text-primary font-medium">{r}:</span> <span className="text-text-secondary">{ROLE_HELP[r]}</span></p>
           ))}

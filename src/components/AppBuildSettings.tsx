@@ -39,7 +39,7 @@ export function AppBuildSettings({
         <div className="space-y-3">
           <h3 className="text-sm font-semibold text-text-primary flex items-center gap-2"><Hammer className="w-4 h-4" /> Build</h3>
           <p className="text-xs text-text-muted">Build on another machine so heavy builds don&apos;t slow down {app.endpoint.name}. The image is pushed to a registry and pulled by {app.endpoint.name}.</p>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid sm:grid-cols-2 gap-3">
             <Field label="Build on">
               <Select value={v.buildEndpointId ?? ""} onChange={(e) => setV({ ...v, buildEndpointId: e.target.value || null })}>
                 <option value="">{app.endpoint.name} (where it runs)</option>

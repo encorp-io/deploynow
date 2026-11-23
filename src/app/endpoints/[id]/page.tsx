@@ -2,15 +2,16 @@
 
 import { use, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { clsx } from "clsx";
-import { ArrowLeft, Play, Square, RotateCw, Trash2, Pencil, RefreshCw, Eraser } from "lucide-react";
+import { Play, Square, RotateCw, Trash2, Pencil, RefreshCw, Eraser } from "lucide-react";
 import { useApi } from "@/components/AppShell";
 import ProxyCard from "@/components/ProxyCard";
 import AgentCard from "@/components/AgentCard";
 import MetricsChart from "@/components/MetricsChart";
 import EndpointForm, { type EndpointView } from "@/components/EndpointForm";
-import { Badge, Button, Card, ErrorText, Modal, PageHeader, formatBytes, stateTone, timeAgo } from "@/components/ui";
+import { Badge, Button, Card, ErrorText, IconButton, Modal, PageHeader, PageSkeleton, Skeleton, TableWrap, Tabs, formatBytes, stateTone, timeAgo } from "@/components/ui";
+import { useConfirm, useToast } from "@/components/feedback";
 
 type Tab = "containers" | "images" | "volumes" | "networks";
 
@@ -35,8 +36,13 @@ export default function EndpointPage({ params }: { params: Promise<{ id: string 
   const { id } = use(params);
   const api = useApi();
   const router = useRouter();
+  const search = useSearchParams();
+  const confirm = useConfirm();
+  const toast = useToast();
   const [endpoint, setEndpoint] = useState<EndpointView | null>(null);
-  const [tab, setTab] = useState<Tab>("containers");
+  const tabParam = search.get("tab");
+  const tab: Tab = (["containers", "images", "volumes", "networks"] as Tab[]).includes(tabParam as Tab) ? (tabParam as Tab) : "containers";
+  const setTab = (t: Tab) => router.replace(t === "containers" ? `/endpoints/${id}` : `/endpoints/${id}?tab=${t}`, { scroll: false });
   const [rows, setRows] = useState<unknown[] | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState<string>("");
@@ -72,40 +78,42 @@ export default function EndpointPage({ params }: { params: Promise<{ id: string 
     setBusy(key);
     const res = await fn();
     setBusy("");
-    if (!res.ok) setError(res.data.error ?? "Action failed");
+    if (!res.ok) toast.error(res.data.error ?? "Action failed");
     else loadTab();
   }
 
   const containerAction = (c: ContainerRow, action: string) =>
     act(`${c.id}:${action}`, () => api(`/api/endpoints/${id}/containers/${c.id}`, { body: { action } }));
 
-  const removeContainer = (c: ContainerRow) => {
-    if (!confirm(`Remove container ${c.name}? This can't be undone.`)) return;
+  const removeContainer = async (c: ContainerRow) => {
+    if (!(await confirm({ title: `Remove container ${c.name}?`, message: "This can't be undone.", confirmLabel: "Remove" }))) return;
     act(`${c.id}:remove`, () => api(`/api/endpoints/${id}/containers/${c.id}`, { method: "DELETE" }));
   };
 
-  const removeResource = (kind: Tab, ref: string, label: string) => {
-    if (!confirm(`Remove ${kind.slice(0, -1)} ${label}?${kind === "volumes" ? " Its data will be deleted." : ""}`)) return;
+  const removeResource = async (kind: Tab, ref: string, label: string) => {
+    if (!(await confirm({ title: `Remove ${kind.slice(0, -1)} ${label}?`, message: kind === "volumes" ? "Its data will be deleted." : undefined, confirmLabel: "Remove" }))) return;
     act(`${ref}:remove`, () => api(`/api/endpoints/${id}/${kind}?ref=${encodeURIComponent(ref)}`, { method: "DELETE" }));
   };
 
   const prune = async (kind: Tab) => {
     const what = { containers: "stopped containers", images: "dangling images", volumes: "unused volumes (their data is deleted)", networks: "unused networks" }[kind];
-    if (!confirm(`Remove all ${what} on ${endpoint?.name}?`)) return;
+    if (!(await confirm({ title: `Prune ${kind} on ${endpoint?.name}?`, message: `Removes all ${what}.`, confirmLabel: "Prune" }))) return;
     setBusy("prune");
     const res = await api<{ removed: number; reclaimed: number }>(`/api/endpoints/${id}/prune`, { body: { kind } });
     setBusy("");
     if (res.ok) {
-      alert(`Removed ${res.data.removed}, reclaimed ${formatBytes(res.data.reclaimed)}`);
+      toast.success(`Removed ${res.data.removed}, reclaimed ${formatBytes(res.data.reclaimed)}`);
       loadTab();
-    } else setError(res.data.error ?? "Prune failed");
+    } else toast.error(res.data.error ?? "Prune failed");
   };
 
   async function deleteEndpoint() {
-    if (!confirm(`Remove endpoint ${endpoint?.name}? Its containers keep running; the deployer just stops managing them.`)) return;
+    if (!(await confirm({ title: `Remove endpoint ${endpoint?.name}?`, message: "Its containers keep running; DeployNow just stops managing them.", confirmLabel: "Remove endpoint", typeToConfirm: endpoint?.name }))) return;
     const res = await api(`/api/endpoints/${id}`, { method: "DELETE" });
-    if (res.ok) router.push("/endpoints");
-    else setError(res.data.error ?? "Could not remove");
+    if (res.ok) {
+      toast.success(`Removed ${endpoint?.name}`);
+      router.push("/endpoints");
+    } else toast.error(res.data.error ?? "Could not remove");
   }
 
   async function refresh() {
@@ -117,21 +125,19 @@ export default function EndpointPage({ params }: { params: Promise<{ id: string 
   }
 
   if (!endpoint) {
-    return error ? <ErrorText>{error}</ErrorText> : <p className="text-sm text-text-muted">Loading…</p>;
+    return error ? <ErrorText>{error}</ErrorText> : <PageSkeleton />;
   }
 
   const q = filter.toLowerCase();
   const match = (...vals: (string | undefined | null)[]) => !q || vals.some((v) => v?.toLowerCase().includes(q));
 
   return (
-    <div>
-      <Link href="/endpoints" className="inline-flex items-center gap-1 text-xs text-text-muted hover:text-text-secondary mb-3">
-        <ArrowLeft className="w-3.5 h-3.5" /> Endpoints
-      </Link>
+    <div className="max-w-6xl">
       <PageHeader
+        crumbs={[{ label: "Endpoints", href: "/endpoints" }, { label: endpoint.name }]}
         title={endpoint.name}
         subtitle={
-          <span className="flex items-center gap-2">
+          <span className="flex items-center flex-wrap gap-x-2 gap-y-1">
             <Badge tone={stateTone(endpoint.status)}>{endpoint.status}</Badge>
             {endpoint.dockerVersion && <>Docker {endpoint.dockerVersion} · {endpoint.os} · {endpoint.cpus} CPU · {formatBytes(endpoint.memoryBytes)}</>}
             {endpoint.status !== "online" && endpoint.lastError && <span className="text-danger">{endpoint.lastError}</span>}
@@ -139,51 +145,51 @@ export default function EndpointPage({ params }: { params: Promise<{ id: string 
         }
         actions={
           <>
-            <Button variant="secondary" loading={busy === "refresh"} onClick={refresh}><RefreshCw className="w-4 h-4" /></Button>
+            <IconButton label="Refresh" variant="secondary" loading={busy === "refresh"} onClick={refresh}><RefreshCw className="w-4 h-4" /></IconButton>
             <Button variant="secondary" onClick={() => setEditing(true)}><Pencil className="w-4 h-4" /> Edit</Button>
-            <Button variant="danger" onClick={deleteEndpoint}><Trash2 className="w-4 h-4" /></Button>
+            <IconButton label="Remove endpoint" variant="danger" onClick={deleteEndpoint}><Trash2 className="w-4 h-4" /></IconButton>
           </>
         }
       />
 
-      <div className="flex items-center justify-between mb-4 gap-4">
-        <div className="flex gap-1 bg-bg-secondary border border-border rounded-lg p-1">
-          {(["containers", "images", "volumes", "networks"] as Tab[]).map((t) => (
-            <button
-              key={t}
-              onClick={() => setTab(t)}
-              className={clsx("px-3 py-1.5 rounded-md text-sm capitalize", tab === t ? "bg-bg-card text-text-primary" : "text-text-muted hover:text-text-secondary")}
-            >
-              {t}
-            </button>
-          ))}
-        </div>
+      {endpoint.type === "agent" && <AgentCard api={api} endpoint={endpoint} onChange={loadEndpoint} />}
+      <MetricsChart api={api} endpointId={id} />
+      <ProxyCard endpointId={id} />
+
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 mt-6 mb-3">
+        <Tabs
+          tabs={[
+            { value: "containers", label: "Containers" },
+            { value: "images", label: "Images" },
+            { value: "volumes", label: "Volumes" },
+            { value: "networks", label: "Networks" },
+          ]}
+          value={tab}
+          onChange={setTab}
+        />
         <div className="flex gap-2">
           <input
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
-            placeholder="Filter…"
-            className="px-3 py-1.5 bg-bg-secondary border border-border rounded-lg text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-accent w-56"
+            placeholder={`Filter ${tab}…`}
+            aria-label={`Filter ${tab}`}
+            className="flex-1 md:w-56 px-3 py-1.5 bg-bg-secondary border border-border rounded-lg text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-accent"
           />
-          <Button variant="secondary" loading={busy === "prune"} onClick={() => prune(tab)}><Eraser className="w-4 h-4" /> Prune</Button>
+          <Button variant="secondary" loading={busy === "prune"} onClick={() => prune(tab)} title={`Remove unused ${tab}`}><Eraser className="w-4 h-4" /> Prune</Button>
         </div>
       </div>
-
-      {endpoint.type === "agent" && <AgentCard api={api} endpoint={endpoint} onChange={loadEndpoint} />}
-      <MetricsChart api={api} endpointId={id} />
-      <ProxyCard endpointId={id} />
       <ErrorText>{error}</ErrorText>
 
       <Card className="overflow-hidden mt-2">
         {rows === null ? (
-          <p className="text-sm text-text-muted p-4">Loading…</p>
+          <div className="p-4 space-y-2"><Skeleton className="h-9" /><Skeleton className="h-9" /><Skeleton className="h-9" /></div>
         ) : tab === "containers" ? (
-          <table className="w-full">
+          <TableWrap><table className="w-full min-w-[640px]">
             <thead className="border-b border-border"><tr><th className={th}>Name</th><th className={th}>State</th><th className={th}>Image</th><th className={th}>Ports</th><th className={th}>Created</th><th className={th}></th></tr></thead>
             <tbody className="divide-y divide-border">
               {(rows as ContainerRow[]).filter((c) => match(c.name, c.image, c.composeProject)).map((c) => (
                 <tr key={c.id} className="hover:bg-bg-card-hover">
-                  <td className={td}>
+                  <td className={clsx(td, "whitespace-nowrap")}>
                     <Link href={`/endpoints/${id}/containers/${c.id}`} className="text-accent hover:underline font-medium">{c.name}</Link>
                     {c.composeProject && <span className="block text-xs text-text-muted">stack {c.composeProject}</span>}
                   </td>
@@ -194,20 +200,20 @@ export default function EndpointPage({ params }: { params: Promise<{ id: string 
                   <td className={clsx(td, "text-right whitespace-nowrap")}>
                     {c.state === "running" ? (
                       <>
-                        <Button variant="ghost" title="Restart" loading={busy === `${c.id}:restart`} onClick={() => containerAction(c, "restart")}><RotateCw className="w-4 h-4" /></Button>
-                        <Button variant="ghost" title="Stop" loading={busy === `${c.id}:stop`} onClick={() => containerAction(c, "stop")}><Square className="w-4 h-4" /></Button>
+                        <IconButton label="Restart" loading={busy === `${c.id}:restart`} onClick={() => containerAction(c, "restart")}><RotateCw className="w-4 h-4" /></IconButton>
+                        <IconButton label="Stop" loading={busy === `${c.id}:stop`} onClick={() => containerAction(c, "stop")}><Square className="w-4 h-4" /></IconButton>
                       </>
                     ) : (
-                      <Button variant="ghost" title="Start" loading={busy === `${c.id}:start`} onClick={() => containerAction(c, "start")}><Play className="w-4 h-4" /></Button>
+                      <IconButton label="Start" loading={busy === `${c.id}:start`} onClick={() => containerAction(c, "start")}><Play className="w-4 h-4" /></IconButton>
                     )}
-                    <Button variant="ghost" title="Remove" loading={busy === `${c.id}:remove`} onClick={() => removeContainer(c)}><Trash2 className="w-4 h-4" /></Button>
+                    <IconButton label="Remove" loading={busy === `${c.id}:remove`} onClick={() => removeContainer(c)}><Trash2 className="w-4 h-4" /></IconButton>
                   </td>
                 </tr>
               ))}
             </tbody>
-          </table>
+          </table></TableWrap>
         ) : tab === "images" ? (
-          <table className="w-full">
+          <TableWrap><table className="w-full min-w-[640px]">
             <thead className="border-b border-border"><tr><th className={th}>Tags</th><th className={th}>Id</th><th className={th}>Size</th><th className={th}>Created</th><th className={th}></th></tr></thead>
             <tbody className="divide-y divide-border">
               {(rows as ImageRow[]).filter((i) => match(i.id, ...i.tags)).map((i) => (
@@ -216,13 +222,13 @@ export default function EndpointPage({ params }: { params: Promise<{ id: string 
                   <td className={clsx(td, "font-mono text-xs text-text-muted")}>{i.id.replace("sha256:", "").slice(0, 12)}</td>
                   <td className={clsx(td, "text-xs")}>{formatBytes(i.size)}</td>
                   <td className={clsx(td, "text-xs text-text-muted")}>{timeAgo(i.created)}</td>
-                  <td className={clsx(td, "text-right")}>{!i.inUse && <Button variant="ghost" loading={busy === `${i.id}:remove`} onClick={() => removeResource("images", i.id, i.tags[0] ?? i.id.slice(7, 19))}><Trash2 className="w-4 h-4" /></Button>}</td>
+                  <td className={clsx(td, "text-right")}>{!i.inUse && <IconButton label="Remove" loading={busy === `${i.id}:remove`} onClick={() => removeResource("images", i.id, i.tags[0] ?? i.id.slice(7, 19))}><Trash2 className="w-4 h-4" /></IconButton>}</td>
                 </tr>
               ))}
             </tbody>
-          </table>
+          </table></TableWrap>
         ) : tab === "volumes" ? (
-          <table className="w-full">
+          <TableWrap><table className="w-full min-w-[640px]">
             <thead className="border-b border-border"><tr><th className={th}>Name</th><th className={th}>Driver</th><th className={th}>Used by</th><th className={th}>Created</th><th className={th}></th></tr></thead>
             <tbody className="divide-y divide-border">
               {(rows as VolumeRow[]).filter((v) => match(v.name, ...v.usedBy)).map((v) => (
@@ -235,9 +241,9 @@ export default function EndpointPage({ params }: { params: Promise<{ id: string 
                 </tr>
               ))}
             </tbody>
-          </table>
+          </table></TableWrap>
         ) : (
-          <table className="w-full">
+          <TableWrap><table className="w-full min-w-[640px]">
             <thead className="border-b border-border"><tr><th className={th}>Name</th><th className={th}>Driver</th><th className={th}>Subnet</th><th className={th}>Containers</th><th className={th}></th></tr></thead>
             <tbody className="divide-y divide-border">
               {(rows as NetworkRow[]).filter((n) => match(n.name, ...n.usedBy)).map((n) => (
@@ -250,9 +256,9 @@ export default function EndpointPage({ params }: { params: Promise<{ id: string 
                 </tr>
               ))}
             </tbody>
-          </table>
+          </table></TableWrap>
         )}
-        {rows !== null && rows.length === 0 && !error && <p className="text-sm text-text-muted p-4">Nothing here.</p>}
+        {rows !== null && rows.length === 0 && !error && <p className="text-sm text-text-muted p-6 text-center">No {tab} on {endpoint.name}.</p>}
       </Card>
 
       {editing && (

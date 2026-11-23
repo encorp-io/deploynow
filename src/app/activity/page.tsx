@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { clsx } from "clsx";
 import { Search, ArrowUpDown, ChevronLeft, ChevronRight, History, X, CheckCircle, AlertCircle } from "lucide-react";
 import { useApi } from "@/components/AppShell";
-import { Badge, Button, Card, PageHeader, timeAgo } from "@/components/ui";
+import { Badge, Button, Card, PageHeader, timeAgo, Skeleton } from "@/components/ui";
 
 interface AuditRow {
   id: string;
@@ -112,7 +112,7 @@ export default function AuditPage() {
       </div>
 
       {!data ? (
-        <p className="text-sm text-text-muted">Loading…</p>
+        <div className="space-y-2" aria-busy="true"><Skeleton className="h-16" /><Skeleton className="h-16" /><Skeleton className="h-16" /></div>
       ) : data.logs.length === 0 ? (
         <Card className="p-12 text-center">
           <History className="w-10 h-10 text-text-muted mx-auto mb-3" />

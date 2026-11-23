@@ -4,7 +4,7 @@ import { Suspense, useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { ShieldCheck, ShieldAlert, Monitor, KeyRound, Copy } from "lucide-react";
 import { useApi } from "@/components/AppShell";
-import { Badge, Button, Card, ErrorText, Field, Input, PageHeader, timeAgo } from "@/components/ui";
+import { Badge, Button, Card, ErrorText, Field, Input, PageHeader, timeAgo, PageSkeleton } from "@/components/ui";
 import { ApiTokensCard, PasskeysCard } from "@/components/AccountSecurity";
 import { PersonalRegistryLogins } from "@/components/RegistryLogins";
 
@@ -144,7 +144,7 @@ function AccountPage() {
     load();
   }
 
-  if (!account) return <p className="text-text-muted text-sm">Loading…</p>;
+  if (!account) return <PageSkeleton rows={4} />;
 
   return (
     <div className="max-w-3xl space-y-6">
@@ -187,10 +187,10 @@ function AccountPage() {
               )}
             </div>
             {disableForm.open && (
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid sm:grid-cols-2 gap-3">
                 <Input type="password" placeholder="Password" value={disableForm.password} onChange={(e) => setDisableForm({ ...disableForm, password: e.target.value })} />
                 <Input placeholder="Code" value={disableForm.code} onChange={(e) => setDisableForm({ ...disableForm, code: e.target.value })} />
-                <Button variant="danger" loading={busy} onClick={disable} className="col-span-2">Turn off 2FA</Button>
+                <Button variant="danger" loading={busy} onClick={disable} className="sm:col-span-2">Turn off 2FA</Button>
               </div>
             )}
           </div>
@@ -222,15 +222,15 @@ function AccountPage() {
 
       <Card className="p-6">
         <h2 className="font-semibold text-text-primary mb-4">Password</h2>
-        <form onSubmit={changePassword} className="grid grid-cols-3 gap-3">
+        <form onSubmit={changePassword} className="grid sm:grid-cols-3 gap-3">
           <Input type="password" placeholder="Current password" autoComplete="current-password" value={pw.current} onChange={(e) => setPw({ ...pw, current: e.target.value })} required />
           <Input type="password" placeholder="New password (12+ characters)" autoComplete="new-password" value={pw.next} onChange={(e) => setPw({ ...pw, next: e.target.value })} required />
           <Input type="password" placeholder="Repeat new password" autoComplete="new-password" value={pw.confirm} onChange={(e) => setPw({ ...pw, confirm: e.target.value })} required />
-          <div className="col-span-3 flex items-center gap-3">
+          <div className="sm:col-span-3 flex items-center gap-3">
             <Button type="submit">Change password</Button>
             {pwMsg.ok && <span className="text-xs text-success">{pwMsg.ok}</span>}
           </div>
-          <div className="col-span-3"><ErrorText>{pwMsg.error}</ErrorText></div>
+          <div className="sm:col-span-3"><ErrorText>{pwMsg.error}</ErrorText></div>
         </form>
       </Card>
 
@@ -264,7 +264,7 @@ function AccountPage() {
 
 export default function Page() {
   return (
-    <Suspense fallback={<p className="text-text-muted text-sm">Loading…</p>}>
+    <Suspense fallback={<PageSkeleton rows={4} />}>
       <AccountPage />
     </Suspense>
   );
