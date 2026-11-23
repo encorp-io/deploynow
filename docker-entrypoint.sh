@@ -180,7 +180,7 @@ NGINX_PID=$!
 
 # ── Start Next.js (loopback only — not exposed outside the container) ─────────
 echo "[deployer] Starting Next.js (internal :3001)..."
-PORT=3001 HOSTNAME=127.0.0.1 node server.js &
+PORT=3001 HOSTNAME=127.0.0.1 node --max-http-header-size=131072 server.js &
 NEXT_PID=$!
 
 echo "[deployer] Encorp Deployer is running at https://0.0.0.0:9444"
