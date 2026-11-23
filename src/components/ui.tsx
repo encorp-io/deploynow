@@ -19,12 +19,12 @@ export function Button({
       {...props}
       disabled={props.disabled || loading}
       className={clsx(
-        "inline-flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 disabled:opacity-50 disabled:cursor-not-allowed",
-        variant === "primary" && "bg-accent hover:bg-accent-hover text-white",
-        variant === "secondary" && "bg-bg-card border border-border hover:border-border-bright text-text-primary",
-        variant === "danger" && "bg-danger/15 text-danger hover:bg-danger/25",
-        variant === "danger-solid" && "bg-danger hover:bg-danger/85 text-white",
-        variant === "ghost" && "text-text-secondary hover:text-text-primary hover:bg-bg-card",
+        "inline-flex items-center justify-center gap-2 px-3.5 py-2 rounded-[10px] text-sm font-medium whitespace-nowrap transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 focus-visible:ring-offset-2 focus-visible:ring-offset-bg-primary disabled:opacity-50 disabled:cursor-not-allowed",
+        variant === "primary" && "dn-btn-primary text-white",
+        variant === "secondary" && "bg-bg-card border border-border hover:border-border-bright hover:bg-bg-card-hover text-text-primary shadow-[0_1px_2px_rgba(0,0,0,0.08)]",
+        variant === "danger" && "bg-danger/10 text-danger border border-danger/20 hover:bg-danger/20",
+        variant === "danger-solid" && "bg-danger hover:brightness-110 text-white shadow-[0_6px_20px_-8px_var(--dn-danger)]",
+        variant === "ghost" && "text-text-secondary hover:text-text-primary hover:bg-bg-card-hover",
         className,
       )}
     >
@@ -35,7 +35,7 @@ export function Button({
 }
 
 export function Card({ className, children }: { className?: string; children: ReactNode }) {
-  return <div className={clsx("bg-bg-card border border-border rounded-xl", className)}>{children}</div>;
+  return <div className={clsx("dn-surface border border-border rounded-2xl", className)}>{children}</div>;
 }
 
 export interface Crumb { label: string; href?: string }
@@ -46,7 +46,7 @@ export interface Crumb { label: string; href?: string }
  */
 export function PageHeader({ title, subtitle, actions, crumbs }: { title: ReactNode; subtitle?: ReactNode; actions?: ReactNode; crumbs?: Crumb[] }) {
   return (
-    <div className="mb-6">
+    <div className="mb-8 animate-page-in">
       {crumbs && crumbs.length > 0 && (
         <nav aria-label="Breadcrumb" className="flex items-center flex-wrap gap-1 text-sm text-text-muted mb-2">
           {crumbs.map((c, i) => (
@@ -63,8 +63,8 @@ export function PageHeader({ title, subtitle, actions, crumbs }: { title: ReactN
       )}
       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 sm:gap-4">
         <div className="min-w-0">
-          <h1 className="text-2xl font-bold text-text-primary break-words">{title}</h1>
-          {subtitle && <div className="text-sm text-text-muted mt-1">{subtitle}</div>}
+          <h1 className="text-[26px] leading-tight font-semibold tracking-[-0.025em] text-text-primary break-words">{title}</h1>
+          {subtitle && <div className="text-sm text-text-secondary mt-1.5">{subtitle}</div>}
         </div>
         {actions && <div className="flex items-center flex-wrap gap-2 flex-shrink-0">{actions}</div>}
       </div>
@@ -90,7 +90,7 @@ export function IconButton({
 
 /** Grey placeholder block shown while data loads */
 export function Skeleton({ className }: { className?: string }) {
-  return <div className={clsx("animate-pulse rounded-lg bg-bg-card", className)} />;
+  return <div className={clsx("animate-pulse rounded-xl bg-bg-card-hover", className)} />;
 }
 
 /** A page-sized loading placeholder: header plus a few cards */
@@ -111,8 +111,12 @@ export function PageSkeleton({ rows = 3 }: { rows?: number }) {
 /** Empty list: icon, a line on what goes here, and the action that adds the first one */
 export function EmptyState({ icon: Icon, title, children, action }: { icon?: LucideIcon; title: string; children?: ReactNode; action?: ReactNode }) {
   return (
-    <Card className="px-6 py-12 text-center">
-      {Icon && <Icon className="w-10 h-10 text-text-muted mx-auto mb-3" />}
+    <Card className="px-6 py-14 text-center">
+      {Icon && (
+        <div className="w-14 h-14 rounded-2xl mx-auto mb-4 flex items-center justify-center bg-accent/10 border border-accent/20 shadow-[0_8px_32px_-8px_var(--dn-accent)]">
+          <Icon className="w-6 h-6 text-accent" />
+        </div>
+      )}
       <p className="text-text-primary font-medium mb-1">{title}</p>
       {children && <div className="text-sm text-text-muted max-w-md mx-auto">{children}</div>}
       {action && <div className="mt-5 flex justify-center gap-2 flex-wrap">{action}</div>}
@@ -126,7 +130,7 @@ export function TableWrap({ children, className }: { children: ReactNode; classN
 }
 
 const inputClass =
-  "w-full px-3 py-2 bg-bg-secondary border border-border rounded-lg text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent/30 transition-colors";
+  "w-full px-3 py-2 bg-bg-secondary border border-border rounded-[10px] text-sm text-text-primary placeholder:text-text-muted/80 shadow-[inset_0_1px_2px_rgba(0,0,0,0.06)] hover:border-border-bright focus:outline-none focus:border-accent focus:ring-[3px] focus:ring-accent/20 transition-[border-color,box-shadow]";
 
 export function Field({ label, hint, children }: { label: string; hint?: ReactNode; children: ReactNode }) {
   return (
@@ -150,12 +154,12 @@ export function Badge({ tone = "muted", children }: { tone?: "success" | "warnin
   return (
     <span
       className={clsx(
-        "inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-medium",
-        tone === "success" && "bg-success/15 text-success",
-        tone === "warning" && "bg-warning/15 text-warning",
-        tone === "danger" && "bg-danger/15 text-danger",
-        tone === "accent" && "bg-accent/15 text-accent",
-        tone === "muted" && "bg-bg-secondary text-text-secondary border border-border",
+        "inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border",
+        tone === "success" && "bg-success/10 text-success border-success/20",
+        tone === "warning" && "bg-warning/10 text-warning border-warning/20",
+        tone === "danger" && "bg-danger/10 text-danger border-danger/20",
+        tone === "accent" && "bg-accent/10 text-accent border-accent/20",
+        tone === "muted" && "bg-bg-secondary text-text-secondary border-border",
       )}
     >
       {children}
@@ -165,7 +169,7 @@ export function Badge({ tone = "muted", children }: { tone?: "success" | "warnin
 
 export function ErrorText({ children }: { children: ReactNode }) {
   if (!children) return null;
-  return <p className="text-xs text-danger bg-danger/10 rounded-lg px-3 py-2">{children}</p>;
+  return <p className="text-xs text-danger bg-danger/10 border border-danger/20 rounded-[10px] px-3 py-2">{children}</p>;
 }
 
 const modalStack: (() => void)[] = [];
@@ -194,25 +198,25 @@ export function Modal({ title, onClose, children, wide, footer }: { title: strin
     };
   }, []);
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 sm:p-4" onMouseDown={onClose}>
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-sm sm:p-4 animate-fade-in" onMouseDown={onClose}>
       <div
         role="dialog"
         aria-modal="true"
         aria-label={title}
         className={clsx(
-          "w-full bg-bg-secondary border border-border rounded-t-xl sm:rounded-xl max-h-[92vh] sm:max-h-[90vh] flex flex-col",
+          "w-full dn-surface border border-border-bright/70 rounded-t-2xl sm:rounded-2xl max-h-[92vh] sm:max-h-[90vh] flex flex-col shadow-[var(--dn-shadow-lg)] animate-dialog-in",
           wide ? "sm:max-w-2xl" : "sm:max-w-md",
         )}
         onMouseDown={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between gap-4 px-6 pt-5 pb-4">
-          <h2 className="text-lg font-semibold text-text-primary">{title}</h2>
-          <button type="button" onClick={onClose} aria-label="Close" className="text-text-muted hover:text-text-primary -mr-1">
+          <h2 className="text-lg font-semibold tracking-[-0.02em] text-text-primary">{title}</h2>
+          <button type="button" onClick={onClose} aria-label="Close" className="p-1 rounded-lg text-text-muted hover:text-text-primary hover:bg-bg-card-hover -mr-1.5">
             <X className="w-5 h-5" />
           </button>
         </div>
         <div className="px-6 pb-6 overflow-y-auto">{children}</div>
-        {footer && <div className="px-6 py-4 border-t border-border flex justify-end gap-2 flex-wrap">{footer}</div>}
+        {footer && <div className="px-6 py-4 border-t border-border bg-bg-secondary/40 rounded-b-2xl flex justify-end gap-2 flex-wrap">{footer}</div>}
       </div>
     </div>
   );
@@ -253,7 +257,7 @@ export function formatTime(date: string | null | undefined): string {
 
 export function Tabs<T extends string>({ tabs, value, onChange }: { tabs: readonly { value: T; label: string }[]; value: T; onChange: (v: T) => void }) {
   return (
-    <div role="tablist" className="flex gap-1 bg-bg-secondary border border-border rounded-lg p-1 w-fit max-w-full overflow-x-auto">
+    <div role="tablist" className="flex gap-1 bg-bg-secondary border border-border rounded-xl p-1 w-fit max-w-full overflow-x-auto">
       {tabs.map((t) => (
         <button
           key={t.value}
@@ -261,7 +265,7 @@ export function Tabs<T extends string>({ tabs, value, onChange }: { tabs: readon
           role="tab"
           aria-selected={value === t.value}
           onClick={() => onChange(t.value)}
-          className={clsx("px-3 py-1.5 rounded-md text-sm whitespace-nowrap", value === t.value ? "bg-bg-card text-text-primary" : "text-text-muted hover:text-text-secondary")}
+          className={clsx("px-3 py-1.5 rounded-lg text-sm font-medium whitespace-nowrap transition-colors", value === t.value ? "bg-bg-card text-text-primary shadow-[0_1px_3px_rgba(0,0,0,0.15)] ring-1 ring-border" : "text-text-muted hover:text-text-secondary")}
         >
           {t.label}
         </button>

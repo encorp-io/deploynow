@@ -2,10 +2,11 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Container, GitBranch, Server, Rocket, CheckCircle, HardDrive } from "lucide-react";
+import { GitBranch, Server, Rocket, CheckCircle, HardDrive } from "lucide-react";
 import { clsx } from "clsx";
 import EndpointForm from "@/components/EndpointForm";
-import { Button, Card, ErrorText, Field, Input } from "@/components/ui";
+import { Button, ErrorText, Field, Input } from "@/components/ui";
+import AuthShell from "@/components/AuthShell";
 
 const STEPS = [
   { id: "endpoint", label: "First machine", icon: Server },
@@ -76,29 +77,28 @@ export default function OnboardingPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-4 py-10">
-      <div className="w-full max-w-2xl">
-        <div className="text-center mb-8">
-          <div className="w-14 h-14 rounded-2xl bg-accent/20 flex items-center justify-center mx-auto mb-3">
-            <Container className="w-7 h-7 text-accent" />
-          </div>
-          <h1 className="text-2xl font-bold text-text-primary">Set up DeployNow</h1>
-          <p className="text-sm text-text-muted mt-1">Connect a Docker machine and, optionally, GitHub Container Registry.</p>
-        </div>
-
-        <div className="flex justify-center gap-6 mb-6">
+    <AuthShell wide title="Set up DeployNow" subtitle="Connect a Docker machine and, optionally, GitHub Container Registry.">
+        <ol className="flex items-center justify-center gap-2 mb-7">
           {STEPS.map((s, i) => {
             const Icon = s.icon;
             return (
-              <div key={s.id} className={clsx("flex items-center gap-2 text-sm", i === step ? "text-accent" : i < step ? "text-success" : "text-text-muted")}>
-                {i < step ? <CheckCircle className="w-4 h-4" /> : <Icon className="w-4 h-4" />}
-                {s.label}
-              </div>
+              <li key={s.id} className="flex items-center gap-2">
+                {i > 0 && <span className={clsx("w-8 h-px", i <= step ? "bg-accent/60" : "bg-border")} />}
+                <span
+                  className={clsx(
+                    "flex items-center gap-2 text-sm px-3 py-1.5 rounded-full border",
+                    i === step ? "text-text-primary border-accent/40 bg-accent/10" : i < step ? "text-success border-success/25 bg-success/10" : "text-text-muted border-border",
+                  )}
+                >
+                  {i < step ? <CheckCircle className="w-4 h-4" /> : <Icon className={clsx("w-4 h-4", i === step && "text-accent")} />}
+                  {s.label}
+                </span>
+              </li>
             );
           })}
-        </div>
+        </ol>
 
-        <Card className="p-6">
+        <div>
           {step === 0 && (
             <div className="space-y-4">
               {status?.hadPortainer && (
@@ -155,14 +155,15 @@ export default function OnboardingPage() {
 
           {step === 2 && (
             <div className="text-center space-y-4 py-4">
-              <Rocket className="w-10 h-10 text-accent mx-auto" />
+              <div className="w-16 h-16 rounded-2xl dn-gradient mx-auto flex items-center justify-center shadow-[0_12px_40px_-10px_var(--dn-accent)]">
+                <Rocket className="w-7 h-7 text-white" />
+              </div>
               <p className="text-text-primary font-medium">You&apos;re set up</p>
               <p className="text-sm text-text-muted">Containers are picked up within a minute. Turn on 2FA under Account if you haven&apos;t yet.</p>
               <Button onClick={() => router.push("/projects")}>Go to your projects</Button>
             </div>
           )}
-        </Card>
-      </div>
-    </div>
+        </div>
+    </AuthShell>
   );
 }

@@ -7,7 +7,7 @@ import { Badge, Button, ErrorText, Field, Input, TextArea } from "./ui";
 import { selectClass } from "./apps";
 
 const MASK = "••••••••";
-const section = "bg-bg-card border border-border rounded-xl p-6";
+const section = "dn-surface border border-border rounded-2xl p-6";
 
 interface VaultForm { addr: string; namespace: string; auth: "token" | "approle"; token: string; roleId: string; secretId: string; caCert: string }
 

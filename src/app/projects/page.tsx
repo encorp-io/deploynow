@@ -78,14 +78,22 @@ export default function ProjectsPage() {
           {projects.map((p) => {
             const apps = p.environments.flatMap((e) => e.apps.map((a) => ({ ...a, env: e.name })));
             return (
-              <Link key={p.id} href={`/projects/${p.id}`}>
-                <Card className="p-5 hover:border-border-bright transition-colors h-full">
-                  <div className="flex items-center justify-between mb-1">
-                    <h2 className="font-semibold text-text-primary truncate">{p.name}</h2>
-                    <span className="text-xs text-text-muted flex-shrink-0 ml-3">{apps.length} {apps.length === 1 ? "app" : "apps"} · {p.environments.map((e) => e.name).join(", ")}</span>
+              <Link key={p.id} href={`/projects/${p.id}`} className="group rounded-2xl">
+                <Card className="p-5 h-full transition-all duration-200 group-hover:border-border-bright group-hover:-translate-y-0.5 group-hover:shadow-[0_16px_40px_-20px_var(--dn-accent)]">
+                  <div className="flex items-start gap-3.5 mb-3">
+                    <span aria-hidden className="w-10 h-10 rounded-xl dn-gradient flex items-center justify-center text-white font-semibold text-sm flex-shrink-0 shadow-[inset_0_1px_0_rgba(255,255,255,0.3),0_6px_16px_-6px_var(--dn-accent)]">
+                      {p.name.split(/\s+/).map((w) => w[0]).join("").slice(0, 2).toUpperCase()}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center justify-between gap-3">
+                        <h2 className="font-semibold tracking-[-0.01em] text-text-primary truncate group-hover:text-accent transition-colors">{p.name}</h2>
+                        <span className="text-xs text-text-muted flex-shrink-0">{apps.length} {apps.length === 1 ? "app" : "apps"}</span>
+                      </div>
+                      <p className="text-sm text-text-muted truncate">{p.description || p.environments.map((e) => e.name).join(" · ")}</p>
+                    </div>
                   </div>
-                  {p.description && <p className="text-sm text-text-muted mb-3">{p.description}</p>}
-                  <div className="flex flex-wrap gap-1.5 mt-3">
+                  <div className="dn-hairline -mx-5 mb-3 opacity-60" />
+                  <div className="flex flex-wrap gap-1.5">
                     {apps.length === 0 && <span className="text-xs text-text-muted">No apps yet. Open the project to add one.</span>}
                     {apps.slice(0, 8).map((a) => (
                       <Badge key={a.id} tone={appStatusTone(a.status)}>{a.name}{p.environments.length > 1 ? ` · ${a.env}` : ""}</Badge>

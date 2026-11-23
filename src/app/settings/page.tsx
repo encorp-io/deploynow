@@ -42,7 +42,7 @@ const SECTIONS = [
 ] as const;
 type SectionId = (typeof SECTIONS)[number]["id"];
 
-const cardClass = "bg-bg-card border border-border rounded-xl p-6";
+const cardClass = "dn-surface border border-border rounded-2xl p-6";
 
 /** Card with a title, a description and its own Save button that lights up once something changed */
 function FormCard({

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Bot, ShieldAlert } from "lucide-react";
 import { Button, ErrorText } from "@/components/ui";
+import AuthShell from "@/components/AuthShell";
 
 interface Option {
   role: string;
@@ -30,21 +31,15 @@ export default function ConsentForm(props: { query: string; clientName: string; 
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-4 py-10">
-      <div className="w-full max-w-md bg-bg-card border border-border rounded-xl p-6 space-y-5">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-lg bg-accent/20 flex items-center justify-center">
-            <Bot className="w-5 h-5 text-accent" />
-          </div>
-          <div className="min-w-0">
-            <h1 className="text-lg font-semibold text-text-primary break-words">Connect {props.clientName} to DeployNow?</h1>
-            <p className="text-xs text-text-muted">
-              {props.server} · signed in as {props.email}
-            </p>
+    <AuthShell title={<span className="break-words">Connect {props.clientName} to DeployNow?</span>} subtitle={`${props.server} · signed in as ${props.email}`}>
+      <div className="space-y-5">
+        <div className="flex justify-center -mt-2">
+          <div className="w-12 h-12 rounded-2xl bg-accent/10 border border-accent/20 flex items-center justify-center shadow-[0_8px_32px_-8px_var(--dn-accent)]">
+            <Bot className="w-6 h-6 text-accent" />
           </div>
         </div>
 
-        <div className="flex gap-2 text-xs text-text-secondary bg-warning/10 border border-warning/30 rounded-lg p-3">
+        <div className="flex gap-2 text-xs text-text-secondary bg-warning/10 border border-warning/25 rounded-xl p-3">
           <ShieldAlert className="w-4 h-4 text-warning shrink-0 mt-0.5" />
           <p>
             The app named itself, so DeployNow can&apos;t vouch for the name. Only continue if you just added DeployNow as a connector in an app you trust. It will act as you and return to{" "}
@@ -55,7 +50,7 @@ export default function ConsentForm(props: { query: string; clientName: string; 
         <fieldset className="space-y-2">
           <legend className="text-xs font-medium text-text-secondary mb-2">What may it do?</legend>
           {props.options.map((o) => (
-            <label key={o.role} className={`flex gap-3 p-3 rounded-lg border cursor-pointer ${role === o.role ? "border-accent bg-accent/5" : "border-border hover:border-border-bright"}`}>
+            <label key={o.role} className={`flex gap-3 p-3 rounded-xl border cursor-pointer transition-colors ${role === o.role ? "border-accent/60 bg-accent/10 ring-1 ring-inset ring-accent/20" : "border-border bg-bg-secondary/50 hover:border-border-bright"}`}>
               <input type="radio" name="role" value={o.role} checked={role === o.role} onChange={() => setRole(o.role)} className="mt-1 accent-[var(--color-accent)]" />
               <span>
                 <span className="block text-sm font-medium text-text-primary">{o.label}</span>
@@ -70,7 +65,7 @@ export default function ConsentForm(props: { query: string; clientName: string; 
 
         {error && <ErrorText>{error}</ErrorText>}
 
-        <div className="flex gap-2 justify-end">
+        <div className="flex gap-2 justify-end pt-1">
           <Button variant="secondary" onClick={() => answer("deny")} loading={busy === "deny"} disabled={!!busy}>
             Cancel
           </Button>
@@ -79,6 +74,6 @@ export default function ConsentForm(props: { query: string; clientName: string; 
           </Button>
         </div>
       </div>
-    </div>
+    </AuthShell>
   );
 }

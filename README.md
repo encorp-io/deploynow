@@ -1,8 +1,8 @@
 <div align="center">
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="site/assets/deploynow-logo-dark.svg">
-  <img src="site/assets/deploynow-logo-light.svg" alt="DeployNow by encorp.ai" height="64">
+  <source media="(prefers-color-scheme: dark)" srcset="brand/deploynow-logo-dark.svg">
+  <img alt="DeployNow by encorp.ai" src="brand/deploynow-logo-light.svg" height="72">
 </picture>
 
 **Ship to every Docker machine you own.**<br>
@@ -12,14 +12,33 @@ Self-hosted control plane for your Docker machines: deploy apps, manage containe
 
 [![CI](https://github.com/encorp-io/deploynow/actions/workflows/ci.yml/badge.svg)](https://github.com/encorp-io/deploynow/actions/workflows/ci.yml)
 [![Docker](https://github.com/encorp-io/deploynow/actions/workflows/docker-publish.yml/badge.svg)](https://github.com/encorp-io/deploynow/actions/workflows/docker-publish.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-1D9CFF.svg)](LICENSE)
+[![by encorp.ai](https://img.shields.io/badge/by-encorp.ai-1D9CFF.svg)](https://encorp.ai)
 
-<img src="site/assets/og.png" alt="DeployNow landing page" width="820">
+<br>
+
+<img alt="DeployNow projects view in dark mode" src="docs/screenshots/projects-dark.png" width="900">
 
 </div>
 
 **DeployNow by [encorp.ai](https://encorp.ai)** replaces Portainer and Dokploy with one app. It talks to Docker directly on the machine it runs on and on remote machines, deploys your apps from images or Git, puts them behind Traefik with SSL, and backs up their data with encrypted restic snapshots. It runs as a single container with an embedded SQLite database.
 
 > DeployNow is v2 of Encorp Deployer, the Portainer update helper. Coming from v1? See [Upgrading from v1](docs/v2.md#upgrading-from-v1).
+
+## A look inside
+
+DeployNow ships with a dark theme by default and a matching light theme. Switch between light, dark and your system setting from the bottom of the sidebar.
+
+<table>
+  <tr>
+    <td width="50%"><img alt="Sign in" src="docs/screenshots/sign-in-dark.png"></td>
+    <td width="50%"><img alt="A project with production and staging" src="docs/screenshots/project-dark.png"></td>
+  </tr>
+  <tr>
+    <td width="50%"><img alt="Projects in light mode" src="docs/screenshots/projects-light.png"></td>
+    <td width="50%"><img alt="Projects in dark mode" src="docs/screenshots/projects-dark.png"></td>
+  </tr>
+</table>
 
 ## Features
 
@@ -149,7 +168,7 @@ The product website lives in [`site/`](site/): static HTML and CSS with no build
 
 | Part | Technology |
 |---|---|
-| App | Next.js 16, React 19, Tailwind CSS v4 |
+| App | Next.js 16, React 19, Tailwind CSS v4, Geist type |
 | Auth | NextAuth v5 with server-side sessions, TOTP, WebAuthn passkeys, OIDC |
 | Data | SQLite through Prisma |
 | Docker | dockerode, plus the Docker CLI with compose and buildx for builds |
@@ -166,6 +185,7 @@ cli/            deploynow CLI
 tests/          unit, API and real-Docker integration tests
 site/           landing page (Cloudflare Pages)
 docs/           user documentation
+brand/          logo, icons, colours and type (see brand/README.md)
 ```
 
 ## Development
@@ -181,12 +201,23 @@ npm test                    # unit and API tests; integration tests run when Doc
 
 CI runs the type check, tests with coverage (including real-Docker integration tests), the Go agent tests and a production build on every push. Pushing a `v*.*.*` tag publishes the app and agent images and creates a GitHub release.
 
+## Brand
+
+The DeployNow logo, the encorp.ai logo, icons, colours and type are in [`brand/`](brand/README.md). The app's colour tokens live in `src/app/globals.css`, so the whole UI follows one palette in both themes.
+
 ## License
 
 MIT, see [LICENSE](LICENSE).
 
 <div align="center">
+<br>
+<a href="https://encorp.ai">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="brand/encorp-logo-white.svg">
+    <img alt="encorp.ai" src="brand/encorp-logo.svg" height="28">
+  </picture>
+</a>
 
-Built by [Encorp](https://encorp.io)
+DeployNow is built by [encorp.ai](https://encorp.ai)
 
 </div>

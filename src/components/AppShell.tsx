@@ -4,7 +4,8 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState, ty
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { signOut } from "next-auth/react";
-import { Container, Menu, X } from "lucide-react";
+import { Menu, X } from "lucide-react";
+import { BrandLockup } from "./Brand";
 import Sidebar, { type Me } from "./Sidebar";
 import { FeedbackProvider } from "./feedback";
 import { Button, ErrorText, Input, Modal } from "./ui";
@@ -119,32 +120,32 @@ export default function AppShell({ children }: { children: ReactNode }) {
         </a>
 
         {/* Desktop: fixed sidebar */}
-        <aside className="hidden lg:block fixed inset-y-0 left-0 w-60 z-30">
+        <aside className="hidden lg:block fixed inset-y-0 left-0 w-64 z-30">
           <Sidebar me={me} onSignOut={handleSignOut} />
         </aside>
 
         {/* Phones and tablets: top bar and a slide-out menu */}
-        <header className="lg:hidden sticky top-0 z-30 flex items-center gap-3 h-14 px-4 bg-bg-secondary/95 backdrop-blur border-b border-border">
+        <header className="lg:hidden sticky top-0 z-30 flex items-center gap-3 h-14 px-4 dn-glass border-b border-border">
           <button onClick={() => setMenuOpen(true)} aria-label="Open menu" aria-expanded={menuOpen} className="p-1.5 -ml-1.5 rounded-lg text-text-secondary hover:text-text-primary hover:bg-bg-card">
             <Menu className="w-5 h-5" />
           </button>
-          <Link href="/projects" className="flex items-center gap-2 font-bold text-text-primary">
-            <Container className="w-5 h-5 text-accent" /> DeployNow
+          <Link href="/projects" aria-label="DeployNow, home" className="flex items-center">
+            <BrandLockup size="sm" />
           </Link>
         </header>
         {menuOpen && (
           <div className="lg:hidden fixed inset-0 z-40" role="dialog" aria-modal="true" aria-label="Menu">
-            <div className="absolute inset-0 bg-black/60" onClick={() => setMenuOpen(false)} />
+            <div className="absolute inset-0 bg-black/50 backdrop-blur-sm animate-fade-in" onClick={() => setMenuOpen(false)} />
             <div className="absolute inset-y-0 left-0 w-72 max-w-[85vw] animate-drawer-in shadow-2xl">
               <Sidebar me={me} onSignOut={handleSignOut} onNavigate={() => setMenuOpen(false)} />
-              <button onClick={() => setMenuOpen(false)} aria-label="Close menu" className="absolute top-4 -right-11 p-1.5 rounded-lg bg-bg-secondary text-text-secondary">
+              <button onClick={() => setMenuOpen(false)} aria-label="Close menu" className="absolute top-4 -right-11 p-1.5 rounded-lg bg-bg-secondary border border-border text-text-secondary">
                 <X className="w-5 h-5" />
               </button>
             </div>
           </div>
         )}
 
-        <main id="main" className="lg:ml-60 px-4 py-6 sm:px-6 lg:px-8 lg:py-8 min-w-0">{children}</main>
+        <main id="main" className="lg:ml-64 px-4 py-6 sm:px-6 lg:px-10 lg:py-10 min-w-0">{children}</main>
       </div>
       {prompt && (
         <Modal title="Confirm it's you" onClose={cancel}>

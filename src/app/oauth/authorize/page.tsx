@@ -9,18 +9,15 @@ import { issuerUrl, maxConnectionRole, mcpEnabled, mcpResourceUrl, SCOPES } from
 import { checkAuthorizeRequest } from "@/lib/oauth/server";
 import { roleAtLeast } from "@/lib/rbac";
 import ConsentForm from "./ConsentForm";
+import AuthShell from "@/components/AuthShell";
 
 export const dynamic = "force-dynamic";
 
 function Problem({ text }: { text: string }) {
   return (
-    <div className="min-h-screen flex items-center justify-center px-4">
-      <div className="w-full max-w-md bg-bg-card border border-border rounded-xl p-6 space-y-2">
-        <h1 className="text-lg font-semibold text-text-primary">Can&apos;t connect this app</h1>
-        <p className="text-sm text-text-secondary">{text}</p>
-        <a href="/" className="text-sm text-accent">Back to DeployNow</a>
-      </div>
-    </div>
+    <AuthShell title="Can't connect this app" subtitle={text}>
+      <a href="/" className="block text-center text-sm text-accent hover:text-accent-hover">Back to DeployNow</a>
+    </AuthShell>
   );
 }
 

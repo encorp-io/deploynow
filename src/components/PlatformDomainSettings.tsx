@@ -98,7 +98,7 @@ export function PlatformDomainSettings() {
   const changed = input.trim().toLowerCase() !== data.domain;
 
   return (
-    <section className="bg-bg-card border border-border rounded-xl p-6">
+    <section className="dn-surface border border-border rounded-2xl p-6">
       <h2 className="text-sm font-semibold text-text-primary mb-1 flex items-center gap-2">
         <Globe className="w-4 h-4" /> Platform domain
       </h2>

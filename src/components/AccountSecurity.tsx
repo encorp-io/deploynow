@@ -266,7 +266,7 @@ export function ConnectedAppsCard() {
         </div>
       </div>
       {data.enabled ? (
-        <div className="flex gap-2 items-center bg-bg-secondary border border-border rounded-lg px-3 py-2">
+        <div className="flex gap-2 items-center bg-bg-secondary border border-border rounded-xl pl-3.5 pr-1.5 py-1.5">
           <code className="flex-1 font-mono text-xs break-all text-text-primary">{data.mcpUrl}</code>
           <Button variant="secondary" onClick={() => navigator.clipboard?.writeText(data.mcpUrl)}><Copy className="w-4 h-4" /> Copy</Button>
         </div>

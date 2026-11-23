@@ -23,8 +23,8 @@ interface Series { key: string; service: string; container: string; endpointId: 
 interface History { range: Range; from: string | null; to: string; bucketSeconds: number; series: Series[] }
 
 // Two series colours checked for colour-blind separation on the dark card surface
-const C1 = "#3b82f6";
-const C2 = "#ec4899";
+const C1 = "var(--color-accent)";
+const C2 = "#a78bfa";
 
 /** "web", or "web #2" for a second compose replica */
 const seriesLabel = (key: string, service: string, container: string) => {
