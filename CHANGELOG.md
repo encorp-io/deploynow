@@ -9,6 +9,9 @@ versions fix bugs. Every version upgrades the database by itself.
 ## [Unreleased]
 
 ### Added
+- **Forms and dialogs:** redesigned dropdowns (themed menu with keyboard support and a
+  filter for long lists), text fields, checkboxes, radios and toggle switches, and
+  dialogs (lit edge, icon header, focus kept inside, bottom sheet on phones).
 - **Templates:** 22 one-click apps (databases, n8n, WordPress, Ghost, Directus,
   Plausible, Umami, Metabase, Grafana, Uptime Kuma, Gitea, Adminer, pgAdmin, Mailpit,
   RabbitMQ, Meilisearch, NocoDB, Vaultwarden, Nextcloud). Passwords and keys are
