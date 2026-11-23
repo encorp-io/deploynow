@@ -5,7 +5,7 @@
 import { prisma } from "../prisma";
 import { getRemoteDigests } from "../ghcr";
 import { parseImageRef } from "../imageRef";
-import { appPullContext, registryAuthFor } from "../registryAuth";
+import { appPullContext, normalizeRegistryHost, registryAuthFor } from "../registryAuth";
 import { DeployBusyError, enqueueDeploy } from "../jobs";
 
 export async function checkAppImageUpdates(): Promise<number> {
@@ -23,7 +23,8 @@ export async function checkAppImageUpdates(): Promise<number> {
       if (!current?.imageDigest) continue;
       const ref = parseImageRef(app.image);
       // Same login the deploy pulls with, so private images and personal or project logins work
-      const auth = ref.registry === "ghcr.io" || ref.registry === "docker.io" ? await registryAuthFor(app.image, appPullContext(app)) : undefined;
+      const host = normalizeRegistryHost(ref.registry); // index.docker.io and registry-1.docker.io are Docker Hub too
+      const auth = host === "ghcr.io" || host === "docker.io" ? await registryAuthFor(app.image, appPullContext(app)) : undefined;
       const remote = await getRemoteDigests(ref.registry, ref.repository, ref.tag, undefined, auth);
       if (!remote) continue;
       if (current.imageDigest === remote.manifest || current.imageDigest === remote.config) continue;
