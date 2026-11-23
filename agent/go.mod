@@ -1,4 +1,4 @@
-module github.com/encorp-io/deployer-for-portainer/agent
+module github.com/encorp-io/deploynow/agent
 
 go 1.24
 
