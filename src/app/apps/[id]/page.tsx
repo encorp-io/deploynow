@@ -2,11 +2,12 @@
 
 import { use, useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { clsx } from "clsx";
-import { ArrowLeft, Copy, ExternalLink, Globe, Lock, Plus, Rocket, RotateCcw, Square, Trash2, Webhook } from "lucide-react";
+import { Copy, ExternalLink, Globe, Info, Lock, Plus, Rocket, RotateCcw, Square, Trash2, Webhook } from "lucide-react";
 import { useApi } from "@/components/AppShell";
-import { Badge, Button, Card, ErrorText, Field, Input, Modal, PageHeader, stateTone, timeAgo } from "@/components/ui";
+import { Badge, Button, Card, ErrorText, Field, IconButton, Input, Modal, PageHeader, PageSkeleton, stateTone, timeAgo } from "@/components/ui";
+import { useConfirm, useToast } from "@/components/feedback";
 import { AppBuildSettings } from "@/components/AppBuildSettings";
 import { AppForm, appStatusTone, emptyApp, EnvEditor, SOURCE_LABELS, type AppFormValue, type EnvRow } from "@/components/apps";
 
@@ -47,6 +48,7 @@ interface AppView extends Omit<AppFormValue, "endpointId"> {
 }
 
 type Tab = "overview" | "deployments" | "environment" | "domains" | "settings";
+const TABS: Tab[] = ["overview", "deployments", "environment", "domains", "settings"];
 
 function duration(d: Deployment) {
   if (!d.startedAt) return "";
@@ -55,8 +57,10 @@ function duration(d: Deployment) {
   return s < 60 ? `${s}s` : `${Math.floor(s / 60)}m ${s % 60}s`;
 }
 
-function DeploymentLog({ appId, dep, canDeploy, onAction }: { appId: string; dep: Deployment; canDeploy: boolean; onAction: () => void }) {
+function DeploymentLog({ appId, dep, canDeploy, isLive, onAction }: { appId: string; dep: Deployment; canDeploy: boolean; isLive: boolean; onAction: () => void }) {
   const api = useApi();
+  const confirm = useConfirm();
+  const toast = useToast();
   const [text, setText] = useState("");
   const [info, setInfo] = useState<Deployment>(dep);
   const offset = useRef(0);
@@ -91,26 +95,30 @@ function DeploymentLog({ appId, dep, canDeploy, onAction }: { appId: string; dep
   }, [text]);
 
   const act = async (action: string) => {
-    await api(`/api/apps/${appId}/deployments/${dep.id}`, { method: "POST", body: { action } });
+    if (action === "rollback" && !(await confirm({ title: "Roll back to this deployment?", message: "DeployNow redeploys this version. The current one stops once the rollback is healthy.", confirmLabel: "Roll back", danger: false }))) return;
+    const res = await api(`/api/apps/${appId}/deployments/${dep.id}`, { method: "POST", body: { action } });
+    if (!res.ok) toast.error(res.data.error ?? "That didn't work");
+    else toast.success(action === "rollback" ? "Rollback started" : "Deployment cancelled");
     onAction();
   };
 
   return (
     <div>
-      <div className="flex items-center gap-2 mb-2">
+      <div className="flex flex-wrap items-center gap-2 mb-2">
         <Badge tone={appStatusTone(info.status)}>{info.status}</Badge>
+        {isLive && <Badge tone="success">live</Badge>}
         <span className="text-xs text-text-muted">{info.trigger} · {duration(info)}</span>
-        {info.error && <span className="text-xs text-danger truncate">{info.error}</span>}
+        {info.error && <span className="text-xs text-danger break-words min-w-0">{info.error}</span>}
         <div className="ml-auto flex gap-2">
           {canDeploy && (info.status === "queued" || info.status === "running") && (
             <Button variant="danger" onClick={() => act("cancel")}><Square className="w-4 h-4" /> Cancel</Button>
           )}
-          {canDeploy && info.status === "success" && (
+          {canDeploy && info.status === "success" && !isLive && (
             <Button variant="secondary" onClick={() => act("rollback")}><RotateCcw className="w-4 h-4" /> Roll back to this</Button>
           )}
         </div>
       </div>
-      <pre ref={box} className="bg-black/40 border border-border rounded-lg p-3 text-xs font-mono text-text-secondary h-96 overflow-auto whitespace-pre-wrap break-all">
+      <pre ref={box} className="bg-black/40 border border-border rounded-lg p-3 text-xs font-mono text-text-secondary h-[28rem] max-h-[60vh] overflow-auto whitespace-pre-wrap break-all">
         {text || (info.status === "queued" ? "Waiting for the worker…" : "No log output")}
       </pre>
     </div>
@@ -121,10 +129,16 @@ export default function AppPage({ params }: { params: Promise<{ id: string }> })
   const { id } = use(params);
   const api = useApi();
   const router = useRouter();
+  const search = useSearchParams();
+  const confirm = useConfirm();
+  const toast = useToast();
   const [app, setApp] = useState<AppView | null>(null);
-  const [tab, setTab] = useState<Tab>("overview");
+  const tabParam = search.get("tab") as Tab | null;
+  const tab: Tab = tabParam && TABS.includes(tabParam) ? tabParam : "overview";
+  const setTab = useCallback((t: Tab) => router.replace(t === "overview" ? `/apps/${id}` : `/apps/${id}?tab=${t}`, { scroll: false }), [router, id]);
   const [error, setError] = useState("");
-  const [notice, setNotice] = useState("");
+  // Saved changes that only take effect on the next deploy
+  const [pending, setPending] = useState("");
   const [busy, setBusy] = useState("");
   const [selected, setSelected] = useState<Deployment | null>(null);
   const [env, setEnv] = useState<EnvRow[]>([]);
@@ -150,6 +164,11 @@ export default function AppPage({ params }: { params: Promise<{ id: string }> })
     });
   }, [load]);
 
+  // Opening the Deployments tab shows the newest deployment's log
+  useEffect(() => {
+    if (tab === "deployments" && !selected && app?.deployments[0]) setSelected(app.deployments[0]);
+  }, [tab, selected, app]);
+
   // Keep the header fresh while something is deploying
   useEffect(() => {
     if (!app || !app.deployments.some((d) => d.status === "queued" || d.status === "running")) return;
@@ -162,7 +181,8 @@ export default function AppPage({ params }: { params: Promise<{ id: string }> })
     setError("");
     const res = await api<Deployment>(`/api/apps/${id}/deploy`, { method: "POST", body: {} });
     setBusy("");
-    if (!res.ok) return setError(res.data.error ?? "Could not start the deployment");
+    if (!res.ok) return toast.error(res.data.error ?? "Could not start the deployment");
+    setPending("");
     setSelected(res.data as Deployment);
     setTab("deployments");
     load();
@@ -171,11 +191,11 @@ export default function AppPage({ params }: { params: Promise<{ id: string }> })
   const save = async (body: Record<string, unknown>, what: string) => {
     setBusy("save");
     setError("");
-    setNotice("");
     const res = await api(`/api/apps/${id}`, { method: "PATCH", body });
     setBusy("");
-    if (!res.ok) return setError(res.data.error ?? "Could not save");
-    setNotice(`${what} saved. Deploy to apply.`);
+    if (!res.ok) return toast.error(res.data.error ?? "Could not save");
+    toast.success(`${what} saved`);
+    setPending(`${what} changed.`);
     const a = await load();
     if (a) {
       setEnv(a.env);
@@ -186,7 +206,7 @@ export default function AppPage({ params }: { params: Promise<{ id: string }> })
   const reveal = async (key: string) => {
     const res = await api<{ key: string; value: string }>(`/api/apps/${id}/env`, { method: "POST", body: { key } });
     if (res.ok) setRevealed(res.data as { key: string; value: string });
-    else setError(res.data.error ?? "Could not reveal");
+    else toast.error(res.data.error ?? "Could not reveal");
   };
 
   const addDomain = async () => {
@@ -205,33 +225,38 @@ export default function AppPage({ params }: { params: Promise<{ id: string }> })
       },
     });
     setBusy("");
-    if (!res.ok) return setError(res.data.error ?? "Could not add the domain");
+    if (!res.ok) return toast.error(res.data.error ?? "Could not add the domain");
     setDomain({ ...domain, host: "", path: "/", https: true, redirectTo: "", basicAuthPassword: "" });
-    setNotice("Domain added. Deploy to apply.");
+    toast.success(`Added ${domain.host}`);
+    setPending("Domains changed.");
     load();
   };
 
-  const removeDomain = async (domainId: string) => {
-    await api(`/api/apps/${id}/domains?domainId=${domainId}`, { method: "DELETE" });
-    setNotice("Domain removed. Deploy to apply.");
+  const removeDomain = async (d: DomainRow) => {
+    if (!(await confirm({ title: `Remove ${d.host}${d.path !== "/" ? d.path : ""}?`, message: "It stops routing to this app after the next deploy.", confirmLabel: "Remove" }))) return;
+    const res = await api(`/api/apps/${id}/domains?domainId=${d.id}`, { method: "DELETE" });
+    if (!res.ok) return toast.error(res.data.error ?? "Could not remove the domain");
+    toast.success(`Removed ${d.host}`);
+    setPending("Domains changed.");
     load();
   };
 
   const showWebhook = async (rotate: boolean) => {
     const res = await api<{ url: string; secret: string }>(`/api/apps/${id}/webhook`, { method: rotate ? "POST" : "GET" });
     if (res.ok) setWebhook(res.data as { url: string; secret: string });
-    else setError(res.data.error ?? "Could not load the webhook");
+    else toast.error(res.data.error ?? "Could not load the webhook");
   };
 
   const remove = async (keepContainers: boolean) => {
     setBusy("delete");
     const res = await api(`/api/apps/${id}`, { method: "DELETE", body: { keepContainers } });
     setBusy("");
-    if (!res.ok) return setError(res.data.error ?? "Could not delete");
+    if (!res.ok) return toast.error(res.data.error ?? "Could not delete");
+    toast.success(`Deleted ${app?.name}`);
     router.push(`/projects/${app?.project.id}`);
   };
 
-  if (!app || !settings) return <div className="max-w-6xl">{error ? <ErrorText>{error}</ErrorText> : <p className="text-sm text-text-muted">Loading…</p>}</div>;
+  if (!app || !settings) return error ? <div className="max-w-6xl"><ErrorText>{error}</ErrorText></div> : <PageSkeleton />;
 
   const current = app.deployments.find((d) => d.id === app.currentDeploymentId);
   const active = app.deployments.find((d) => d.status === "queued" || d.status === "running");
@@ -239,13 +264,11 @@ export default function AppPage({ params }: { params: Promise<{ id: string }> })
 
   return (
     <div className="max-w-6xl">
-      <Link href={`/projects/${app.project.id}`} className="inline-flex items-center gap-1 text-sm text-text-muted hover:text-text-primary mb-3">
-        <ArrowLeft className="w-4 h-4" /> {app.project.name} / {app.environment.name}
-      </Link>
       <PageHeader
+        crumbs={[{ label: "Projects", href: "/projects" }, { label: app.project.name, href: `/projects/${app.project.id}` }, { label: app.environment.name }]}
         title={app.name}
         subtitle={
-          <span className="flex items-center gap-2">
+          <span className="flex items-center flex-wrap gap-2">
             <Badge tone={appStatusTone(app.status)}>{app.status}</Badge>
             <span>{SOURCE_LABELS[app.sourceType]} on {app.endpoint.name}</span>
           </span>
@@ -253,17 +276,32 @@ export default function AppPage({ params }: { params: Promise<{ id: string }> })
         actions={app.can.deploy && <Button onClick={deploy} loading={busy === "deploy"} disabled={!!active}><Rocket className="w-4 h-4" /> {active ? "Deploying…" : "Deploy"}</Button>}
       />
 
-      <div className="flex gap-1 border-b border-border mb-4">
-        {(["overview", "deployments", "environment", "domains", "settings"] as Tab[]).map((t) => (
-          <button key={t} onClick={() => setTab(t)} className={clsx("px-3 py-2 text-sm capitalize border-b-2 -mb-px", tab === t ? "border-accent text-text-primary" : "border-transparent text-text-muted hover:text-text-primary")}>
+      <div role="tablist" className="flex gap-1 border-b border-border mb-4 overflow-x-auto">
+        {TABS.map((t) => (
+          <button
+            key={t}
+            role="tab"
+            aria-selected={tab === t}
+            onClick={() => setTab(t)}
+            className={clsx("px-3 py-2 text-sm capitalize border-b-2 -mb-px whitespace-nowrap", tab === t ? "border-accent text-text-primary" : "border-transparent text-text-muted hover:text-text-primary")}
+          >
             {t}
+            {t === "domains" && app.domains.length > 0 && <span className="ml-1.5 text-xs text-text-muted">{app.domains.length}</span>}
+            {t === "environment" && app.env.length > 0 && <span className="ml-1.5 text-xs text-text-muted">{app.env.length}</span>}
           </button>
         ))}
       </div>
 
       <div className="space-y-3 mb-4">
         <ErrorText>{error}</ErrorText>
-        {notice && <p className="text-xs text-accent bg-accent/10 rounded-lg px-3 py-2">{notice}</p>}
+        {pending && app.can.deploy && !active && (
+          <div className="flex flex-wrap items-center gap-3 rounded-lg border border-accent/30 bg-accent/10 px-4 py-2.5">
+            <Info className="w-4 h-4 text-accent flex-shrink-0" />
+            <p className="text-sm text-text-primary flex-1 min-w-[12rem]">{pending} Deploy to apply it to the running app.</p>
+            <Button variant="ghost" onClick={() => setPending("")}>Later</Button>
+            <Button onClick={deploy} loading={busy === "deploy"}><Rocket className="w-4 h-4" /> Deploy now</Button>
+          </div>
+        )}
       </div>
 
       {tab === "overview" && (
@@ -277,7 +315,10 @@ export default function AppPage({ params }: { params: Promise<{ id: string }> })
                 {current.imageRef && <p className="font-mono text-xs text-text-muted break-all">{current.imageRef}</p>}
               </div>
             ) : (
-              <p className="text-sm text-text-muted">Not deployed yet.</p>
+              <div className="text-sm text-text-muted space-y-3">
+                <p>Not deployed yet. Add environment variables and a domain if it needs them, then deploy.</p>
+                {app.can.deploy && <Button onClick={deploy} loading={busy === "deploy"}><Rocket className="w-4 h-4" /> Deploy now</Button>}
+              </div>
             )}
             <div className="mt-4 space-y-1.5">
               {app.containers === null && <p className="text-xs text-warning">Couldn&apos;t reach {app.endpoint.name}</p>}
@@ -293,7 +334,10 @@ export default function AppPage({ params }: { params: Promise<{ id: string }> })
           <Card className="p-5">
             <h3 className="text-sm font-semibold text-text-primary mb-3">Domains</h3>
             {app.domains.length === 0 ? (
-              <p className="text-sm text-text-muted">No domains. Add one in the Domains tab.</p>
+              <p className="text-sm text-text-muted">
+                No domains yet.{" "}
+                <button className="text-accent hover:underline" onClick={() => setTab("domains")}>Add one</button>
+              </p>
             ) : (
               app.domains.map((d) => (
                 <a key={d.id} href={`${d.https ? "https" : "http"}://${d.host}${d.path}`} target="_blank" rel="noreferrer" className="flex items-center gap-2 text-sm text-text-primary hover:text-accent">
@@ -332,12 +376,12 @@ export default function AppPage({ params }: { params: Promise<{ id: string }> })
           <Card className="p-4">
             {selected ? (
               app.can.logs ? (
-                <DeploymentLog key={selected.id} appId={id} dep={selected} canDeploy={app.can.deploy} onAction={load} />
+                <DeploymentLog key={selected.id} appId={id} dep={selected} canDeploy={app.can.deploy} isLive={selected.id === app.currentDeploymentId} onAction={load} />
               ) : (
                 <p className="text-sm text-text-muted">Operators and above can read deploy logs.</p>
               )
             ) : (
-              <p className="text-sm text-text-muted">Pick a deployment to see its log.</p>
+              <p className="text-sm text-text-muted py-10 text-center">{app.deployments.length ? "Pick a deployment on the left to see its log." : "Deploy the app to see its log here."}</p>
             )}
           </Card>
         </div>
@@ -383,27 +427,28 @@ export default function AppPage({ params }: { params: Promise<{ id: string }> })
               Traffic is routed by {app.endpoint.proxyMode === "managed" ? "DeployNow's Traefik" : "the existing Traefik"} on {app.endpoint.name}. Point the domain&apos;s DNS at that machine; HTTPS certificates come from Let&apos;s Encrypt.
             </p>
           )}
+          {app.domains.length === 0 && app.endpoint.proxyMode !== "none" && <p className="text-sm text-text-primary">No domains yet. Add the first one below.</p>}
           {app.domains.map((d) => (
-            <div key={d.id} className="flex items-center gap-3 text-sm">
+            <div key={d.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
               <Globe className="w-4 h-4 text-text-muted" />
               <span className="font-mono">{d.host}{d.path !== "/" ? d.path : ""}</span>
               <span className="text-text-muted">→ {d.redirectTo ? `${d.redirectTo} (${d.redirectCode})` : `${d.service ? `${d.service}:` : ""}${d.containerPort}`}</span>
               <Badge tone={d.https ? "success" : "muted"}>{d.https ? "HTTPS" : "HTTP only"}</Badge>
               {d.basicAuthUser && <Badge tone="warning">password: {d.basicAuthUser}</Badge>}
-              {app.can.manage && <Button variant="ghost" className="ml-auto" onClick={() => removeDomain(d.id)}><Trash2 className="w-4 h-4" /></Button>}
+              {app.can.manage && <IconButton label={`Remove ${d.host}`} className="ml-auto" onClick={() => removeDomain(d)}><Trash2 className="w-4 h-4" /></IconButton>}
             </div>
           ))}
           {app.can.manage && app.endpoint.proxyMode !== "none" && (
             <div className="grid grid-cols-12 gap-2 items-end pt-2 border-t border-border">
-              <div className="col-span-12 flex gap-2">
+              <div className="col-span-12 flex flex-wrap gap-2">
                 {([["route", "Route to the app"], ["auth", "Route with a password"], ["redirect", "Redirect elsewhere"]] as const).map(([k, label]) => (
                   <button key={k} type="button" onClick={() => setDomain({ ...domain, kind: k })} className={`px-2.5 py-1 rounded-lg border text-xs ${domain.kind === k ? "border-accent bg-accent/10 text-text-primary" : "border-border text-text-secondary"}`}>{label}</button>
                 ))}
               </div>
               {domain.kind === "redirect" && (
                 <>
-                  <div className="col-span-8"><Field label="Redirect to"><Input value={domain.redirectTo} onChange={(e) => setDomain({ ...domain, redirectTo: e.target.value })} placeholder="https://example.com" /></Field></div>
-                  <div className="col-span-4">
+                  <div className="col-span-12 sm:col-span-8"><Field label="Redirect to"><Input value={domain.redirectTo} onChange={(e) => setDomain({ ...domain, redirectTo: e.target.value })} placeholder="https://example.com" /></Field></div>
+                  <div className="col-span-12 sm:col-span-4">
                     <Field label="Status">
                       <select value={domain.redirectCode} onChange={(e) => setDomain({ ...domain, redirectCode: e.target.value })} className="w-full px-3 py-2 bg-bg-secondary border border-border rounded-lg text-sm text-text-primary">
                         <option value="308">308 permanent</option>
@@ -417,18 +462,18 @@ export default function AppPage({ params }: { params: Promise<{ id: string }> })
               )}
               {domain.kind === "auth" && (
                 <>
-                  <div className="col-span-6"><Field label="User name"><Input value={domain.basicAuthUser} onChange={(e) => setDomain({ ...domain, basicAuthUser: e.target.value })} autoComplete="off" /></Field></div>
-                  <div className="col-span-6"><Field label="Password (8+ characters)"><Input type="password" value={domain.basicAuthPassword} onChange={(e) => setDomain({ ...domain, basicAuthPassword: e.target.value })} autoComplete="new-password" /></Field></div>
+                  <div className="col-span-12 sm:col-span-6"><Field label="User name"><Input value={domain.basicAuthUser} onChange={(e) => setDomain({ ...domain, basicAuthUser: e.target.value })} autoComplete="off" /></Field></div>
+                  <div className="col-span-12 sm:col-span-6"><Field label="Password (8+ characters)"><Input type="password" value={domain.basicAuthPassword} onChange={(e) => setDomain({ ...domain, basicAuthPassword: e.target.value })} autoComplete="new-password" /></Field></div>
                 </>
               )}
-              <div className="col-span-4"><Field label="Domain"><Input value={domain.host} onChange={(e) => setDomain({ ...domain, host: e.target.value })} placeholder="app.example.com" /></Field></div>
-              <div className="col-span-2"><Field label="Path"><Input value={domain.path} onChange={(e) => setDomain({ ...domain, path: e.target.value })} /></Field></div>
-              {isCompose && <div className="col-span-2"><Field label="Service"><Input value={domain.service} onChange={(e) => setDomain({ ...domain, service: e.target.value })} placeholder="web" /></Field></div>}
-              <div className="col-span-2"><Field label="Container port"><Input type="number" value={domain.containerPort} onChange={(e) => setDomain({ ...domain, containerPort: e.target.value })} placeholder="3000" /></Field></div>
-              <label className="col-span-1 flex items-center gap-1.5 text-xs text-text-secondary pb-2.5">
+              <div className="col-span-12 md:col-span-4"><Field label="Domain"><Input value={domain.host} onChange={(e) => setDomain({ ...domain, host: e.target.value })} placeholder="app.example.com" /></Field></div>
+              <div className="col-span-6 md:col-span-2"><Field label="Path"><Input value={domain.path} onChange={(e) => setDomain({ ...domain, path: e.target.value })} /></Field></div>
+              {isCompose && <div className="col-span-6 md:col-span-2"><Field label="Service"><Input value={domain.service} onChange={(e) => setDomain({ ...domain, service: e.target.value })} placeholder="web" /></Field></div>}
+              <div className="col-span-6 md:col-span-2"><Field label="Container port"><Input type="number" value={domain.containerPort} onChange={(e) => setDomain({ ...domain, containerPort: e.target.value })} placeholder="3000" /></Field></div>
+              <label className="col-span-3 md:col-span-1 flex items-center gap-1.5 text-xs text-text-secondary pb-2.5">
                 <input type="checkbox" checked={domain.https} onChange={(e) => setDomain({ ...domain, https: e.target.checked })} /> HTTPS
               </label>
-              <div className="col-span-1"><Button onClick={addDomain} loading={busy === "domain"} disabled={!domain.host || (domain.kind === "redirect" ? !domain.redirectTo : !domain.containerPort)}><Plus className="w-4 h-4" /></Button></div>
+              <div className="col-span-3 md:col-span-1"><Button className="w-full" title="Add domain" onClick={addDomain} loading={busy === "domain"} disabled={!domain.host || (domain.kind === "redirect" ? !domain.redirectTo : !domain.containerPort)}><Plus className="w-4 h-4" /> <span className="md:hidden">Add</span></Button></div>
             </div>
           )}
         </Card>

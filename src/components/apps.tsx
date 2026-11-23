@@ -3,7 +3,7 @@ import clsx from "clsx";
 
 import { useState } from "react";
 import { Eye, Lock, Plus, Trash2, Vault } from "lucide-react";
-import { Button, Field, Input, TextArea } from "./ui";
+import { Button, Field, IconButton, Input, TextArea } from "./ui";
 
 export const selectClass = "w-full px-3 py-2 bg-bg-secondary border border-border rounded-lg text-sm text-text-primary";
 
@@ -20,6 +20,13 @@ export const SOURCE_LABELS: Record<string, string> = {
   "git-dockerfile": "Dockerfile from Git",
   "git-compose": "docker-compose from Git",
   compose: "docker-compose file",
+};
+
+const SOURCE_HINTS: Record<string, string> = {
+  image: "Run a ready-made image from a registry",
+  "git-dockerfile": "Build from a repository with a Dockerfile",
+  "git-compose": "Run the compose file in a repository",
+  compose: "Paste a compose file here",
 };
 
 export interface PortRow { host: number | null; container: number; protocol: "tcp" | "udp" }
@@ -91,7 +98,7 @@ export function AppForm({
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid sm:grid-cols-2 gap-3">
         <Field label="Name">
           <Input
             value={value.name}
@@ -111,15 +118,17 @@ export function AppForm({
       </Field>
 
       <Field label="Source">
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid sm:grid-cols-2 gap-2">
           {Object.entries(SOURCE_LABELS).map(([k, label]) => (
             <button
               key={k}
               type="button"
               onClick={() => onChange({ ...value, sourceType: k, updatePolicy: "manual", ...(k === "git-compose" || k === "compose" ? { ports: [], volumes: [] } : {}) })}
+              aria-pressed={value.sourceType === k}
               className={`text-left px-3 py-2 rounded-lg border text-sm ${value.sourceType === k ? "border-accent bg-accent/10 text-text-primary" : "border-border text-text-secondary hover:border-border-bright"}`}
             >
-              {label}
+              <span className="block font-medium">{label}</span>
+              <span className="block text-xs text-text-muted mt-0.5">{SOURCE_HINTS[k]}</span>
             </button>
           ))}
         </div>
@@ -133,8 +142,8 @@ export function AppForm({
 
       {isGit && (
         <>
-          <div className="grid grid-cols-3 gap-3">
-            <div className="col-span-2">
+          <div className="grid sm:grid-cols-3 gap-3">
+            <div className="sm:col-span-2">
               <Field label="Repository" hint="https URL; private repos use the GitHub token from Settings">
                 <Input value={value.gitRepo} onChange={(e) => set("gitRepo", e.target.value)} placeholder="https://github.com/encorp-io/app" className="font-mono" />
               </Field>
@@ -142,7 +151,7 @@ export function AppForm({
             <Field label="Branch"><Input value={value.gitBranch} onChange={(e) => set("gitBranch", e.target.value)} className="font-mono" /></Field>
           </div>
           {value.sourceType === "git-dockerfile" ? (
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid sm:grid-cols-2 gap-3">
               <Field label="Build context"><Input value={value.buildContext} onChange={(e) => set("buildContext", e.target.value)} className="font-mono" /></Field>
               <Field label="Dockerfile"><Input value={value.dockerfilePath} onChange={(e) => set("dockerfilePath", e.target.value)} className="font-mono" /></Field>
             </div>
@@ -171,7 +180,7 @@ export function AppForm({
                     <option value="tcp">tcp</option>
                     <option value="udp">udp</option>
                   </select>
-                  <Button variant="ghost" onClick={() => set("ports", value.ports.filter((_, j) => j !== i))}><Trash2 className="w-4 h-4" /></Button>
+                  <IconButton label="Remove port" onClick={() => set("ports", value.ports.filter((_, j) => j !== i))}><Trash2 className="w-4 h-4" /></IconButton>
                 </div>
               ))}
               <Button variant="secondary" onClick={() => set("ports", [...value.ports, { host: null, container: 0, protocol: "tcp" }])}><Plus className="w-4 h-4" /> Port</Button>
@@ -184,13 +193,13 @@ export function AppForm({
                   <Input placeholder="data" value={v.name} onChange={(e) => set("volumes", value.volumes.map((q, j) => (j === i ? { ...q, name: e.target.value } : q)))} className="font-mono" />
                   <span className="text-text-muted">→</span>
                   <Input placeholder="/var/lib/app" value={v.path} onChange={(e) => set("volumes", value.volumes.map((q, j) => (j === i ? { ...q, path: e.target.value } : q)))} className="font-mono" />
-                  <Button variant="ghost" onClick={() => set("volumes", value.volumes.filter((_, j) => j !== i))}><Trash2 className="w-4 h-4" /></Button>
+                  <IconButton label="Remove volume" onClick={() => set("volumes", value.volumes.filter((_, j) => j !== i))}><Trash2 className="w-4 h-4" /></IconButton>
                 </div>
               ))}
               <Button variant="secondary" onClick={() => set("volumes", [...value.volumes, { name: "", path: "" }])}><Plus className="w-4 h-4" /> Volume</Button>
             </div>
           </Field>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid sm:grid-cols-2 gap-3">
             <Field label="Command (optional)" hint="Overrides the image's CMD">
               <Input value={value.command} onChange={(e) => set("command", e.target.value)} className="font-mono" />
             </Field>
@@ -277,9 +286,9 @@ export function EnvEditor({ rows, onChange, onReveal, canReveal }: { rows: EnvRo
           </div>
           <div className="flex">
             {r.kind === "secret" && r.hasValue && canReveal && onReveal && (
-              <Button variant="ghost" title="Reveal (asks for your 2FA code)" onClick={() => onReveal(r.key)}><Eye className="w-4 h-4" /></Button>
+              <IconButton label="Reveal (asks for your 2FA code)" onClick={() => onReveal(r.key)}><Eye className="w-4 h-4" /></IconButton>
             )}
-            <Button variant="ghost" title="Remove" onClick={() => onChange(rows.filter((_, j) => j !== i))}><Trash2 className="w-4 h-4" /></Button>
+            <IconButton label={`Remove ${r.key || "variable"}`} onClick={() => onChange(rows.filter((_, j) => j !== i))}><Trash2 className="w-4 h-4" /></IconButton>
           </div>
         </div>
       ))}

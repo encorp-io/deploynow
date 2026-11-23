@@ -1,13 +1,12 @@
 "use client";
 
 import { use, useCallback, useEffect, useRef, useState } from "react";
-import Link from "next/link";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
-import { clsx } from "clsx";
-import { ArrowLeft, Play, Square, RotateCw, Trash2, Pause } from "lucide-react";
+import { Play, Square, RotateCw, Trash2, Pause } from "lucide-react";
 import { useApi } from "@/components/AppShell";
-import { Badge, Button, Card, ErrorText, PageHeader, formatBytes, stateTone, timeAgo } from "@/components/ui";
+import { Badge, Button, Card, ErrorText, IconButton, PageHeader, PageSkeleton, Tabs, formatBytes, stateTone, timeAgo } from "@/components/ui";
+import { useConfirm, useToast } from "@/components/feedback";
 
 const ContainerConsole = dynamic(() => import("@/components/ContainerConsole"), { ssr: false });
 
@@ -101,6 +100,8 @@ export default function ContainerPage({ params }: { params: Promise<{ id: string
   const { id, cid } = use(params);
   const api = useApi();
   const router = useRouter();
+  const confirm = useConfirm();
+  const toast = useToast();
   const [d, setD] = useState<Detail | null>(null);
   const [stats, setStats] = useState<Stats | null>(null);
   const [tab, setTab] = useState<Tab>("overview");
@@ -136,30 +137,30 @@ export default function ContainerPage({ params }: { params: Promise<{ id: string
     setBusy(a);
     const res = await api(`/api/endpoints/${id}/containers/${cid}`, { body: { action: a } });
     setBusy("");
-    if (!res.ok) setError(res.data.error ?? "Action failed");
+    if (!res.ok) toast.error(res.data.error ?? "Action failed");
     load();
   }
 
   async function remove() {
-    if (!confirm(`Remove container ${d?.name}? This can't be undone.`)) return;
+    if (!(await confirm({ title: `Remove container ${d?.name}?`, message: "This can't be undone.", confirmLabel: "Remove" }))) return;
     const res = await api(`/api/endpoints/${id}/containers/${cid}`, { method: "DELETE" });
-    if (res.ok) router.push(`/endpoints/${id}`);
-    else setError(res.data.error ?? "Could not remove");
+    if (res.ok) {
+      toast.success(`Removed ${d?.name}`);
+      router.push(`/endpoints/${id}`);
+    } else toast.error(res.data.error ?? "Could not remove");
   }
 
-  if (!d) return error ? <ErrorText>{error}</ErrorText> : <p className="text-sm text-text-muted">Loading…</p>;
+  if (!d) return error ? <ErrorText>{error}</ErrorText> : <PageSkeleton />;
 
-  const kv = "grid grid-cols-[160px_1fr] gap-y-2 text-sm";
+  const kv = "grid grid-cols-[120px_1fr] sm:grid-cols-[160px_1fr] gap-y-2 text-sm [&>*]:min-w-0 [&>*]:break-words";
 
   return (
-    <div>
-      <Link href={`/endpoints/${id}`} className="inline-flex items-center gap-1 text-xs text-text-muted hover:text-text-secondary mb-3">
-        <ArrowLeft className="w-3.5 h-3.5" /> Containers
-      </Link>
+    <div className="max-w-6xl">
       <PageHeader
+        crumbs={[{ label: "Endpoints", href: "/endpoints" }, { label: "Containers", href: `/endpoints/${id}` }, { label: d.name }]}
         title={d.name}
         subtitle={
-          <span className="flex items-center gap-2">
+          <span className="flex items-center flex-wrap gap-2">
             <Badge tone={stateTone(d.state.status)}>{d.state.status}</Badge>
             {d.state.health && <Badge tone={d.state.health === "healthy" ? "success" : "warning"}>{d.state.health}</Badge>}
             <span className="font-mono text-xs">{d.image}</span>
@@ -170,7 +171,7 @@ export default function ContainerPage({ params }: { params: Promise<{ id: string
             {d.state.running ? (
               <>
                 <Button variant="secondary" loading={busy === "restart"} onClick={() => action("restart")}><RotateCw className="w-4 h-4" /> Restart</Button>
-                <Button variant="secondary" loading={busy === "pause"} onClick={() => action("pause")}><Pause className="w-4 h-4" /></Button>
+                <IconButton label="Pause" variant="secondary" loading={busy === "pause"} onClick={() => action("pause")}><Pause className="w-4 h-4" /></IconButton>
                 <Button variant="secondary" loading={busy === "stop"} onClick={() => action("stop")}><Square className="w-4 h-4" /> Stop</Button>
               </>
             ) : d.state.status === "paused" ? (
@@ -178,24 +179,20 @@ export default function ContainerPage({ params }: { params: Promise<{ id: string
             ) : (
               <Button loading={busy === "start"} onClick={() => action("start")}><Play className="w-4 h-4" /> Start</Button>
             )}
-            <Button variant="danger" onClick={remove}><Trash2 className="w-4 h-4" /></Button>
+            <IconButton label="Remove container" variant="danger" onClick={remove}><Trash2 className="w-4 h-4" /></IconButton>
           </>
         }
       />
       <ErrorText>{error}</ErrorText>
 
-      <div className="flex gap-1 bg-bg-secondary border border-border rounded-lg p-1 w-fit mb-4 mt-2">
-        {(["overview", "logs", "console"] as Tab[]).map((t) => (
-          <button key={t} onClick={() => setTab(t)} className={clsx("px-3 py-1.5 rounded-md text-sm capitalize", tab === t ? "bg-bg-card text-text-primary" : "text-text-muted hover:text-text-secondary")}>
-            {t}
-          </button>
-        ))}
+      <div className="mb-4 mt-2">
+        <Tabs tabs={[{ value: "overview", label: "Overview" }, { value: "logs", label: "Logs" }, { value: "console", label: "Console" }]} value={tab} onChange={setTab} />
       </div>
 
       {tab === "overview" && (
         <div className="space-y-4">
           {stats && (
-            <div className="grid grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               {[
                 ["CPU", `${stats.cpuPercent}%`],
                 ["Memory", `${formatBytes(stats.memoryUsage)}${stats.memoryLimit ? ` / ${formatBytes(stats.memoryLimit)}` : ""}`],
@@ -219,7 +216,7 @@ export default function ContainerPage({ params }: { params: Promise<{ id: string
               <span className="text-text-muted">Image id</span><span className="font-mono text-xs">{d.imageId.replace("sha256:", "").slice(0, 12)}</span>
             </div>
           </Card>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid md:grid-cols-2 gap-4">
             <Card className="p-5">
               <h3 className="font-semibold text-sm mb-3">Ports</h3>
               {d.ports.length ? d.ports.map((p) => (

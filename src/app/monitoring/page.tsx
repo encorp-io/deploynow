@@ -64,7 +64,7 @@ export default function MonitoringPage() {
   }, [load]);
 
   return (
-    <div>
+    <div className="max-w-6xl">
       <PageHeader title="Monitoring" subtitle="Host usage and alerts. Alerts go to your notification channels when they start and when they clear." />
       <ErrorText>{error}</ErrorText>
       {data && (

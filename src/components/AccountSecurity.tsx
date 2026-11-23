@@ -5,6 +5,7 @@ import { startRegistration } from "@simplewebauthn/browser";
 import { Copy, Fingerprint, KeyRound, Plus, Trash2 } from "lucide-react";
 import { useApi } from "@/components/AppShell";
 import { Badge, Button, Card, ErrorText, Field, Input, Select, timeAgo } from "@/components/ui";
+import { useConfirm } from "@/components/feedback";
 
 interface PasskeyRow {
   id: string;
@@ -15,6 +16,7 @@ interface PasskeyRow {
 
 export function PasskeysCard({ onChange }: { onChange?: () => void }) {
   const api = useApi();
+  const confirm = useConfirm();
   const [rows, setRows] = useState<PasskeyRow[]>([]);
   const [name, setName] = useState("");
   const [error, setError] = useState("");
@@ -52,7 +54,7 @@ export function PasskeysCard({ onChange }: { onChange?: () => void }) {
   }
 
   async function remove(p: PasskeyRow) {
-    if (!window.confirm(`Remove the passkey "${p.name}"?`)) return;
+    if (!(await confirm({ title: `Remove the passkey "${p.name}"?`, confirmLabel: "Remove" }))) return;
     const res = await api(`/api/passkeys/${p.id}`, { method: "DELETE" });
     if (!res.ok) setError(String(res.data.error ?? "Could not remove it"));
     await load();
@@ -120,6 +122,7 @@ const SCOPES = [
 
 export function ApiTokensCard({ role }: { role: string }) {
   const api = useApi();
+  const confirm = useConfirm();
   const [rows, setRows] = useState<TokenRow[]>([]);
   const [form, setForm] = useState({ name: "", scope: "viewer", expiresInDays: "90" });
   const [created, setCreated] = useState<string | null>(null);
@@ -148,7 +151,7 @@ export function ApiTokensCard({ role }: { role: string }) {
   }
 
   async function revoke(t: TokenRow) {
-    if (!window.confirm(`Revoke "${t.name}"? Anything using it stops working.`)) return;
+    if (!(await confirm({ title: `Revoke "${t.name}"?`, message: "Anything using it stops working.", confirmLabel: "Revoke" }))) return;
     await api(`/api/tokens/${t.id}`, { method: "DELETE" });
     load();
   }

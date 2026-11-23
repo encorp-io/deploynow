@@ -63,3 +63,38 @@ body {
 .glow-red {
   box-shadow: 0 0 20px rgba(239, 68, 68, 0.15);
 }
+
+/* Toasts slide up into place */
+@keyframes toast-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-toast-in {
+  animation: toast-in 160ms ease-out;
+}
+
+/* Side drawer on phones */
+@keyframes drawer-in {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(0); }
+}
+
+.animate-drawer-in {
+  animation: drawer-in 180ms ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-toast-in,
+  .animate-drawer-in,
+  .animate-pulse,
+  .pulse-dot {
+    animation: none;
+  }
+}
+
+/* Visible keyboard focus everywhere */
+:where(a, button, input, select, textarea, [tabindex]):focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--color-accent) 70%, transparent);
+  outline-offset: 2px;
+}

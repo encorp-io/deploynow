@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Boxes, LogIn, Plus, Send, Trash2 } from "lucide-react";
 import { useApi } from "@/components/AppShell";
 import { Badge, Button, ErrorText, Field, Input, Select } from "@/components/ui";
+import { useConfirm } from "@/components/feedback";
 
 const MASK = "••••••••";
 
@@ -45,6 +46,7 @@ const SETUP_HELP: Record<string, string> = {
 
 export function SsoSettings() {
   const api = useApi();
+  const confirm = useConfirm();
   const [data, setData] = useState<{ redirectUri: string; providers: Provider[] } | null>(null);
   const [form, setForm] = useState<ProviderForm | null>(null);
   const [error, setError] = useState("");
@@ -70,7 +72,7 @@ export function SsoSettings() {
     load();
   };
   const remove = async (p: Provider) => {
-    if (!window.confirm(`Remove sign-in with ${p.name}? ${p.linkedUsers} linked account(s) will need another way to sign in.`)) return;
+    if (!(await confirm({ title: `Remove sign-in with ${p.name}?`, message: `${p.linkedUsers} linked account(s) will need another way to sign in.`, confirmLabel: "Remove" }))) return;
     const r = await api(`/api/sso/${p.id}`, { method: "DELETE" });
     if (!r.ok) setError(r.data.error ?? "Could not remove it");
     load();
@@ -105,7 +107,7 @@ export function SsoSettings() {
       {form ? (
         <div className="space-y-3 mt-4 pt-4 border-t border-border">
           <p className="text-xs text-text-muted">{SETUP_HELP[form.type]}</p>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid sm:grid-cols-2 gap-3">
             <Field label="Button label"><Input value={form.name} onChange={(e) => set("name", e.target.value)} /></Field>
             {form.type === "microsoft" && (
               <Field label="Tenant" hint="Tenant id, domain, or organizations"><Input value={form.tenant} onChange={(e) => set("tenant", e.target.value)} /></Field>
@@ -136,7 +138,7 @@ export function SsoSettings() {
           </div>
         </div>
       ) : (
-        <div className="flex gap-2 mt-4">
+        <div className="flex flex-wrap gap-2 mt-4">
           <Button type="button" variant="secondary" onClick={() => setForm(blank("google"))}><Plus className="w-4 h-4" /> Google</Button>
           <Button type="button" variant="secondary" onClick={() => setForm(blank("microsoft"))}><Plus className="w-4 h-4" /> Microsoft</Button>
           <Button type="button" variant="secondary" onClick={() => setForm(blank("oidc"))}><Plus className="w-4 h-4" /> Other OIDC</Button>

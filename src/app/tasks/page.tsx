@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { CalendarClock, Play, Pencil, Trash2, Plus } from "lucide-react";
 import { useApi } from "@/components/AppShell";
-import { Badge, Button, Card, ErrorText, Field, Input, Modal, PageHeader, Select, TextArea, formatTime, timeAgo } from "@/components/ui";
+import { Badge, Button, Card, ErrorText, Field, Input, Modal, PageHeader, Select, TextArea, formatTime, timeAgo, IconButton, Skeleton } from "@/components/ui";
+import { useConfirm } from "@/components/feedback";
 
 interface Task {
   id: string;
@@ -40,6 +41,7 @@ type Api = ReturnType<typeof useApi>;
 
 export default function TasksPage() {
   const api = useApi();
+  const confirm = useConfirm();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [endpoints, setEndpoints] = useState<EndpointLite[]>([]);
   const [editing, setEditing] = useState<Task | "new" | null>(null);
@@ -69,7 +71,7 @@ export default function TasksPage() {
   }
 
   return (
-    <div>
+    <div className="max-w-6xl">
       <PageHeader
         title="Scheduled tasks"
         subtitle="Commands on a cron schedule: run inside a running container, or in a one-off container"
@@ -78,15 +80,16 @@ export default function TasksPage() {
       <ErrorText>{error}</ErrorText>
       <Card className="overflow-hidden mt-2">
         {tasks.length === 0 ? (
-          <div className="p-8 text-center">
-            <CalendarClock className="w-8 h-8 text-text-muted mx-auto mb-2" />
-            <p className="text-sm text-text-secondary">No scheduled tasks yet.</p>
-            <p className="text-xs text-text-muted mt-1">For example: clear a cache nightly with exec in the app container, or run a report in a one-off container.</p>
+          <div className="p-10 text-center">
+            <CalendarClock className="w-10 h-10 text-text-muted mx-auto mb-3" />
+            <p className="text-text-primary font-medium mb-1">No scheduled tasks yet</p>
+            <p className="text-sm text-text-muted max-w-md mx-auto">For example: clear a cache nightly inside the app container, or run a report in a one-off container.</p>
+            {endpoints.length > 0 && <Button className="mt-5" onClick={() => setEditing("new")}><Plus className="w-4 h-4" /> New task</Button>}
           </div>
         ) : (
           <div className="divide-y divide-border">
             {tasks.map((t) => (
-              <div key={t.id} className="p-4 flex items-start justify-between gap-4">
+              <div key={t.id} className="p-4 flex flex-col md:flex-row md:items-start justify-between gap-3 md:gap-4">
                 <div className="min-w-0">
                   <p className="text-sm font-medium text-text-primary flex items-center gap-2">
                     {t.name}
@@ -99,20 +102,20 @@ export default function TasksPage() {
                   <p className="text-xs font-mono text-text-secondary mt-1 truncate max-w-2xl">{t.command}</p>
                   <p className="text-xs text-text-muted mt-1">Last run {timeAgo(t.lastRunAt)}{t.enabled && t.nextRunAt ? ` · next ${formatTime(t.nextRunAt)}` : ""}</p>
                 </div>
-                <div className="flex gap-1 flex-shrink-0">
+                <div className="flex flex-wrap gap-1 flex-shrink-0">
                   <Button variant="secondary" loading={busy === t.id} onClick={() => runNow(t)}><Play className="w-4 h-4" /> Run now</Button>
                   <Button variant="ghost" onClick={() => setHistory(t)}>History</Button>
-                  <Button variant="ghost" onClick={() => setEditing(t)}><Pencil className="w-4 h-4" /></Button>
-                  <Button
-                    variant="ghost"
+                  <IconButton label="Edit" onClick={() => setEditing(t)}><Pencil className="w-4 h-4" /></IconButton>
+                  <IconButton
+                    label="Remove"
                     onClick={async () => {
-                      if (!confirm(`Remove task ${t.name}?`)) return;
+                      if (!(await confirm({ title: `Remove task ${t.name}?`, confirmLabel: "Remove" }))) return;
                       await api(`/api/tasks/${t.id}`, { method: "DELETE" });
                       load();
                     }}
                   >
                     <Trash2 className="w-4 h-4" />
-                  </Button>
+                  </IconButton>
                 </div>
               </div>
             ))}
@@ -162,7 +165,7 @@ function TaskForm({ api, existing, endpoints, onSaved, onCancel }: { api: Api; e
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid sm:grid-cols-2 gap-3">
         <Field label="Name"><Input value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} placeholder="clear cache" /></Field>
         <Field label="Endpoint">
           <Select value={f.endpointId} disabled={!!existing} onChange={(e) => setF({ ...f, endpointId: e.target.value })}>
@@ -170,7 +173,7 @@ function TaskForm({ api, existing, endpoints, onSaved, onCancel }: { api: Api; e
           </Select>
         </Field>
       </div>
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid sm:grid-cols-2 gap-3">
         <Field label="Schedule" hint="Cron: minute hour day month weekday"><Input value={f.schedule} onChange={(e) => setF({ ...f, schedule: e.target.value })} className="font-mono" /></Field>
         <Field label="Timeout (seconds)"><Input type="number" value={f.timeoutSec} onChange={(e) => setF({ ...f, timeoutSec: Number(e.target.value) })} /></Field>
       </div>
@@ -223,7 +226,7 @@ function HistoryModal({ api, task, onClose }: { api: Api; task: Task; onClose: (
   return (
     <Modal title={`${task.name}: recent runs`} onClose={onClose} wide>
       {!runs ? (
-        <p className="text-sm text-text-muted">Loading…</p>
+        <div className="space-y-2" aria-busy="true"><Skeleton className="h-10" /><Skeleton className="h-10" /></div>
       ) : runs.length === 0 ? (
         <p className="text-sm text-text-muted">It hasn&apos;t run yet.</p>
       ) : (

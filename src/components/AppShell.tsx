@@ -1,9 +1,12 @@
 "use client";
 
-import { createContext, useCallback, useContext, useRef, useState, type ReactNode } from "react";
-import { useRouter } from "next/navigation";
+import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
+import Link from "next/link";
+import { usePathname, useRouter } from "next/navigation";
 import { signOut } from "next-auth/react";
-import Sidebar from "./Sidebar";
+import { Container, Menu, X } from "lucide-react";
+import Sidebar, { type Me } from "./Sidebar";
+import { FeedbackProvider } from "./feedback";
 import { Button, ErrorText, Input, Modal } from "./ui";
 
 type ApiResult<T> = { ok: boolean; status: number; data: T & { error?: string } };
@@ -23,6 +26,26 @@ export function useApi(): ApiFn {
 
 export default function AppShell({ children }: { children: ReactNode }) {
   const router = useRouter();
+  const pathname = usePathname();
+  const [me, setMe] = useState<Me | null>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/account")
+      .then((r) => (r.ok ? r.json() : null))
+      .then(setMe)
+      .catch(() => {});
+  }, []);
+
+  // Close the phone menu whenever the page changes
+  useEffect(() => setMenuOpen(false), [pathname]);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setMenuOpen(false);
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [menuOpen]);
   const [prompt, setPrompt] = useState(false);
   const [code, setCode] = useState("");
   const [error, setError] = useState("");
@@ -89,9 +112,39 @@ export default function AppShell({ children }: { children: ReactNode }) {
 
   return (
     <ApiContext.Provider value={api}>
+     <FeedbackProvider>
       <div className="min-h-screen">
-        <Sidebar onSignOut={handleSignOut} />
-        <main className="ml-64 p-8">{children}</main>
+        <a href="#main" className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-[70] focus:px-3 focus:py-2 focus:bg-accent focus:text-white focus:rounded-lg">
+          Skip to content
+        </a>
+
+        {/* Desktop: fixed sidebar */}
+        <aside className="hidden lg:block fixed inset-y-0 left-0 w-60 z-30">
+          <Sidebar me={me} onSignOut={handleSignOut} />
+        </aside>
+
+        {/* Phones and tablets: top bar and a slide-out menu */}
+        <header className="lg:hidden sticky top-0 z-30 flex items-center gap-3 h-14 px-4 bg-bg-secondary/95 backdrop-blur border-b border-border">
+          <button onClick={() => setMenuOpen(true)} aria-label="Open menu" aria-expanded={menuOpen} className="p-1.5 -ml-1.5 rounded-lg text-text-secondary hover:text-text-primary hover:bg-bg-card">
+            <Menu className="w-5 h-5" />
+          </button>
+          <Link href="/projects" className="flex items-center gap-2 font-bold text-text-primary">
+            <Container className="w-5 h-5 text-accent" /> DeployNow
+          </Link>
+        </header>
+        {menuOpen && (
+          <div className="lg:hidden fixed inset-0 z-40" role="dialog" aria-modal="true" aria-label="Menu">
+            <div className="absolute inset-0 bg-black/60" onClick={() => setMenuOpen(false)} />
+            <div className="absolute inset-y-0 left-0 w-72 max-w-[85vw] animate-drawer-in shadow-2xl">
+              <Sidebar me={me} onSignOut={handleSignOut} onNavigate={() => setMenuOpen(false)} />
+              <button onClick={() => setMenuOpen(false)} aria-label="Close menu" className="absolute top-4 -right-11 p-1.5 rounded-lg bg-bg-secondary text-text-secondary">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+          </div>
+        )}
+
+        <main id="main" className="lg:ml-60 px-4 py-6 sm:px-6 lg:px-8 lg:py-8 min-w-0">{children}</main>
       </div>
       {prompt && (
         <Modal title="Confirm it's you" onClose={cancel}>
@@ -115,6 +168,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
           </form>
         </Modal>
       )}
+     </FeedbackProvider>
     </ApiContext.Provider>
   );
 }

@@ -158,7 +158,7 @@ export default function OnboardingPage() {
               <Rocket className="w-10 h-10 text-accent mx-auto" />
               <p className="text-text-primary font-medium">You&apos;re set up</p>
               <p className="text-sm text-text-muted">Containers are picked up within a minute. Turn on 2FA under Account if you haven&apos;t yet.</p>
-              <Button onClick={() => router.push("/dashboard")}>Go to the dashboard</Button>
+              <Button onClick={() => router.push("/projects")}>Go to your projects</Button>
             </div>
           )}
         </Card>

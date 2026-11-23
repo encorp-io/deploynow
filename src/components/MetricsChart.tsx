@@ -45,7 +45,7 @@ export default function MetricsChart({ api, endpointId }: { api: Api; endpointId
   return (
     <Card className="p-4 mb-4">
       <p className="text-xs text-text-muted mb-3">Last 24 hours</p>
-      <div className="grid grid-cols-3 gap-6">
+      <div className="grid sm:grid-cols-3 gap-6">
         <Spark label="CPU load" values={samples.map((s) => pct(s.load1, s.cpus || 1))} latest={`${last.load1.toFixed(2)} / ${last.cpus} CPU`} color="var(--color-accent, #6366f1)" />
         <Spark label="Memory" values={samples.map((s) => pct(s.memUsed, s.memTotal))} latest={`${Math.round(pct(last.memUsed, last.memTotal) * 100)}%`} color="var(--color-warning, #f59e0b)" />
         <Spark label="Disk" values={samples.map((s) => pct(s.diskUsed, s.diskTotal))} latest={`${Math.round(pct(last.diskUsed, last.diskTotal) * 100)}%`} color="var(--color-success, #10b981)" />

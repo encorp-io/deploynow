@@ -4,7 +4,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { clsx } from "clsx";
 import { Archive, Play, Pencil, Trash2, Plus, RotateCcw, ShieldCheck, Download, FlaskConical, KeyRound, X, PlugZap } from "lucide-react";
 import { useApi } from "@/components/AppShell";
-import { Badge, Button, Card, ErrorText, Field, Input, Modal, PageHeader, Select, Tabs, TextArea, formatBytes, formatTime, timeAgo } from "@/components/ui";
+import { Badge, Button, Card, ErrorText, Field, Input, Modal, PageHeader, Select, Tabs, TextArea, formatBytes, formatTime, timeAgo, TableWrap, IconButton } from "@/components/ui";
+import { useConfirm } from "@/components/feedback";
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -133,6 +134,7 @@ type Tab = "policies" | "snapshots" | "runs" | "destinations";
 
 export default function BackupsPage() {
   const api = useApi();
+  const confirm = useConfirm();
   const [tab, setTab] = useState<Tab>("policies");
   const [policies, setPolicies] = useState<Policy[]>([]);
   const [destinations, setDestinations] = useState<Destination[]>([]);
@@ -188,14 +190,14 @@ export default function BackupsPage() {
   }
 
   async function removePolicy(p: Policy) {
-    if (!confirm(`Remove backup policy ${p.name}? Existing snapshots stay in the bucket.`)) return;
+    if (!(await confirm({ title: `Remove backup policy ${p.name}?`, message: "Existing snapshots stay in the bucket.", confirmLabel: "Remove" }))) return;
     const res = await api(`/api/backups/policies/${p.id}`, { method: "DELETE" });
     if (!res.ok) setError(res.data.error ?? "Could not remove");
     load();
   }
 
   return (
-    <div>
+    <div className="max-w-6xl">
       <PageHeader
         title="Backups"
         subtitle="Volumes, bind paths, databases and DeployNow itself, with restic to S3-compatible storage"
@@ -224,17 +226,22 @@ export default function BackupsPage() {
       {tab === "policies" && (
         <Card className="overflow-hidden mt-2">
           {policies.length === 0 ? (
-            <div className="p-8 text-center">
-              <Archive className="w-8 h-8 text-text-muted mx-auto mb-2" />
-              <p className="text-sm text-text-secondary">No backup policies yet.</p>
-              <p className="text-xs text-text-muted mt-1">
-                {destinations.length ? "Create a policy to choose what to back up and when." : "Start by adding a destination: a Cloudflare R2 or other S3 bucket."}
+            <div className="p-10 text-center">
+              <Archive className="w-10 h-10 text-text-muted mx-auto mb-3" />
+              <p className="text-text-primary font-medium mb-1">{destinations.length ? "No backup policies yet" : "Set up backups in two steps"}</p>
+              <p className="text-sm text-text-muted max-w-md mx-auto">
+                {destinations.length
+                  ? "A policy says what to back up (volumes, folders, databases or a whole app), when, and how long to keep it."
+                  : "First add a destination: a Cloudflare R2 or other S3-compatible bucket. Then create a policy for what to back up and when."}
               </p>
+              <Button className="mt-5" onClick={() => (destinations.length ? setEditing("new") : setEditingDest("new"))}>
+                <Plus className="w-4 h-4" /> {destinations.length ? "New policy" : "Add a destination"}
+              </Button>
             </div>
           ) : (
             <div className="divide-y divide-border">
               {policies.map((p) => (
-                <div key={p.id} className="p-4 flex items-start justify-between gap-4">
+                <div key={p.id} className="p-4 flex flex-col md:flex-row md:items-start justify-between gap-3 md:gap-4">
                   <div className="min-w-0">
                     <p className="text-sm font-medium text-text-primary flex items-center gap-2">
                       {p.name}
@@ -251,8 +258,8 @@ export default function BackupsPage() {
                   </div>
                   <div className="flex gap-1 flex-shrink-0">
                     <Button variant="secondary" onClick={() => runNow(p)}><Play className="w-4 h-4" /> Back up now</Button>
-                    <Button variant="ghost" title="Edit" onClick={() => setEditing(p)}><Pencil className="w-4 h-4" /></Button>
-                    <Button variant="ghost" title="Remove" onClick={() => removePolicy(p)}><Trash2 className="w-4 h-4" /></Button>
+                    <IconButton label="Edit" onClick={() => setEditing(p)}><Pencil className="w-4 h-4" /></IconButton>
+                    <IconButton label="Remove" onClick={() => removePolicy(p)}><Trash2 className="w-4 h-4" /></IconButton>
                   </div>
                 </div>
               ))}
@@ -268,7 +275,7 @@ export default function BackupsPage() {
           {runs.length === 0 ? (
             <p className="text-sm text-text-muted p-4">Nothing has run yet.</p>
           ) : (
-            <table className="w-full">
+            <TableWrap><table className="w-full min-w-[640px]">
               <thead className="border-b border-border">
                 <tr>{["What", "Status", "Started", "Took", "Data added", ""].map((h) => <th key={h} className="text-left text-xs font-medium text-text-muted px-4 py-2.5">{h}</th>)}</tr>
               </thead>
@@ -292,7 +299,7 @@ export default function BackupsPage() {
                   );
                 })}
               </tbody>
-            </table>
+            </table></TableWrap>
           )}
         </Card>
       )}
@@ -315,18 +322,18 @@ export default function BackupsPage() {
                   </div>
                   <div className="flex gap-1">
                     <TestButton api={api} url={`/api/backups/destinations/${d.id}`} />
-                    <Button variant="ghost" onClick={() => setEditingDest(d)}><Pencil className="w-4 h-4" /></Button>
-                    <Button
-                      variant="ghost"
+                    <IconButton label="Edit" onClick={() => setEditingDest(d)}><Pencil className="w-4 h-4" /></IconButton>
+                    <IconButton
+                      label="Remove"
                       onClick={async () => {
-                        if (!confirm(`Remove destination ${d.name}? Its policies are removed too. The data in the bucket is not deleted.`)) return;
+                        if (!(await confirm({ title: `Remove destination ${d.name}?`, message: "Its policies are removed too. The data in the bucket is not deleted.", confirmLabel: "Remove", typeToConfirm: d.name }))) return;
                         const res = await api(`/api/backups/destinations/${d.id}`, { method: "DELETE" });
                         if (!res.ok) setError(res.data.error ?? "Could not remove");
                         load();
                       }}
                     >
                       <Trash2 className="w-4 h-4" />
-                    </Button>
+                    </IconButton>
                   </div>
                 </div>
               ))}
@@ -419,7 +426,7 @@ function DestinationForm({ api, existing, onSaved, onCancel }: { api: Api; exist
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid sm:grid-cols-2 gap-3">
         <Field label="Name"><Input value={f.name} onChange={set("name")} /></Field>
         <Field label="Provider">
           <Select value={f.provider} onChange={(e) => setF({ ...f, provider: e.target.value, region: e.target.value === "r2" ? "auto" : f.region === "auto" ? "us-east-1" : f.region })}>
@@ -433,18 +440,18 @@ function DestinationForm({ api, existing, onSaved, onCancel }: { api: Api; exist
       <Field label={f.provider === "r2" ? "Account id or endpoint URL" : "Endpoint URL"} hint={f.provider === "r2" ? "Your Cloudflare account id, or https://<account id>.r2.cloudflarestorage.com" : "e.g. https://s3.eu-central-1.amazonaws.com"}>
         <Input value={f.endpointUrl} onChange={set("endpointUrl")} placeholder={f.provider === "r2" ? "0123456789abcdef0123456789abcdef" : "https://s3.amazonaws.com"} />
       </Field>
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid sm:grid-cols-3 gap-3">
         <Field label="Bucket"><Input value={f.bucket} onChange={set("bucket")} placeholder="backups" disabled={!!existing} /></Field>
         <Field label="Folder"><Input value={f.prefix} onChange={set("prefix")} disabled={!!existing} /></Field>
         <Field label="Region"><Input value={f.region} onChange={set("region")} /></Field>
       </div>
       <p className="text-xs font-medium text-text-secondary pt-1">Backup key: read and write, ideally without delete</p>
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid sm:grid-cols-2 gap-3">
         <Field label="Access key id"><Input value={f.accessKeyId} onChange={set("accessKeyId")} autoComplete="off" /></Field>
         <Field label="Secret access key"><Input type="password" value={f.secretKey} onChange={set("secretKey")} autoComplete="new-password" /></Field>
       </div>
       <p className="text-xs font-medium text-text-secondary pt-1">Prune key (optional): may delete, used only for retention and checks</p>
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid sm:grid-cols-2 gap-3">
         <Field label="Access key id"><Input value={f.pruneKeyId} onChange={set("pruneKeyId")} autoComplete="off" /></Field>
         <Field label="Secret access key"><Input type="password" value={f.pruneSecretKey} onChange={set("pruneSecretKey")} autoComplete="new-password" /></Field>
       </div>
@@ -562,7 +569,7 @@ function PolicyForm({
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid sm:grid-cols-2 gap-3">
         <Field label="Name"><Input value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} placeholder="nightly" /></Field>
         <Field label="Destination">
           <Select value={f.destinationId} disabled={!!existing} onChange={(e) => setF({ ...f, destinationId: e.target.value })}>
@@ -641,7 +648,7 @@ function PolicyForm({
         </div>
       )}
 
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid sm:grid-cols-2 gap-3">
         <Field label="Schedule" hint="Cron, in the server's time zone">
           <div className="flex gap-2">
             <Select value={SCHEDULES.some((s) => s.value === f.schedule) ? f.schedule : "custom"} onChange={(e) => e.target.value !== "custom" && setF({ ...f, schedule: e.target.value })} className="w-1/2">
@@ -652,7 +659,7 @@ function PolicyForm({
           </div>
         </Field>
         <Field label="Keep (daily / weekly / monthly)">
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid sm:grid-cols-3 gap-2">
             <Input type="number" min={0} value={f.keepDaily} onChange={(e) => setF({ ...f, keepDaily: Number(e.target.value) })} />
             <Input type="number" min={0} value={f.keepWeekly} onChange={(e) => setF({ ...f, keepWeekly: Number(e.target.value) })} />
             <Input type="number" min={0} value={f.keepMonthly} onChange={(e) => setF({ ...f, keepMonthly: Number(e.target.value) })} />
@@ -768,7 +775,7 @@ function SnapshotsTab({ api, repos, endpoints, onKit, onStarted }: { api: Api; r
         ) : snaps.length === 0 ? (
           <p className="text-sm text-text-muted p-4">No snapshots in this repository yet.</p>
         ) : (
-          <table className="w-full">
+          <TableWrap><table className="w-full min-w-[640px]">
             <thead className="border-b border-border">
               <tr>{["Snapshot", "Source", "Policy", "Size", ""].map((h) => <th key={h} className="text-left text-xs font-medium text-text-muted px-4 py-2.5">{h}</th>)}</tr>
             </thead>
@@ -785,7 +792,7 @@ function SnapshotsTab({ api, repos, endpoints, onKit, onStarted }: { api: Api; r
                 </tr>
               ))}
             </tbody>
-          </table>
+          </table></TableWrap>
         )}
       </Card>
       {restoring && repo && (
@@ -807,13 +814,18 @@ function RestoreForm({ api, repo, snap, endpoints, onStarted, onCancel }: { api:
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const other = kind === "volume" ? "volume" : kind === "bind" ? "path" : "container";
+  const confirm = useConfirm();
 
   async function start() {
-    const msg =
+    const ok =
       target === "same"
-        ? `Restore ${snap.source} from ${formatTime(snap.time)} in place? ${kind === "db" ? "The dump is loaded into the running database." : "Current contents are replaced and containers using it are stopped while it runs."}`
-        : `Restore ${snap.source} to ${name}?`;
-    if (!confirm(msg)) return;
+        ? await confirm({
+            title: `Restore ${snap.source} in place?`,
+            message: `From the snapshot of ${formatTime(snap.time)}. ${kind === "db" ? "The dump is loaded into the running database." : "Current contents are replaced and containers using it are stopped while it runs."}`,
+            confirmLabel: "Restore in place",
+          })
+        : await confirm({ title: `Restore ${snap.source} to ${name}?`, confirmLabel: "Restore", danger: false });
+    if (!ok) return;
     setBusy(true);
     setError("");
     const res = await api(`/api/backups/repos/${repo.id}`, {
@@ -835,7 +847,7 @@ function RestoreForm({ api, repo, snap, endpoints, onStarted, onCancel }: { api:
         </label>
       </div>
       {target !== "same" && (
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid sm:grid-cols-2 gap-3">
           <Field label="Endpoint">
             <Select value={endpointId} onChange={(e) => setEndpointId(e.target.value)}>
               {endpoints.map((e) => <option key={e.id} value={e.id}>{e.name}{e.id === repo.scope ? " (original)" : ""}</option>)}
@@ -861,6 +873,7 @@ function RestoreForm({ api, repo, snap, endpoints, onStarted, onCancel }: { api:
 // ─── Recovery kit and run log ──────────────────────────────────────────────────
 
 function KitModal({ api, repoId, onClose }: { api: Api; repoId: string; onClose: () => void }) {
+  const confirm = useConfirm();
   const [kit, setKit] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -880,7 +893,7 @@ function KitModal({ api, repoId, onClose }: { api: Api; repoId: string; onClose:
     URL.revokeObjectURL(url);
   }
   return (
-    <Modal title="Recovery kit" onClose={() => { if (!kit || confirm("Did you save the kit? It can't be shown again.")) onClose(); }} wide>
+    <Modal title="Recovery kit" onClose={async () => { if (!kit || (await confirm({ title: "Did you save the kit?", message: "It can't be shown again.", confirmLabel: "Yes, close", danger: false }))) onClose(); }} wide>
       {!kit ? (
         <div className="space-y-3">
           <p className="text-sm text-text-secondary">

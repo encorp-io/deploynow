@@ -5,6 +5,7 @@ import { Radio, ShieldOff, KeyRound } from "lucide-react";
 import type { EndpointView } from "./EndpointForm";
 import AgentJoin, { type JoinInfo } from "./AgentJoin";
 import { Badge, Button, Card, ErrorText, formatBytes, timeAgo } from "./ui";
+import { useConfirm } from "@/components/feedback";
 
 type Api = <T = Record<string, unknown>>(url: string, init?: { method?: string; body?: unknown }) => Promise<{ ok: boolean; status: number; data: T & { error?: string } }>;
 
@@ -25,6 +26,7 @@ function Meter({ label, used, total, detail }: { label: string; used: number; to
 }
 
 export default function AgentCard({ api, endpoint, onChange }: { api: Api; endpoint: EndpointView; onChange: () => void }) {
+  const confirm = useConfirm();
   const [join, setJoin] = useState<JoinInfo | null>(null);
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
@@ -41,7 +43,7 @@ export default function AgentCard({ api, endpoint, onChange }: { api: Api; endpo
   }
 
   async function revoke() {
-    if (!confirm(`Revoke the agent on ${endpoint.name}? It is disconnected at once and has to be enrolled again with a new join command.`)) return;
+    if (!(await confirm({ title: `Revoke the agent on ${endpoint.name}?`, message: "It is disconnected at once and has to be enrolled again with a new join command.", confirmLabel: "Revoke" }))) return;
     setBusy("revoke");
     setError("");
     const res = await api(`/api/endpoints/${endpoint.id}/agent`, { body: { action: "revoke" } });
@@ -75,7 +77,7 @@ export default function AgentCard({ api, endpoint, onChange }: { api: Api; endpo
         </div>
       </div>
       {m && (
-        <div className="grid grid-cols-3 gap-4 mt-4">
+        <div className="grid sm:grid-cols-3 gap-4 mt-4">
           <Meter label="CPU load" used={m.load1} total={m.cpus || 1} detail={`${m.load1.toFixed(2)} on ${m.cpus} CPU`} />
           <Meter label="Memory" used={m.memTotal - m.memAvailable} total={m.memTotal} detail={`${formatBytes(m.memTotal - m.memAvailable)} of ${formatBytes(m.memTotal)}`} />
           <Meter label={`Disk ${m.diskPath}`} used={m.diskTotal - m.diskFree} total={m.diskTotal} detail={`${formatBytes(m.diskFree)} free`} />

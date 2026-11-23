@@ -9,5 +9,5 @@ export default async function HomePage() {
   // No machines connected yet: start the onboarding wizard
   if ((await prisma.endpoint.count()) === 0) redirect("/onboarding");
 
-  redirect("/dashboard");
+  redirect("/projects");
 }

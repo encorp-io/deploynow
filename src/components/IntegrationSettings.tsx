@@ -51,8 +51,8 @@ export function VaultSettings() {
         For production secrets: an app env var of kind &quot;vault&quot; holds <code>mount/path#field</code> (KV v2 or v1), read at each deploy. Vault keeps versions, rotation and the audit trail.
       </p>
       <div className="space-y-3">
-        <div className="grid grid-cols-3 gap-3">
-          <div className="col-span-2"><Field label="Address"><Input value={v.addr} onChange={(e) => set("addr", e.target.value)} placeholder="https://vault.example.com:8200" /></Field></div>
+        <div className="grid sm:grid-cols-3 gap-3">
+          <div className="sm:col-span-2"><Field label="Address"><Input value={v.addr} onChange={(e) => set("addr", e.target.value)} placeholder="https://vault.example.com:8200" /></Field></div>
           <Field label="Namespace (Enterprise/HCP)"><Input value={v.namespace} onChange={(e) => set("namespace", e.target.value)} placeholder="admin" /></Field>
         </div>
         <Field label="Login">
@@ -64,7 +64,7 @@ export function VaultSettings() {
         {v.auth === "token" ? (
           <Field label="Token"><Input type="password" value={v.token} onFocus={() => v.token === MASK && set("token", "")} onChange={(e) => set("token", e.target.value)} /></Field>
         ) : (
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid sm:grid-cols-2 gap-3">
             <Field label="Role ID"><Input value={v.roleId} onChange={(e) => set("roleId", e.target.value)} className="font-mono" /></Field>
             <Field label="Secret ID"><Input type="password" value={v.secretId} onFocus={() => v.secretId === MASK && set("secretId", "")} onChange={(e) => set("secretId", e.target.value)} /></Field>
           </div>
@@ -169,7 +169,7 @@ export function NotificationSettings() {
       </div>
       {form ? (
         <div className="space-y-3 mt-4 pt-4 border-t border-border">
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid sm:grid-cols-2 gap-3">
             <Field label="Name"><Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="#deploys" /></Field>
             <Field label="Type">
               <select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })} className={selectClass}>
@@ -182,7 +182,7 @@ export function NotificationSettings() {
             </Field>
           </div>
           {form.type === "email" ? (
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid sm:grid-cols-3 gap-3">
               <Field label="SMTP server"><Input value={form.host ?? ""} onChange={(e) => setForm({ ...form, host: e.target.value })} placeholder="smtp.example.com" /></Field>
               <Field label="Security">
                 <select value={form.security ?? "starttls"} onChange={(e) => setForm({ ...form, security: e.target.value, port: e.target.value === "tls" ? "465" : e.target.value === "none" ? "25" : "587" })} className={selectClass}>
@@ -195,10 +195,10 @@ export function NotificationSettings() {
               <Field label="User name"><Input value={form.user ?? ""} onChange={(e) => setForm({ ...form, user: e.target.value })} autoComplete="off" /></Field>
               <Field label="Password"><Input type="password" value={form.pass ?? ""} onChange={(e) => setForm({ ...form, pass: e.target.value })} autoComplete="new-password" /></Field>
               <Field label="From"><Input value={form.from ?? ""} onChange={(e) => setForm({ ...form, from: e.target.value })} placeholder="DeployNow <ops@example.com>" /></Field>
-              <div className="col-span-3"><Field label="To (comma-separated)"><Input value={form.to ?? ""} onChange={(e) => setForm({ ...form, to: e.target.value })} placeholder="oncall@example.com, ops@example.com" /></Field></div>
+              <div className="sm:col-span-3"><Field label="To (comma-separated)"><Input value={form.to ?? ""} onChange={(e) => setForm({ ...form, to: e.target.value })} placeholder="oncall@example.com, ops@example.com" /></Field></div>
             </div>
           ) : form.type === "telegram" ? (
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid sm:grid-cols-2 gap-3">
               <Field label="Bot token"><Input type="password" value={form.botToken} onChange={(e) => setForm({ ...form, botToken: e.target.value })} /></Field>
               <Field label="Chat id"><Input value={form.chatId} onChange={(e) => setForm({ ...form, chatId: e.target.value })} placeholder="-1001234567890" /></Field>
             </div>

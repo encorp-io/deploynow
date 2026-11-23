@@ -5,7 +5,7 @@ import Link from "next/link";
 import { Plus, Server, RefreshCw, Cpu, MemoryStick, Boxes } from "lucide-react";
 import { useApi } from "@/components/AppShell";
 import EndpointForm, { type EndpointView } from "@/components/EndpointForm";
-import { Badge, Button, Card, Modal, PageHeader, formatBytes, stateTone, timeAgo } from "@/components/ui";
+import { Badge, Button, Card, Modal, PageHeader, formatBytes, stateTone, timeAgo, Skeleton } from "@/components/ui";
 
 const TYPE_LABEL = { socket: "Local socket", ssh: "SSH", tls: "TLS API", agent: "Agent" } as const;
 
@@ -32,10 +32,10 @@ export default function EndpointsPage() {
   }
 
   return (
-    <div>
+    <div className="max-w-6xl">
       <PageHeader
         title="Endpoints"
-        subtitle="The Docker machines this deployer manages"
+        subtitle="The Docker machines DeployNow manages: this server, and others over SSH, TLS or an agent"
         actions={
           <>
             <Button variant="secondary" loading={refreshing} onClick={refreshAll}>
@@ -49,7 +49,7 @@ export default function EndpointsPage() {
       />
 
       {endpoints === null ? (
-        <p className="text-sm text-text-muted">Loading…</p>
+        <div className="grid lg:grid-cols-2 gap-4" aria-busy="true"><Skeleton className="h-36" /><Skeleton className="h-36" /></div>
       ) : endpoints.length === 0 ? (
         <Card className="p-10 text-center">
           <Server className="w-10 h-10 text-text-muted mx-auto mb-3" />
@@ -72,7 +72,7 @@ export default function EndpointsPage() {
                   <Badge tone={stateTone(e.status)}>{e.status}</Badge>
                 </div>
                 {e.status === "online" ? (
-                  <div className="flex gap-5 mt-4 text-xs text-text-secondary">
+                  <div className="flex flex-wrap gap-x-5 gap-y-1 mt-4 text-xs text-text-secondary">
                     <span className="flex items-center gap-1.5"><Boxes className="w-3.5 h-3.5" /> {e.containers} containers</span>
                     <span className="flex items-center gap-1.5"><Cpu className="w-3.5 h-3.5" /> {e.cpus} CPU</span>
                     <span className="flex items-center gap-1.5"><MemoryStick className="w-3.5 h-3.5" /> {formatBytes(e.memoryBytes)}</span>

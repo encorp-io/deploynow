@@ -125,7 +125,7 @@ export default function EndpointForm({
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-4 gap-2">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
         {TYPES.filter((t) => !existing || (t.value === "agent") === (existing.type === "agent")).map((t) => {
           const Icon = t.icon;
           return (
@@ -149,7 +149,7 @@ export default function EndpointForm({
       </div>
       <p className="text-xs text-text-muted">{typeInfo.hint}</p>
 
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid sm:grid-cols-2 gap-3">
         <Field label="Name">
           <Input value={form.name} onChange={set("name")} placeholder="prod-1" />
         </Field>

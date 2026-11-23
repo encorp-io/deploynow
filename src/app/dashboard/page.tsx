@@ -164,16 +164,16 @@ export default function DashboardPage() {
   }
 
   return (
-    <div>
+    <div className="max-w-6xl">
       {/* Header */}
-      <div className="flex items-center justify-between mb-8">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-8">
         <div>
-          <h1 className="text-2xl font-bold text-text-primary">Dashboard</h1>
+          <h1 className="text-2xl font-bold text-text-primary">Image updates</h1>
           <p className="text-sm text-text-muted mt-1">
-            Monitor and manage your Docker deployments
+            Every running container, and whether its registry has a newer image
           </p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center flex-wrap gap-3">
           <button
             onClick={handleCheck}
             disabled={checking}
@@ -184,7 +184,7 @@ export default function DashboardPage() {
             ) : (
               <Activity className="w-4 h-4" />
             )}
-            Check Updates
+            Check for updates
           </button>
           <button
             onClick={handleSync}
@@ -202,7 +202,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-4 gap-4 mb-8">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
         {stats.map((stat) => {
           const Icon = stat.icon;
           return (
@@ -223,9 +223,9 @@ export default function DashboardPage() {
       </div>
 
       {/* Main content */}
-      <div className="grid grid-cols-3 gap-8">
+      <div className="grid lg:grid-cols-3 gap-8">
         {/* Services grid */}
-        <div className="col-span-2">
+        <div className="lg:col-span-2 min-w-0">
           <h2 className="text-sm font-semibold text-text-secondary uppercase tracking-wider mb-4">
             Services
           </h2>
@@ -233,7 +233,7 @@ export default function DashboardPage() {
             <div className="bg-bg-card border border-border rounded-xl p-12 text-center">
               <Box className="w-12 h-12 text-text-muted mx-auto mb-4" />
               <h3 className="text-lg font-semibold text-text-primary mb-2">
-                No services found
+                No containers found
               </h3>
               <p className="text-sm text-text-muted mb-6">
                 Add an endpoint under Endpoints, then click
@@ -243,11 +243,11 @@ export default function DashboardPage() {
                 onClick={handleSync}
                 className="px-4 py-2 bg-accent hover:bg-accent-hover text-white rounded-lg text-sm font-medium transition-colors"
               >
-                Sync Now
+                Sync now
               </button>
             </div>
           ) : (
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid md:grid-cols-2 gap-4">
               {services.map((service) => (
                 <ServiceCard
                   key={service.id}
@@ -263,7 +263,7 @@ export default function DashboardPage() {
         {/* Activity feed */}
         <div>
           <h2 className="text-sm font-semibold text-text-secondary uppercase tracking-wider mb-4">
-            Recent Activity
+            Recent activity
           </h2>
           <div className="bg-bg-card border border-border rounded-xl p-3 max-h-[600px] overflow-y-auto">
             <ActivityFeed logs={logs} />
