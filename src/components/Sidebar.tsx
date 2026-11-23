@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { BrandLockup } from "./Brand";
 import ThemeToggle from "./ThemeToggle";
+import { VERSION } from "@/lib/version";
 
 type Role = "viewer" | "operator" | "admin" | "owner";
 const RANK: Record<Role, number> = { viewer: 0, operator: 1, admin: 2, owner: 3 };
@@ -146,6 +147,14 @@ export default function Sidebar({ me, onSignOut, onNavigate }: { me: Me | null; 
           </button>
         </div>
         <ThemeToggle />
+        <a
+          href="https://github.com/encorp-io/deploynow/releases"
+          target="_blank"
+          rel="noreferrer"
+          className="block px-2 pt-1 text-[11px] text-text-muted hover:text-text-secondary transition-colors"
+        >
+          DeployNow v{VERSION}
+        </a>
       </div>
     </div>
   );

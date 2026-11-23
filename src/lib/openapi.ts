@@ -22,6 +22,7 @@ const ID = "{id}";
 
 export const OPERATIONS: Op[] = [
   // Endpoints
+  { method: "get", path: "/health", summary: "Liveness: the version and whether the database answers", tag: "System", access: "public" },
   { method: "get", path: "/endpoints", summary: "List endpoints", tag: "Endpoints", access: "viewer" },
   { method: "post", path: "/endpoints", summary: "Add an endpoint (socket, ssh, tls or agent; agent returns a join command)", tag: "Endpoints", access: "admin", body: { name: "string", type: "socket | ssh | tls | agent", host: "string", port: "number", username: "string", privateKey: "string", labels: "string" } },
   { method: "post", path: "/endpoints/test", summary: "Test a connection before saving it", tag: "Endpoints", access: "admin" },

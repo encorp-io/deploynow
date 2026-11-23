@@ -11,6 +11,7 @@
  * the agent's local Docker socket, so dockerode, the console and the docker CLI
  * work exactly as they do for a local socket.
  */
+import { VERSION } from "../version";
 import crypto from "crypto";
 import fs from "fs";
 import https from "https";
@@ -87,12 +88,18 @@ export async function agentPublicUrl(): Promise<string> {
   return s?.agentPublicUrl || defaultAgentUrl();
 }
 
+/** The agent image built from the same release as this server; `edge` for builds of main. */
+export function defaultAgentImage(version = VERSION): string {
+  const tag = /^\d+\.\d+\.\d+(-[\w.]+)?$/.test(version) ? version : "edge";
+  return `ghcr.io/encorp-io/deploynow-agent:${tag}`;
+}
+
 export async function joinInfo(endpointId: string) {
   const pki = await ensureHubPki();
   const { token, expiresAt } = await createJoinToken(endpointId);
   const url = await agentPublicUrl();
   const ca = certFingerprint(pki.caCert);
-  const image = process.env.AGENT_IMAGE || "ghcr.io/encorp-io/deploynow-agent:latest";
+  const image = process.env.AGENT_IMAGE || defaultAgentImage();
   const command = [
     "docker run -d --name deploynow-agent --restart unless-stopped",
     "  -v /var/run/docker.sock:/var/run/docker.sock",

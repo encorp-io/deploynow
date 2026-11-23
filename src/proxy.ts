@@ -77,7 +77,7 @@ export default auth((req: NextRequest & { auth: unknown }) => {
 
   // The OpenAPI description, SSO callbacks and passkey sign-in are public
   // …and so is the platform domain probe (Settings → Domain checks the domain reaches this instance)
-  if (pathname === "/api/openapi.json" || pathname.startsWith("/api/sso/") || pathname.startsWith("/api/passkeys/login") || (pathname === "/api/platform-domain/probe" && method === "GET")) {
+  if (pathname === "/api/health" || pathname === "/api/openapi.json" || pathname.startsWith("/api/sso/") || pathname.startsWith("/api/passkeys/login") || (pathname === "/api/platform-domain/probe" && method === "GET")) {
     return NextResponse.next();
   }
 

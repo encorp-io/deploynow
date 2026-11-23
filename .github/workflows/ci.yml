@@ -5,6 +5,7 @@ on:
     branches: ["**"]
   pull_request:
     branches: [main, master]
+  workflow_call: # the release workflow runs CI before it publishes
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -30,6 +31,15 @@ jobs:
 
       - name: Type check
         run: npx tsc --noEmit
+
+      # schema.prisma and prisma/migrations must agree, or upgrades would miss a change.
+      # Add a migration with: npm run db:migration -- --name <what-changed>
+      - name: Migrations match the schema
+        env:
+          DATABASE_URL: file:/tmp/migrations-check.db
+        run: |
+          npx prisma migrate deploy
+          npx prisma migrate diff --from-url "$DATABASE_URL" --to-schema-datamodel prisma/schema.prisma --exit-code
 
   test:
     name: Test
@@ -100,8 +110,8 @@ jobs:
       - name: Generate Prisma client
         run: npx prisma generate
 
-      - name: Push schema to test DB
-        run: npx prisma db push --skip-generate
+      - name: Migrate the test DB
+        run: npx prisma migrate deploy
 
       - name: Next.js build
         run: npx next build

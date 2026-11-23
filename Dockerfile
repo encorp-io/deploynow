@@ -21,11 +21,14 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
 ENV NEXT_TELEMETRY_DISABLED=1
+# The release tag (v2.1.0) or empty for package.json's version
+ARG DEPLOYNOW_VERSION=""
+ENV DEPLOYNOW_VERSION=${DEPLOYNOW_VERSION}
 # AUTH_SECRET must never be baked into the image — required at runtime only.
 # DATABASE_URL is only needed for prisma db push at build time.
 ENV DATABASE_URL="file:/tmp/build-dummy.db"
 
-RUN npx prisma generate && npx prisma db push --skip-generate
+RUN npx prisma generate && npx prisma migrate deploy
 RUN mkdir -p public
 RUN npx next build
 
@@ -91,5 +94,9 @@ VOLUME ["/data", "/certs"]
 EXPOSE 9444 8444
 
 USER nextjs
+
+# /api/health answers once the app and its database are up (Next.js on loopback :3001)
+HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
+  CMD node -e "fetch('http://127.0.0.1:3001/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
 
 ENTRYPOINT ["/app/docker-entrypoint.sh"]

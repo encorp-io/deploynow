@@ -10,10 +10,16 @@ import crypto from "crypto";
 const SALT = "encorp-deployer-secrets-v1";
 const ITERATIONS = 100_000;
 
+// PBKDF2 with 100k iterations takes tens of milliseconds and blocks the event
+// loop, so derive the key once per AUTH_SECRET instead of on every call (a deploy
+// with many secrets, the metrics sampler and every agent call decrypt often).
+let cachedKey: { secret: string; key: Buffer } | null = null;
+
 function deriveKey(): Buffer {
   const secret = process.env.AUTH_SECRET;
   if (!secret) throw new Error("AUTH_SECRET is not set");
-  return crypto.pbkdf2Sync(secret, SALT, ITERATIONS, 32, "sha256");
+  if (cachedKey?.secret !== secret) cachedKey = { secret, key: crypto.pbkdf2Sync(secret, SALT, ITERATIONS, 32, "sha256") };
+  return cachedKey.key;
 }
 
 export function encryptSecret(plaintext: string): string {

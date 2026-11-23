@@ -1,16 +1,17 @@
 {
-  "name": "encorp-deployer",
-  "version": "1.0.0",
+  "name": "deploynow",
+  "version": "2.0.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "npx prisma generate && npx prisma db push && next build",
+    "build": "npx prisma generate && node prisma/migrate.cjs && next build",
     "start": "next start",
     "postinstall": "prisma generate",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "test:watch": "vitest",
-    "db:push": "prisma db push",
+    "db:migrate": "node prisma/migrate.cjs",
+    "db:migration": "prisma migrate dev --create-only",
     "db:seed": "tsx prisma/seed.ts"
   },
   "dependencies": {

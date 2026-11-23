@@ -144,7 +144,7 @@ deploynow api GET /endpoints
 | `DEPLOYNOW_DATA_DIR` | No | the database's folder | Deploy logs, build checkouts and backup staging |
 | `AGENT_PORT` | No | `8444` | Port agents connect to; `off` disables it |
 | `AGENT_PUBLIC_URL` | No | the platform domain's or `NEXTAUTH_URL`'s host on `AGENT_PORT` | Address agents dial. Can also be set under Settings |
-| `AGENT_IMAGE` | No | `ghcr.io/encorp-io/deploynow-agent:latest` | Agent image in the join command |
+| `AGENT_IMAGE` | No | `ghcr.io/encorp-io/deploynow-agent:<this version>` | Agent image in the join command |
 | `RESTIC_IMAGE` | No | `restic/restic:0.18.1` | restic image used for backups on endpoints |
 | `DEPLOYNOW_MCP` | No | `on` | `off` turns off the MCP server and OAuth for AI apps |
 | `BACKUP_PARALLEL` | No | `2` | Backups that run at the same time |
@@ -193,7 +193,7 @@ brand/          logo, icons, colours and type (see brand/README.md)
 ```bash
 npm install
 cp .env.example .env        # set AUTH_SECRET
-npx prisma db push
+npm run db:migrate         # creates or upgrades the SQLite database
 ADMIN_PASSWORD=dev-password-123 npx prisma db seed   # creates admin@encorp.io
 npm run dev                 # http://localhost:3000
 npm test                    # unit and API tests; integration tests run when Docker is available
