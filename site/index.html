@@ -1,0 +1,378 @@
+<!doctype html>
+<html lang="en" class="no-js">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DeployNow by encorp.ai | Self-hosted deploys for every Docker machine</title>
+<meta name="description" content="DeployNow is a self-hosted control plane for your Docker machines. Deploy apps, manage containers, add domains with SSL, keep secrets encrypted and back up data, from one place. Replaces Portainer and Dokploy.">
+<meta name="theme-color" content="#05070d">
+<meta property="og:title" content="DeployNow by encorp.ai">
+<meta property="og:description" content="Ship to every Docker machine you own. One self-hosted app for containers, deploys, domains, secrets and backups.">
+<meta property="og:type" content="website">
+<meta property="og:image" content="https://encorp-io.github.io/deploynow/assets/og.png">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="icon" href="assets/favicon.ico" sizes="any">
+<link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@300..700&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<div class="bg" aria-hidden="true">
+  <div class="bg-grid"></div>
+  <div class="bg-aurora a1"></div>
+  <div class="bg-aurora a2"></div>
+  <div class="bg-aurora a3"></div>
+</div>
+
+<header class="nav" id="top">
+  <div class="wrap nav-inner">
+    <a class="brand" href="#top" aria-label="DeployNow home">
+      <img src="assets/deploynow-mark.svg" alt="" width="30" height="30">
+      <span class="brand-name">DeployNow</span>
+      <span class="brand-by">by <img src="assets/encorp-logo-white.svg" alt="encorp.ai" height="13"></span>
+    </a>
+    <nav class="nav-links" aria-label="Sections">
+      <a href="#features">Features</a>
+      <a href="#how">How it works</a>
+      <a href="#backups">Backups</a>
+      <a href="#security">Security</a>
+      <a href="#start">Quick start</a>
+    </nav>
+    <div class="nav-cta">
+      <a class="btn btn-ghost btn-sm" href="https://github.com/encorp-io/deploynow">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+        GitHub
+      </a>
+      <a class="btn btn-primary btn-sm" href="#start">Get started</a>
+    </div>
+  </div>
+</header>
+
+<main>
+
+<!-- ============ HERO ============ -->
+<section class="hero">
+  <div class="wrap">
+    <a class="pill reveal" href="#features">
+      <span class="pill-dot"></span>
+      DeployNow 2.0 · Replaces Portainer and Dokploy
+      <span class="pill-arrow">→</span>
+    </a>
+    <h1 class="hero-title reveal">Ship to every Docker<br>machine <span class="grad">you own.</span></h1>
+    <p class="hero-sub reveal">One self-hosted control plane for containers, deploys, domains, secrets and backups. Connect machines anywhere, even behind NAT, and run them all from one calm, fast dashboard.</p>
+    <div class="hero-cta reveal">
+      <a class="btn btn-primary btn-lg" href="#start">Deploy in 5 minutes</a>
+      <a class="btn btn-ghost btn-lg" href="#features">Explore features</a>
+    </div>
+    <ul class="hero-meta reveal">
+      <li><span class="tick"></span>Single container</li>
+      <li><span class="tick"></span>Embedded SQLite</li>
+      <li><span class="tick"></span>Machines behind NAT</li>
+    </ul>
+
+    <!-- Product window -->
+    <div class="window reveal" role="img" aria-label="DeployNow dashboard preview showing machines, apps and a live deployment log">
+      <div class="window-glow"></div>
+      <div class="window-bar">
+        <span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
+        <div class="window-url">deploynow.yourcompany.com</div>
+      </div>
+      <div class="app">
+        <aside class="app-side">
+          <div class="app-brand"><img src="assets/deploynow-mark.svg" alt="" width="20" height="20"> DeployNow</div>
+          <div class="side-group">Workspace</div>
+          <div class="side-item active"><i class="ic ic-grid"></i>Overview</div>
+          <div class="side-item"><i class="ic ic-box"></i>Projects</div>
+          <div class="side-item"><i class="ic ic-server"></i>Machines</div>
+          <div class="side-item"><i class="ic ic-globe"></i>Domains</div>
+          <div class="side-item"><i class="ic ic-shield"></i>Backups</div>
+          <div class="side-item"><i class="ic ic-pulse"></i>Monitoring</div>
+          <div class="side-foot">by <b>encorp.ai</b></div>
+        </aside>
+        <div class="app-main">
+          <div class="app-head">
+            <div>
+              <div class="crumbs">shop / production</div>
+              <div class="app-title">web <span class="badge ok">Running</span></div>
+            </div>
+            <div class="app-actions">
+              <span class="chip">ghcr.io/acme/web:1.42</span>
+              <span class="mini-btn">Deploy</span>
+            </div>
+          </div>
+          <div class="stats">
+            <div class="stat"><div class="stat-k">Machines</div><div class="stat-v">12<small>/12 online</small></div><svg class="spark" viewBox="0 0 100 28" preserveAspectRatio="none"><path d="M0 20 L12 18 L24 19 L36 14 L48 15 L60 10 L72 12 L84 7 L100 8"/></svg></div>
+            <div class="stat"><div class="stat-k">Apps</div><div class="stat-v">48<small>3 previews</small></div><svg class="spark" viewBox="0 0 100 28" preserveAspectRatio="none"><path d="M0 22 L14 21 L28 17 L42 18 L56 13 L70 14 L84 9 L100 6"/></svg></div>
+            <div class="stat"><div class="stat-k">CPU</div><div class="stat-v">31<small>%</small></div><svg class="spark" viewBox="0 0 100 28" preserveAspectRatio="none"><path d="M0 14 L10 18 L20 11 L30 16 L40 9 L50 15 L60 12 L70 17 L80 10 L90 14 L100 12"/></svg></div>
+            <div class="stat"><div class="stat-k">Last backup</div><div class="stat-v">4<small>min ago</small></div><svg class="spark" viewBox="0 0 100 28" preserveAspectRatio="none"><path d="M0 16 L20 16 L20 8 L40 8 L40 16 L60 16 L60 8 L80 8 L80 16 L100 16"/></svg></div>
+          </div>
+          <div class="panes">
+            <div class="pane log">
+              <div class="pane-h"><span>Deployment #318</span><span class="live"><i></i>live</span></div>
+              <pre class="log-body" id="log"></pre>
+            </div>
+            <div class="pane machines">
+              <div class="pane-h"><span>Machines</span><span class="muted">3 regions</span></div>
+              <ul class="mlist">
+                <li><span class="sd on"></span>fra-1<small>agent · mTLS</small><b>42%</b></li>
+                <li><span class="sd on"></span>ams-edge<small>SSH</small><b>18%</b></li>
+                <li><span class="sd on"></span>office-nas<small>agent · NAT</small><b>9%</b></li>
+                <li><span class="sd on"></span>build-01<small>build server</small><b>67%</b></li>
+                <li><span class="sd warn"></span>lab-pi<small>agent</small><b>88%</b></li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ SOURCES STRIP ============ -->
+<section class="strip">
+  <div class="wrap">
+    <p class="strip-label">Deploy from what you already use</p>
+    <div class="strip-row">
+      <span>GHCR</span><span>Docker Hub</span><span>Dockerfile in Git</span><span>Docker Compose</span><span>GitHub webhooks</span><span>Traefik</span><span>Let's Encrypt</span><span>HashiCorp Vault</span><span>Prometheus</span><span>Grafana</span>
+    </div>
+  </div>
+</section>
+
+<!-- ============ FEATURES ============ -->
+<section class="section" id="features">
+  <div class="wrap">
+    <div class="eyebrow reveal">Everything in one place</div>
+    <h2 class="h2 reveal">Two tools became one.<br><span class="dim">Then we kept going.</span></h2>
+    <p class="lede reveal">Container management, app deploys, edge routing, secrets, backups and monitoring share one data model, one permission system and one audit log.</p>
+
+    <div class="bento">
+      <article class="card c-wide reveal">
+        <div class="card-ic"><i class="ic ic-server"></i></div>
+        <h3>Every machine, one dashboard</h3>
+        <p>The local Docker socket, machines over SSH or TLS, and machines behind NAT through a tiny outbound agent. Mutual TLS, no open ports.</p>
+        <div class="topo" aria-hidden="true">
+          <svg viewBox="0 0 520 150" fill="none">
+            <defs>
+              <linearGradient id="ln" x1="0" x2="1"><stop stop-color="#5FCEF9" stop-opacity=".1"/><stop offset=".5" stop-color="#1D9CFF"/><stop offset="1" stop-color="#5FCEF9" stop-opacity=".1"/></linearGradient>
+            </defs>
+            <path class="flow" d="M260 75 C 190 75, 150 25, 70 25" stroke="url(#ln)"/>
+            <path class="flow" d="M260 75 C 190 75, 150 125, 70 125" stroke="url(#ln)"/>
+            <path class="flow" d="M260 75 C 330 75, 370 25, 450 25" stroke="url(#ln)"/>
+            <path class="flow" d="M260 75 C 330 75, 370 125, 450 125" stroke="url(#ln)"/>
+            <g class="node"><rect x="20" y="10" width="100" height="30" rx="9"/><text x="70" y="29">fra-1 · agent</text></g>
+            <g class="node"><rect x="20" y="110" width="100" height="30" rx="9"/><text x="70" y="129">office · NAT</text></g>
+            <g class="node"><rect x="400" y="10" width="100" height="30" rx="9"/><text x="450" y="29">ams · SSH</text></g>
+            <g class="node"><rect x="400" y="110" width="100" height="30" rx="9"/><text x="450" y="129">build · TLS</text></g>
+            <g class="hub"><rect x="205" y="52" width="110" height="46" rx="14"/><image href="assets/deploynow-mark.svg" x="217" y="63" width="24" height="24"/><text x="282" y="80">DeployNow</text></g>
+          </svg>
+        </div>
+      </article>
+
+      <article class="card reveal">
+        <div class="card-ic"><i class="ic ic-rocket"></i></div>
+        <h3>Deploy anything</h3>
+        <p>An image from GHCR or Docker Hub, a Dockerfile or compose file in Git, or a pasted compose file. Zero-downtime replace and one-click rollback.</p>
+      </article>
+
+      <article class="card reveal">
+        <div class="card-ic"><i class="ic ic-branch"></i></div>
+        <h3>Push to deploy, with previews</h3>
+        <p>GitHub webhooks deploy on push. Every pull request gets its own preview at <code>pr-&lt;n&gt;.your.domain</code>.</p>
+      </article>
+
+      <article class="card reveal">
+        <div class="card-ic"><i class="ic ic-globe"></i></div>
+        <h3>Domains and SSL, handled</h3>
+        <p>Managed Traefik with Let's Encrypt over HTTP or Cloudflare DNS. Redirects and password protection per domain.</p>
+      </article>
+
+      <article class="card reveal">
+        <div class="card-ic"><i class="ic ic-key"></i></div>
+        <h3>Secrets that stay secret</h3>
+        <p>Encrypted at rest, masked in the UI and in logs. Point to HashiCorp Vault paths when production needs it.</p>
+        <div class="secret" aria-hidden="true">
+          <span>DATABASE_URL</span><span class="mask">••••••••••••••</span><span class="lock">vault</span>
+        </div>
+      </article>
+
+      <article class="card c-wide reveal">
+        <div class="card-ic"><i class="ic ic-pulse"></i></div>
+        <h3>See everything, get told early</h3>
+        <p>Live logs, stats and an in-browser console for every container. Usage history per app, Prometheus metrics with a ready Grafana dashboard, and alerts for disk, memory, crash loops and failed jobs to Slack, Discord, Telegram, email or a signed webhook.</p>
+        <div class="chart" aria-hidden="true">
+          <svg viewBox="0 0 520 110" preserveAspectRatio="none">
+            <defs><linearGradient id="area" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#1D9CFF" stop-opacity=".35"/><stop offset="1" stop-color="#1D9CFF" stop-opacity="0"/></linearGradient></defs>
+            <path d="M0 80 C 40 70, 60 85, 100 66 S 170 40, 210 52 S 280 78, 320 46 S 400 30, 440 38 S 500 22, 520 26 L520 110 L0 110Z" fill="url(#area)"/>
+            <path class="line" d="M0 80 C 40 70, 60 85, 100 66 S 170 40, 210 52 S 280 78, 320 46 S 400 30, 440 38 S 500 22, 520 26" stroke="#5FCEF9" stroke-width="2" fill="none"/>
+            <path d="M0 96 C 60 92, 120 98, 180 90 S 300 94, 360 86 S 460 90, 520 84" stroke="#2E4FE0" stroke-opacity=".7" stroke-width="1.5" fill="none" stroke-dasharray="3 4"/>
+          </svg>
+        </div>
+      </article>
+
+      <article class="card reveal">
+        <div class="card-ic"><i class="ic ic-terminal"></i></div>
+        <h3>CLI and API first</h3>
+        <p>API tokens, an OpenAPI description and the <code>deploynow</code> CLI for CI pipelines and scripts.</p>
+      </article>
+    </div>
+  </div>
+</section>
+
+<!-- ============ HOW IT WORKS ============ -->
+<section class="section" id="how">
+  <div class="wrap">
+    <div class="eyebrow reveal">How it works</div>
+    <h2 class="h2 reveal">From a bare server to production<br><span class="dim">in three steps.</span></h2>
+    <ol class="steps">
+      <li class="step reveal">
+        <span class="step-n">01</span>
+        <h3>Run one container</h3>
+        <p>Start DeployNow with Docker Compose. It brings its own database and manages the machine it runs on right away.</p>
+        <div class="code-mini"><span class="p">$</span> docker compose up -d</div>
+      </li>
+      <li class="step reveal">
+        <span class="step-n">02</span>
+        <h3>Connect your machines</h3>
+        <p>Add machines over SSH or TLS, or paste one <code>docker run</code> line to join a machine behind NAT through the agent.</p>
+        <div class="code-mini"><span class="p">$</span> docker run … deploynow-agent</div>
+      </li>
+      <li class="step reveal">
+        <span class="step-n">03</span>
+        <h3>Ship your apps</h3>
+        <p>Create a project, pick a source, add a domain and secrets, and deploy. Every rollout is logged and can be rolled back.</p>
+        <div class="code-mini"><span class="p">$</span> deploynow deploy shop/production/web</div>
+      </li>
+    </ol>
+  </div>
+</section>
+
+<!-- ============ BACKUPS ============ -->
+<section class="section split" id="backups">
+  <div class="wrap split-inner">
+    <div class="split-copy">
+      <div class="eyebrow reveal">Backups you can trust</div>
+      <h2 class="h2 reveal">Backups that prove<br><span class="grad">they restore.</span></h2>
+      <p class="lede reveal">Encrypted restic snapshots of volumes, folders, databases, whole apps and DeployNow itself, sent to Cloudflare R2, AWS S3, Backblaze B2 or any S3 service.</p>
+      <ul class="checks reveal">
+        <li>Postgres, MySQL and MariaDB, MongoDB and Redis, dumped consistently</li>
+        <li>Encrypted before upload, with a recovery kit you keep offline</li>
+        <li>Restore to the original place, a new volume or a new database</li>
+        <li>Monthly automatic restore drills, so you find out before you need it</li>
+      </ul>
+    </div>
+    <div class="timeline-card reveal" aria-hidden="true">
+      <div class="tl-h"><span>postgres · nightly</span><span class="badge ok">Healthy</span></div>
+      <ul class="tl">
+        <li><i class="ok"></i><div><b>Snapshot 3f9a2c</b><small>Today, 03:00 · 1.8 GB · R2</small></div><span>12s</span></li>
+        <li class="drill"><i class="drill"></i><div><b>Restore drill passed</b><small>Nov 1 · restored to scratch volume, checksums match</small></div><span>41s</span></li>
+        <li><i class="ok"></i><div><b>Snapshot a71d04</b><small>Yesterday, 03:00 · 1.8 GB · R2</small></div><span>11s</span></li>
+        <li><i class="ok"></i><div><b>Snapshot 0c5be8</b><small>Nov 21, 03:00 · 1.7 GB · R2</small></div><span>12s</span></li>
+        <li class="faded"><i class="ok"></i><div><b>Retention</b><small>7 daily · 4 weekly · 12 monthly</small></div><span></span></li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ============ SECURITY ============ -->
+<section class="section" id="security">
+  <div class="wrap">
+    <div class="eyebrow reveal">Security and access</div>
+    <h2 class="h2 reveal">Root on every machine<br><span class="dim">deserves serious locks.</span></h2>
+    <div class="sec-grid">
+      <div class="sec reveal"><i class="ic ic-finger"></i><h3>Passkeys and 2FA</h3><p>TOTP and WebAuthn passkeys. Admins must have one.</p></div>
+      <div class="sec reveal"><i class="ic ic-users"></i><h3>Single sign-on</h3><p>Google, Microsoft or any OpenID Connect provider.</p></div>
+      <div class="sec reveal"><i class="ic ic-layers"></i><h3>Fine-grained roles</h3><p>Viewer, operator, admin and owner, granted per machine and per project.</p></div>
+      <div class="sec reveal"><i class="ic ic-shield"></i><h3>Step-up for danger</h3><p>A fresh 2FA code before destructive actions. Sessions you can revoke.</p></div>
+      <div class="sec reveal"><i class="ic ic-list"></i><h3>Full audit log</h3><p>Who did what, where and when, for every change.</p></div>
+      <div class="sec reveal"><i class="ic ic-lock"></i><h3>mTLS agents</h3><p>Agents dial out over mutual TLS. Nothing listens on the remote machine.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ QUICK START ============ -->
+<section class="section" id="start">
+  <div class="wrap start">
+    <div class="start-copy">
+      <div class="eyebrow reveal">Quick start</div>
+      <h2 class="h2 reveal">Running in<br><span class="grad">five minutes.</span></h2>
+      <p class="lede reveal">You need a Linux machine with Docker. Then open <code>https://your-server:9444</code>, sign in, and set up a passkey.</p>
+      <div class="ports reveal">
+        <div><b>9444</b><span>Dashboard</span></div>
+        <div><b>8444</b><span>Agents (optional)</span></div>
+      </div>
+    </div>
+    <div class="term reveal">
+      <div class="term-bar">
+        <span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
+        <span class="term-title">bash</span>
+        <button class="copy" type="button" data-copy="qs">Copy</button>
+      </div>
+<pre id="qs"><span class="c"># 1. Get DeployNow</span>
+git clone https://github.com/encorp-io/deploynow.git
+cd deploynow
+
+<span class="c"># 2. Configure</span>
+cat &gt; .env &lt;&lt;EOF
+AUTH_SECRET=$(openssl rand -base64 32)
+ADMIN_EMAIL=you@example.com
+ADMIN_PASSWORD=choose-a-long-password
+NEXTAUTH_URL=https://your-server:9444
+DOCKER_GID=$(stat -c %g /var/run/docker.sock)
+EOF
+
+<span class="c"># 3. Start</span>
+docker compose up -d</pre>
+    </div>
+  </div>
+</section>
+
+<!-- ============ CTA ============ -->
+<section class="cta">
+  <div class="wrap">
+    <div class="cta-card reveal">
+      <img src="assets/deploynow-mark.svg" alt="" width="64" height="64" class="cta-mark">
+      <h2>Own your deploys again.</h2>
+      <p>Self-hosted, private by default, and built to replace the tools you are juggling today.</p>
+      <div class="hero-cta">
+        <a class="btn btn-primary btn-lg" href="#start">Get started</a>
+        <a class="btn btn-ghost btn-lg" href="https://github.com/encorp-io/deploynow">Star on GitHub</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<footer class="foot">
+  <div class="wrap foot-inner">
+    <div class="foot-brand">
+      <a class="brand" href="#top">
+        <img src="assets/deploynow-mark.svg" alt="" width="26" height="26">
+        <span class="brand-name">DeployNow</span>
+      </a>
+      <p>Self-hosted control plane for your Docker machines.</p>
+      <a class="by" href="https://encorp.ai">
+        <span>A product by</span>
+        <img src="assets/encorp-logo-white.svg" alt="encorp.ai" height="20">
+      </a>
+    </div>
+    <div class="foot-cols">
+      <div><h4>Product</h4><a href="#features">Features</a><a href="#backups">Backups</a><a href="#security">Security</a><a href="#start">Quick start</a></div>
+      <div><h4>Developers</h4><a href="https://github.com/encorp-io/deploynow">GitHub</a><a href="https://github.com/encorp-io/deploynow/blob/main/docs/v2.md">Documentation</a><a href="https://github.com/encorp-io/deploynow/blob/main/docs/backups.md">Backup guide</a><a href="https://github.com/encorp-io/deploynow/releases">Releases</a></div>
+      <div><h4>Company</h4><a href="https://encorp.ai">encorp.ai</a><a href="https://github.com/encorp-io/deploynow/issues">Support</a></div>
+    </div>
+  </div>
+  <div class="wrap foot-base">
+    <span>© 2026 encorp.ai. All rights reserved.</span>
+    <span>Made for people who run their own servers.</span>
+  </div>
+</footer>
+
+<script>document.documentElement.classList.remove("no-js")</script>
+<script src="main.js" defer></script>
+</body>
+</html>
