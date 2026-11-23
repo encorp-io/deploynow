@@ -11,6 +11,13 @@ import { prisma } from "./prisma";
 import { can, normalizeRole, type Binding, type Permission, type Role } from "./rbac";
 import { hasRecentStepUp } from "./sessions";
 import { bearerToken, lowerRole, resolveToken } from "./apiTokens";
+import { ACCESS_RE, resolveAccessToken } from "./oauth/server";
+
+/** The OAuth access token from an Authorization header, if it looks like one. */
+export function oauthBearer(header: string | null | undefined): string | null {
+  const m = /^Bearer\s+(\S+)$/i.exec((header ?? "").trim());
+  return m && ACCESS_RE.test(m[1]) ? m[1] : null;
+}
 
 export interface CurrentUser {
   id: string;
@@ -21,8 +28,10 @@ export interface CurrentUser {
   bindings: Binding[];
   totpEnabled: boolean;
   stepUpAt: Date | null;
-  /** Set when the request is authenticated with an API token rather than a session */
+  /** Set when the request is authenticated with an API token or an OAuth connection rather than a session */
   tokenId?: string;
+  /** Set for an OAuth connection (an AI app through /mcp): its grant and app name */
+  oauth?: { grantId: string; clientName: string; resource: string };
 }
 
 async function headerValue(name: string): Promise<string | null> {
@@ -34,11 +43,30 @@ async function headerValue(name: string): Promise<string | null> {
   }
 }
 
-/** A request with "Authorization: Bearer dn_…": the token's user, capped at the token's scope. */
+/** A request with "Authorization: Bearer dn_…" or an OAuth access token "dno_…": its user, capped at the token's scope. */
 async function tokenUser(): Promise<CurrentUser | null | undefined> {
-  const token = bearerToken(await headerValue("authorization"));
+  const header = await headerValue("authorization");
+  const fwd = (await headerValue("x-real-ip"))?.trim() || (await headerValue("x-forwarded-for"))?.split(",")[0]?.trim() || "";
+  const oauth = oauthBearer(header);
+  if (oauth) {
+    const c = await resolveAccessToken(oauth, fwd);
+    if (!c) return null;
+    const cap = normalizeRole(c.grant.role);
+    return {
+      id: c.user.id,
+      email: c.user.email,
+      name: c.user.name,
+      role: c.role,
+      sid: `oauth:${c.grant.id}`,
+      bindings: c.user.roleBindings.map((b) => ({ role: lowerRole(normalizeRole(b.role), cap), scopeType: b.scopeType, scopeId: b.scopeId })),
+      totpEnabled: !!c.user.totpEnabledAt,
+      stepUpAt: null,
+      tokenId: `oauth:${c.grant.id}`,
+      oauth: { grantId: c.grant.id, clientName: c.client.name, resource: c.resource },
+    };
+  }
+  const token = bearerToken(header);
   if (!token) return undefined;
-  const fwd = (await headerValue("x-forwarded-for"))?.split(",")[0]?.trim() ?? "";
   const row = await resolveToken(token, fwd);
   if (!row) return null;
   const cap = normalizeRole(row.scope);
@@ -98,6 +126,7 @@ export async function requireUser(
  */
 export function requireStepUp(user: CurrentUser): NextResponse | null {
   // Sensitive actions (deleting endpoints, restores, recovery kits…) need a person, not a token
+  if (user.oauth) return NextResponse.json({ error: "This action needs a person signed in to DeployNow; AI connections can't do it" }, { status: 403 });
   if (user.tokenId) return NextResponse.json({ error: "This action needs a signed-in session; API tokens can't do it" }, { status: 403 });
   if (!user.totpEnabled || hasRecentStepUp(user.stepUpAt)) return null;
   return NextResponse.json(

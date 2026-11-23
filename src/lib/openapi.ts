@@ -131,6 +131,17 @@ export const OPERATIONS: Op[] = [
   { method: "post", path: "/github/test", summary: "Test GitHub credentials", tag: "Admin", access: "admin" },
   { method: "get", path: "/onboarding", summary: "Onboarding status", tag: "Admin", access: "viewer" },
 
+  // AI connectors: OAuth 2.1 and the MCP endpoint (also served at /mcp and /.well-known/…)
+  { method: "get", path: "/oauth/metadata", summary: "OAuth authorization server metadata (RFC 8414), also at /.well-known/oauth-authorization-server", tag: "AI connectors", access: "public" },
+  { method: "get", path: "/oauth/resource-metadata", summary: "Protected resource metadata for /mcp (RFC 9728), also at /.well-known/oauth-protected-resource", tag: "AI connectors", access: "public" },
+  { method: "post", path: "/oauth/register", summary: "Register an OAuth client (RFC 7591)", tag: "AI connectors", access: "public" },
+  { method: "post", path: "/oauth/token", summary: "Exchange an authorization code (PKCE S256) or refresh token", tag: "AI connectors", access: "public" },
+  { method: "post", path: "/oauth/revoke", summary: "Revoke an OAuth token (RFC 7009)", tag: "AI connectors", access: "public" },
+  { method: "post", path: "/oauth/authorize", summary: "The consent screen's answer (allow or deny)", tag: "AI connectors", access: "session" },
+  { method: "post", path: "/mcp", summary: "MCP over Streamable HTTP (JSON-RPC), also at /mcp. Needs an OAuth access token or an API token", tag: "AI connectors", access: "viewer" },
+  { method: "get", path: "/mcp", summary: "Not used: this MCP server has no server-initiated stream (405)", tag: "AI connectors", access: "public" },
+  { method: "delete", path: "/mcp", summary: "Not used: this MCP server is stateless (405)", tag: "AI connectors", access: "public" },
+
   // Your account (signed-in people only)
   { method: "get", path: "/tokens", summary: "Your API tokens", tag: "Account", access: "session" },
   { method: "post", path: "/tokens", summary: "Create an API token (returned once)", tag: "Account", access: "session", body: { name: "string", scope: "viewer | operator | admin | owner", expiresInDays: "number" } },
@@ -148,6 +159,7 @@ const TAG_TEXT: Record<string, string> = {
   Admin: "Instance administration",
   Updates: "Image update tracking for unmanaged containers",
   Account: "Your API tokens (needs a signed-in session)",
+  "AI connectors": "OAuth 2.1 and the MCP server that Claude, ChatGPT and other AI apps connect to",
 };
 
 export function openApiDocument(serverUrl = "/api") {
@@ -156,7 +168,7 @@ export function openApiDocument(serverUrl = "/api") {
     const params = [...op.path.matchAll(/\{(\w+)\}/g)].map((m) => ({ name: m[1], in: "path", required: true, schema: { type: "string" } }));
     for (const [name, desc] of Object.entries(op.query ?? {})) params.push({ name, in: "query", required: false, schema: { type: "string" }, description: desc } as (typeof params)[number]);
     const access =
-      op.access === "public" ? "No authentication (verified by signature)." : op.access === "session" ? "Needs a signed-in session; API tokens are refused." : `Needs the ${op.access} role (or higher) and a token scope that allows it.`;
+      op.access === "public" ? (op.tag === "AI connectors" ? "No session needed; OAuth clients authenticate as the OAuth specs describe." : "No authentication (verified by signature).") : op.access === "session" ? "Needs a signed-in session; API tokens are refused." : `Needs the ${op.access} role (or higher) and a token scope that allows it.`;
     paths[op.path] ??= {};
     paths[op.path][op.method] = {
       tags: [op.tag],

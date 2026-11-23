@@ -16,6 +16,18 @@ const SSO_ERRORS: Record<string, string> = {
 const inputClass =
   "w-full px-3 py-2.5 bg-bg-card border border-border rounded-lg text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent/30 transition-colors";
 
+/** Where to go after signing in: a same-site path from ?next= (kept across SSO round trips), else the dashboard. */
+function afterLogin(): string {
+  let next = "";
+  try {
+    next = new URLSearchParams(window.location.search).get("next") || sessionStorage.getItem("dn_next") || "";
+    sessionStorage.removeItem("dn_next");
+  } catch {
+    /* storage blocked */
+  }
+  return next.startsWith("/") && !next.startsWith("//") && !next.startsWith("/\\") ? next : "/";
+}
+
 export default function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState("");
@@ -37,6 +49,11 @@ export default function LoginPage() {
     fetch("/api/sso/login").then((r) => (r.ok ? r.json() : [])).then(setProviders).catch(() => {});
     setPasskeySupported(typeof window !== "undefined" && !!window.PublicKeyCredential && window.isSecureContext);
     const q = new URLSearchParams(window.location.search);
+    try {
+      if (q.get("next")) sessionStorage.setItem("dn_next", q.get("next")!);
+    } catch {
+      /* storage blocked */
+    }
     const err = q.get("error");
     if (err) setError(q.get("message") || SSO_ERRORS[err] || "Sign-in failed.");
     const t = q.get("ticket");
@@ -47,7 +64,7 @@ export default function LoginPage() {
       exchangeTicket(t).then((result) => {
         setLoading(false);
         if (!result?.error) {
-          router.push("/");
+          router.push(afterLogin());
         } else if (result.code === "2fa_required") {
           setNeedsCode(true);
         } else {
@@ -71,7 +88,7 @@ export default function LoginPage() {
       if (!res.ok) throw new Error(data.error || "Passkey sign-in failed");
       const result = await exchangeTicket(data.ticket);
       if (result?.error) throw new Error("Passkey sign-in failed");
-      router.push("/");
+      router.push(afterLogin());
     } catch (err) {
       setLoading(false);
       const msg = (err as Error).message || "";
@@ -94,7 +111,7 @@ export default function LoginPage() {
         });
 
     if (!result?.error) {
-      router.push("/");
+      router.push(afterLogin());
       return;
     }
 
