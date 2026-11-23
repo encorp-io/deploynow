@@ -34,6 +34,7 @@ model User {
   passkeys      Passkey[]
   identities    UserIdentity[]
   registries    Registry[]
+  oauthGrants   OAuthGrant[]
 }
 
 model RecoveryCode {
@@ -153,6 +154,8 @@ model Endpoint {
   backupPolicies BackupPolicy[]
   scheduledTasks ScheduledTask[]
   metricSamples  MetricSample[]
+  containerSamples ContainerSample[]
+  containerUsage   ContainerUsageHourly[]
 }
 
 // ─── Settings ─────────────────────────────────────────────────────────────────
@@ -179,6 +182,9 @@ model Settings {
   agentServerCert     String  @default("")
   agentServerKey      String  @default("") // encrypted
   agentPublicUrl      String  @default("") // what agents dial, e.g. https://deploynow.example.com:8444
+  // The domain DeployNow's own UI is served on through the local endpoint's Traefik
+  // (e.g. deploy.example.com). Only set after the domain answered with a valid certificate.
+  platformDomain      String  @default("")
   // Alerts
   alertDiskPercent    Int     @default(90) // alert when a host disk is this full
   alertMemPercent     Int     @default(95)
@@ -518,6 +524,69 @@ model MetricSample {
   @@index([endpointId, at])
 }
 
+// Container resource usage, sampled every minute by the monitor. Raw samples are
+// kept about a day; hourly rollups (ContainerUsageHourly) keep the long view.
+// `key` identifies a series across redeploys: app:<appId>:<service> for app
+// containers (their names change with each deployment), name:<name> otherwise.
+model ContainerSample {
+  id              String   @id @default(cuid())
+  endpointId      String
+  endpoint        Endpoint @relation(fields: [endpointId], references: [id], onDelete: Cascade)
+  key             String
+  containerId     String
+  containerName   String
+  applicationId   String   @default("")
+  service         String   @default("")
+  at              DateTime @default(now())
+  // Over the interval since the previous sample (seconds = 0 on the first sample of a container)
+  seconds         Float    @default(0)
+  cpuPercent      Float    @default(0) // 100 = one full core
+  netRx           Float    @default(0) // bytes in the interval
+  netTx           Float    @default(0)
+  blkRead         Float    @default(0)
+  blkWrite        Float    @default(0)
+  // At the sample
+  memUsage        Float    @default(0) // bytes, without page cache (like docker stats)
+  memLimit        Float    @default(0)
+  pids            Int      @default(0)
+  // Cumulative counters since the container started (for /api/metrics)
+  cpuSecondsTotal Float    @default(0)
+  netRxTotal      Float    @default(0)
+  netTxTotal      Float    @default(0)
+  blkReadTotal    Float    @default(0)
+  blkWriteTotal   Float    @default(0)
+
+  @@index([endpointId, key, at])
+  @@index([applicationId, at])
+  @@index([at])
+}
+
+model ContainerUsageHourly {
+  id            String   @id @default(cuid())
+  endpointId    String
+  endpoint      Endpoint @relation(fields: [endpointId], references: [id], onDelete: Cascade)
+  key           String
+  containerName String // latest name in the hour
+  applicationId String   @default("")
+  service       String   @default("")
+  hour          DateTime // start of the hour
+  samples       Int      @default(0)
+  seconds       Float    @default(0) // seconds covered by samples with rates
+  cpuAvg        Float    @default(0)
+  cpuMax        Float    @default(0)
+  memAvg        Float    @default(0)
+  memMax        Float    @default(0)
+  memLimit      Float    @default(0)
+  netRx         Float    @default(0) // bytes in the hour
+  netTx         Float    @default(0)
+  blkRead       Float    @default(0)
+  blkWrite      Float    @default(0)
+
+  @@unique([endpointId, key, hour])
+  @@index([applicationId, hour])
+  @@index([hour])
+}
+
 // An alert that is currently firing, so it is sent once and cleared when it recovers.
 model Alert {
   id         String    @id @default(cuid())
@@ -599,6 +668,7 @@ model Passkey {
   counter      Int       @default(0)
   transports   String    @default("") // comma-separated
   name         String    @default("Passkey")
+  rpId         String    @default("") // the host it was added on; it only works there ("" = added before this was recorded)
   createdAt    DateTime  @default(now())
   lastUsedAt   DateTime?
 }
@@ -682,4 +752,67 @@ model Registry {
   @@index([host])
   @@index([userId])
   @@index([projectId])
+}
+
+// ── AI connectors: OAuth 2.1 for the built-in MCP server ──────────────────────
+// Clients register themselves (RFC 7591). A person approves a client once on the
+// consent screen, which creates a grant; every code and token hangs off that
+// grant, so revoking it in Account ends the connection.
+model OAuthClient {
+  id              String       @id @default(cuid())
+  clientId        String       @unique // "dnc_…", what the client sends
+  secretHash      String       @default("") // sha256, for confidential clients only
+  name            String
+  redirectUris    String // JSON array, matched exactly
+  tokenAuthMethod String       @default("none") // none, client_secret_post, client_secret_basic
+  clientUri       String       @default("")
+  softwareId      String       @default("")
+  registeredIp    String       @default("")
+  createdAt       DateTime     @default(now())
+  grants          OAuthGrant[]
+}
+
+model OAuthGrant {
+  id         String       @id @default(cuid())
+  clientId   String
+  client     OAuthClient  @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  userId     String
+  user       User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role       String // highest role the connection acts with: viewer, operator, admin
+  createdAt  DateTime     @default(now())
+  lastUsedAt DateTime?
+  lastUsedIp String       @default("")
+  revokedAt  DateTime?
+  codes      OAuthCode[]
+  tokens     OAuthToken[]
+
+  @@index([userId])
+  @@index([clientId])
+}
+
+model OAuthCode {
+  id            String     @id @default(cuid())
+  hash          String     @unique // sha256 of the code
+  grantId       String
+  grant         OAuthGrant @relation(fields: [grantId], references: [id], onDelete: Cascade)
+  redirectUri   String
+  codeChallenge String // S256
+  resource      String
+  expiresAt     DateTime
+  usedAt        DateTime?
+  createdAt     DateTime   @default(now())
+}
+
+model OAuthToken {
+  id        String     @id @default(cuid())
+  hash      String     @unique // sha256 of the token
+  kind      String // access, refresh
+  grantId   String
+  grant     OAuthGrant @relation(fields: [grantId], references: [id], onDelete: Cascade)
+  resource  String
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime   @default(now())
+
+  @@index([grantId])
 }

@@ -39,6 +39,10 @@ services:
       # Set this to your server's actual URL, e.g. https://164.90.232.75:9444
       # If unset, auth and redirects derive the URL from the incoming request headers.
       NEXTAUTH_URL: ${NEXTAUTH_URL:-}
+      # A domain set under Settings → Domain (served through Traefik with Let's Encrypt)
+      # takes precedence. Port 9444 keeps working either way. To bypass a stored
+      # domain without the UI:
+      # IGNORE_PLATFORM_DOMAIN: "true"
 
       # Address agents dial (defaults to NEXTAUTH_URL's host on AGENT_PORT). Can also be set in Settings.
       # AGENT_PUBLIC_URL: https://deploynow.example.com:8444

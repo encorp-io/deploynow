@@ -31,6 +31,8 @@ export const OPERATIONS: Op[] = [
   { method: "post", path: `/endpoints/${ID}/refresh`, summary: "Refresh Docker info", tag: "Endpoints", access: "viewer" },
   { method: "post", path: `/endpoints/${ID}/agent`, summary: "Agent: new join command (action=join) or revoke (action=revoke)", tag: "Endpoints", access: "admin", body: { action: "join | revoke" } },
   { method: "get", path: `/endpoints/${ID}/metrics`, summary: "Host metric samples", tag: "Monitoring", access: "viewer", query: { hours: "1-168" } },
+  { method: "get", path: `/endpoints/${ID}/container-usage`, summary: "Resource usage summary of each container on the endpoint", tag: "Monitoring", access: "viewer", query: { range: "1h | 6h | 24h | 7d | 30d" } },
+  { method: "get", path: `/endpoints/${ID}/containers/{cid}/metrics`, summary: "CPU, memory, network and disk I/O history of a container", tag: "Monitoring", access: "viewer", query: { range: "1h | 6h | 24h | 7d | 30d" } },
   { method: "get", path: `/endpoints/${ID}/proxy`, summary: "Edge proxy status", tag: "Endpoints", access: "viewer" },
   { method: "post", path: `/endpoints/${ID}/proxy`, summary: "Install, adopt or remove the edge proxy", tag: "Endpoints", access: "admin" },
   { method: "post", path: `/endpoints/${ID}/prune`, summary: "Prune containers, images, volumes or networks", tag: "Docker", access: "admin", body: { kind: "containers | images | volumes | networks" } },
@@ -63,6 +65,7 @@ export const OPERATIONS: Op[] = [
   { method: "delete", path: `/apps/${ID}`, summary: "Delete an app and stop what it runs", tag: "Apps", access: "admin" },
   { method: "post", path: `/apps/${ID}/deploy`, summary: "Deploy (or redeploy) an app", tag: "Apps", access: "operator", body: { ref: "branch or commit (optional)" } },
   { method: "get", path: `/apps/${ID}/deployments`, summary: "List deployments", tag: "Apps", access: "viewer" },
+  { method: "get", path: `/apps/${ID}/metrics`, summary: "CPU, memory, network and disk I/O history of the app's containers", tag: "Apps", access: "viewer", query: { range: "1h | 6h | 24h | 7d | 30d" } },
   { method: "get", path: `/apps/${ID}/deployments/{depId}`, summary: "Get a deployment and its log", tag: "Apps", access: "operator", query: { offset: "log byte offset" } },
   { method: "post", path: `/apps/${ID}/deployments/{depId}`, summary: "Cancel, or roll back to this deployment", tag: "Apps", access: "operator", body: { action: "cancel | rollback" } },
   { method: "post", path: `/apps/${ID}/domains`, summary: "Add a domain (with optional redirect or basic auth)", tag: "Apps", access: "admin" },
@@ -99,6 +102,7 @@ export const OPERATIONS: Op[] = [
   { method: "post", path: `/tasks/${ID}`, summary: "Run a task now", tag: "Tasks", access: "operator" },
   { method: "delete", path: `/tasks/${ID}`, summary: "Remove a task", tag: "Tasks", access: "admin" },
   { method: "get", path: "/monitoring", summary: "Active and recent alerts, and host usage", tag: "Monitoring", access: "viewer" },
+  { method: "get", path: "/metrics", summary: "Prometheus metrics (text format) for hosts, containers, apps and alerts", tag: "Monitoring", access: "viewer" },
 
   // Registries
   { method: "get", path: "/registries", summary: "List your registry logins and the shared ones (masked); ?projectId= lists those an app in that project may use", tag: "Registries", access: "viewer" },
@@ -112,6 +116,9 @@ export const OPERATIONS: Op[] = [
   { method: "get", path: "/settings", summary: "Instance settings", tag: "Admin", access: "viewer" },
   { method: "put", path: "/settings", summary: "Update instance settings", tag: "Admin", access: "admin" },
   { method: "post", path: "/settings/vault", summary: "Test the Vault connection", tag: "Admin", access: "admin" },
+  { method: "get", path: "/settings/domain", summary: "Platform domain: the active domain, its Traefik route and the fallback address", tag: "Admin", access: "admin" },
+  { method: "post", path: "/settings/domain", summary: "Check a platform domain (DNS, route, certificate), or switch to it", tag: "Admin", access: "admin", body: { action: "check | activate", domain: "string", confirmPasskeys: "boolean", force: "boolean" } },
+  { method: "delete", path: "/settings/domain", summary: "Stop using the platform domain", tag: "Admin", access: "admin" },
   { method: "get", path: "/notifications", summary: "Notification channels", tag: "Admin", access: "admin" },
   { method: "post", path: "/notifications", summary: "Add a channel (slack, discord, telegram, webhook, email)", tag: "Admin", access: "admin" },
   { method: "patch", path: `/notifications/${ID}`, summary: "Update a channel", tag: "Admin", access: "admin" },
@@ -131,6 +138,17 @@ export const OPERATIONS: Op[] = [
   { method: "post", path: "/github/test", summary: "Test GitHub credentials", tag: "Admin", access: "admin" },
   { method: "get", path: "/onboarding", summary: "Onboarding status", tag: "Admin", access: "viewer" },
 
+  // AI connectors: OAuth 2.1 and the MCP endpoint (also served at /mcp and /.well-known/…)
+  { method: "get", path: "/oauth/metadata", summary: "OAuth authorization server metadata (RFC 8414), also at /.well-known/oauth-authorization-server", tag: "AI connectors", access: "public" },
+  { method: "get", path: "/oauth/resource-metadata", summary: "Protected resource metadata for /mcp (RFC 9728), also at /.well-known/oauth-protected-resource", tag: "AI connectors", access: "public" },
+  { method: "post", path: "/oauth/register", summary: "Register an OAuth client (RFC 7591)", tag: "AI connectors", access: "public" },
+  { method: "post", path: "/oauth/token", summary: "Exchange an authorization code (PKCE S256) or refresh token", tag: "AI connectors", access: "public" },
+  { method: "post", path: "/oauth/revoke", summary: "Revoke an OAuth token (RFC 7009)", tag: "AI connectors", access: "public" },
+  { method: "post", path: "/oauth/authorize", summary: "The consent screen's answer (allow or deny)", tag: "AI connectors", access: "session" },
+  { method: "post", path: "/mcp", summary: "MCP over Streamable HTTP (JSON-RPC), also at /mcp. Needs an OAuth access token or an API token", tag: "AI connectors", access: "viewer" },
+  { method: "get", path: "/mcp", summary: "Not used: this MCP server has no server-initiated stream (405)", tag: "AI connectors", access: "public" },
+  { method: "delete", path: "/mcp", summary: "Not used: this MCP server is stateless (405)", tag: "AI connectors", access: "public" },
+
   // Your account (signed-in people only)
   { method: "get", path: "/tokens", summary: "Your API tokens", tag: "Account", access: "session" },
   { method: "post", path: "/tokens", summary: "Create an API token (returned once)", tag: "Account", access: "session", body: { name: "string", scope: "viewer | operator | admin | owner", expiresInDays: "number" } },
@@ -148,6 +166,7 @@ const TAG_TEXT: Record<string, string> = {
   Admin: "Instance administration",
   Updates: "Image update tracking for unmanaged containers",
   Account: "Your API tokens (needs a signed-in session)",
+  "AI connectors": "OAuth 2.1 and the MCP server that Claude, ChatGPT and other AI apps connect to",
 };
 
 export function openApiDocument(serverUrl = "/api") {
@@ -156,7 +175,7 @@ export function openApiDocument(serverUrl = "/api") {
     const params = [...op.path.matchAll(/\{(\w+)\}/g)].map((m) => ({ name: m[1], in: "path", required: true, schema: { type: "string" } }));
     for (const [name, desc] of Object.entries(op.query ?? {})) params.push({ name, in: "query", required: false, schema: { type: "string" }, description: desc } as (typeof params)[number]);
     const access =
-      op.access === "public" ? "No authentication (verified by signature)." : op.access === "session" ? "Needs a signed-in session; API tokens are refused." : `Needs the ${op.access} role (or higher) and a token scope that allows it.`;
+      op.access === "public" ? (op.tag === "AI connectors" ? "No session needed; OAuth clients authenticate as the OAuth specs describe." : "No authentication (verified by signature).") : op.access === "session" ? "Needs a signed-in session; API tokens are refused." : `Needs the ${op.access} role (or higher) and a token scope that allows it.`;
     paths[op.path] ??= {};
     paths[op.path][op.method] = {
       tags: [op.tag],

@@ -10,6 +10,7 @@ import { Badge, Button, Card, ErrorText, Field, IconButton, Input, Modal, PageHe
 import { useConfirm, useToast } from "@/components/feedback";
 import { AppBuildSettings } from "@/components/AppBuildSettings";
 import { AppRegistryLogin } from "@/components/RegistryLogins";
+import ResourceHistory from "@/components/ResourceHistory";
 import { AppForm, appStatusTone, emptyApp, EnvEditor, SOURCE_LABELS, type AppFormValue, type EnvRow } from "@/components/apps";
 
 interface Deployment {
@@ -358,6 +359,7 @@ export default function AppPage({ params }: { params: Promise<{ id: string }> })
           </Card>
         </div>
       )}
+      {tab === "overview" && <div className="mt-4"><ResourceHistory appId={id} /></div>}
 
       {tab === "deployments" && (
         <div className="grid gap-4 md:grid-cols-[280px_1fr]">

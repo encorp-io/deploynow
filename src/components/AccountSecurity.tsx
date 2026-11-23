@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { startRegistration } from "@simplewebauthn/browser";
-import { Copy, Fingerprint, KeyRound, Plus, Trash2 } from "lucide-react";
+import { Bot, Copy, Fingerprint, KeyRound, Plus, Trash2 } from "lucide-react";
 import { useApi } from "@/components/AppShell";
 import { Badge, Button, Card, ErrorText, Field, Input, Select, timeAgo } from "@/components/ui";
 import { useConfirm } from "@/components/feedback";
@@ -215,6 +215,83 @@ export function ApiTokensCard({ role }: { role: string }) {
         <Button loading={busy} onClick={create} disabled={!form.name.trim()}><Plus className="w-4 h-4" /> Create</Button>
       </div>
       <ErrorText>{error}</ErrorText>
+    </Card>
+  );
+}
+
+interface ConnectionRow {
+  id: string;
+  name: string;
+  clientUri: string;
+  redirectHost: string;
+  role: string;
+  createdAt: string;
+  lastUsedAt: string | null;
+  lastUsedIp: string;
+}
+
+const ROLE_LABEL: Record<string, string> = { viewer: "read only", operator: "operate", admin: "admin" };
+
+/** AI apps connected over OAuth (Claude, ChatGPT, …), with the address to add DeployNow to one. */
+export function ConnectedAppsCard() {
+  const api = useApi();
+  const confirm = useConfirm();
+  const [data, setData] = useState<{ enabled: boolean; mcpUrl: string; connections: ConnectionRow[] } | null>(null);
+
+  const load = useCallback(async () => {
+    const res = await api<{ enabled: boolean; mcpUrl: string; connections: ConnectionRow[] }>("/api/account/connections");
+    if (res.ok) setData(res.data as unknown as { enabled: boolean; mcpUrl: string; connections: ConnectionRow[] });
+  }, [api]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  async function revoke(c: ConnectionRow) {
+    if (!(await confirm({ title: `Disconnect ${c.name}?`, message: "It loses access at once. You can connect it again later.", confirmLabel: "Disconnect" }))) return;
+    await api(`/api/account/connections?id=${c.id}`, { method: "DELETE" });
+    load();
+  }
+
+  if (!data) return null;
+  return (
+    <Card className="p-6 space-y-4">
+      <div id="ai-connections" className="flex items-center gap-3">
+        <Bot className="w-5 h-5 text-accent" />
+        <div>
+          <h2 className="font-semibold text-text-primary">AI connections</h2>
+          <p className="text-xs text-text-muted">
+            Use DeployNow from Claude, ChatGPT or any app that supports MCP connectors. Add a custom connector with this address, then sign in here and choose what it may do.
+          </p>
+        </div>
+      </div>
+      {data.enabled ? (
+        <div className="flex gap-2 items-center bg-bg-secondary border border-border rounded-xl pl-3.5 pr-1.5 py-1.5">
+          <code className="flex-1 font-mono text-xs break-all text-text-primary">{data.mcpUrl}</code>
+          <Button variant="secondary" onClick={() => navigator.clipboard?.writeText(data.mcpUrl)}><Copy className="w-4 h-4" /> Copy</Button>
+        </div>
+      ) : (
+        <p className="text-sm text-text-secondary">AI connectors are turned off on this server (DEPLOYNOW_MCP=off).</p>
+      )}
+      {data.connections.length > 0 ? (
+        <div className="divide-y divide-border">
+          {data.connections.map((c) => (
+            <div key={c.id} className="flex items-center justify-between py-2.5 text-sm gap-3">
+              <div className="min-w-0">
+                <p className="text-text-primary truncate">
+                  {c.name} <Badge tone={c.role === "admin" ? "warning" : "muted"}>{ROLE_LABEL[c.role] ?? c.role}</Badge>
+                </p>
+                <p className="text-xs text-text-muted">
+                  {c.redirectHost ? `${c.redirectHost} · ` : ""}connected {timeAgo(c.createdAt)} · {c.lastUsedAt ? `used ${timeAgo(c.lastUsedAt)}${c.lastUsedIp ? ` from ${c.lastUsedIp}` : ""}` : "never used"}
+                </p>
+              </div>
+              <Button variant="ghost" onClick={() => revoke(c)}>Disconnect</Button>
+            </div>
+          ))}
+        </div>
+      ) : (
+        data.enabled && <p className="text-xs text-text-muted">No apps connected yet.</p>
+      )}
     </Card>
   );
 }
