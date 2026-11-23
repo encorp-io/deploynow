@@ -7,6 +7,10 @@ export async function register() {
       console.error("[deployer] Upgrade step failed:", err instanceof Error ? err.message : "unknown error");
     }
 
+    // The platform domain (Settings → Domain): load it, then put its Traefik route back
+    const { reconcilePlatformDomain } = await import("./lib/platformDomain");
+    await reconcilePlatformDomain();
+
     const { startWsServer } = await import("./lib/wsServer");
     startWsServer();
 

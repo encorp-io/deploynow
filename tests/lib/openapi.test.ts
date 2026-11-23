@@ -5,7 +5,7 @@ import { OPERATIONS, openApiDocument } from "@/lib/openapi";
 
 const API = path.join(process.cwd(), "src/app/api");
 // Not part of the public API
-const SKIP = [/^\/auth\//, /^\/account(\/|$)/, /^\/team$/, /^\/openapi\.json$/, /^\/sso\/(login|callback)/, /^\/passkeys(\/|$)/];
+const SKIP = [/^\/auth\//, /^\/account(\/|$)/, /^\/team$/, /^\/openapi\.json$/, /^\/sso\/(login|callback)/, /^\/passkeys(\/|$)/, /^\/platform-domain\/probe$/];
 
 function routes(): { method: string; path: string }[] {
   const out: { method: string; path: string }[] = [];

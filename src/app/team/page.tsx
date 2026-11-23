@@ -53,7 +53,7 @@ export default function TeamPage() {
       if (!(await confirm({ title: rest.length ? `${title}?` : title, message: rest.join("? ") || undefined, confirmLabel: "Confirm" }))) return;
     }
     setError("");
-    const res = await api<{ token?: string }>("/api/team", { body });
+    const res = await api<{ token?: string; link?: string }>("/api/team", { body });
     if (!res.ok) setError(res.data.error ?? "Action failed");
     await load();
     return res;
@@ -61,7 +61,7 @@ export default function TeamPage() {
 
   async function sendInvite() {
     const res = await post({ action: "invite", email: invite.email, role: invite.role });
-    if (res?.ok && res.data.token) setInvite({ ...invite, link: `${window.location.origin}/setup?token=${res.data.token}` });
+    if (res?.ok && res.data.token) setInvite({ ...invite, link: res.data.link || `${window.location.origin}/setup?token=${res.data.token}` });
   }
 
   if (!data) return <PageSkeleton rows={2} />;

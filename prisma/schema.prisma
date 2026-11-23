@@ -179,6 +179,9 @@ model Settings {
   agentServerCert     String  @default("")
   agentServerKey      String  @default("") // encrypted
   agentPublicUrl      String  @default("") // what agents dial, e.g. https://deploynow.example.com:8444
+  // The domain DeployNow's own UI is served on through the local endpoint's Traefik
+  // (e.g. deploy.example.com). Only set after the domain answered with a valid certificate.
+  platformDomain      String  @default("")
   // Alerts
   alertDiskPercent    Int     @default(90) // alert when a host disk is this full
   alertMemPercent     Int     @default(95)
@@ -599,6 +602,7 @@ model Passkey {
   counter      Int       @default(0)
   transports   String    @default("") // comma-separated
   name         String    @default("Passkey")
+  rpId         String    @default("") // the host it was added on; it only works there ("" = added before this was recorded)
   createdAt    DateTime  @default(now())
   lastUsedAt   DateTime?
 }

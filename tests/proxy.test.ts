@@ -45,6 +45,12 @@ describe("proxy", () => {
     expect(call("/api/team", { method: "POST" }).status).toBe(401);
   });
 
+  it("keeps the platform domain probe public (GET only)", () => {
+    expect(call("/api/platform-domain/probe?n=abc").status).toBe(200);
+    expect(call("/api/platform-domain/probe", { method: "POST" }).status).toBe(401);
+    expect(call("/api/settings/domain").status).toBe(401);
+  });
+
   it("holds admins without 2FA on the account page", () => {
     const page = call("/endpoints", { auth: mustEnrol });
     expect(page.headers.get("location")).toBe("https://deploy.example.com:9444/account?setup=2fa");
