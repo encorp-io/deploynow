@@ -1,16 +1,20 @@
 "use client";
 
 import { use, useCallback, useEffect, useRef, useState } from "react";
+import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { clsx } from "clsx";
-import { Copy, ExternalLink, Globe, Info, Lock, Plus, Rocket, RotateCcw, Square, Trash2, Webhook } from "lucide-react";
+import { Copy, ExternalLink, Globe, Info, Lock, Plus, Rocket, RotateCcw, ScrollText, Square, SquareTerminal, Trash2, Webhook } from "lucide-react";
 import { useApi } from "@/components/AppShell";
 import { Badge, Button, Card, ErrorText, Field, IconButton, Input, Modal, PageHeader, PageSkeleton, stateTone, timeAgo } from "@/components/ui";
 import { useConfirm, useToast } from "@/components/feedback";
 import { AppBuildSettings } from "@/components/AppBuildSettings";
 import { AppRegistryLogin } from "@/components/RegistryLogins";
+import ContainerLogs from "@/components/ContainerLogs";
 import { AppForm, appStatusTone, emptyApp, EnvEditor, SOURCE_LABELS, type AppFormValue, type EnvRow } from "@/components/apps";
+
+const ContainerConsole = dynamic(() => import("@/components/ContainerConsole"), { ssr: false });
 
 interface Deployment {
   id: string;
@@ -38,8 +42,8 @@ interface AppView extends Omit<AppFormValue, "endpointId"> {
   project: { id: string; name: string };
   domains: DomainRow[];
   deployments: Deployment[];
-  containers: { id: string; name: string; service: string; image: string; state: string; status: string }[] | null;
-  can: { deploy: boolean; manage: boolean; secrets: boolean; logs: boolean };
+  containers: AppContainer[] | null;
+  can: { deploy: boolean; manage: boolean; secrets: boolean; logs: boolean; containerLogs: boolean; console: boolean };
   buildEndpointId: string | null;
   registryId: string | null;
   pullRegistryId: string | null;
@@ -49,8 +53,34 @@ interface AppView extends Omit<AppFormValue, "endpointId"> {
   prNumber: number | null;
 }
 
-type Tab = "overview" | "deployments" | "environment" | "domains" | "settings";
-const TABS: Tab[] = ["overview", "deployments", "environment", "domains", "settings"];
+interface AppContainer { id: string; name: string; service: string; image: string; state: string; status: string }
+
+type Tab = "overview" | "logs" | "deployments" | "console" | "environment" | "domains" | "settings";
+const TABS: Tab[] = ["overview", "logs", "deployments", "console", "environment", "domains", "settings"];
+
+/** Picks which of the app's containers the Logs and Console tabs show. Hidden for single-container apps. */
+function ContainerPicker({ containers, value, onChange, endpointId }: { containers: AppContainer[]; value: string; onChange: (id: string) => void; endpointId: string }) {
+  return (
+    <div className="flex flex-wrap items-center gap-2 mb-3">
+      {containers.length > 1 &&
+        containers.map((c) => (
+          <button
+            key={c.id}
+            onClick={() => onChange(c.id)}
+            aria-pressed={c.id === value}
+            className={clsx(
+              "flex items-center gap-2 px-3 py-1.5 rounded-lg border text-sm",
+              c.id === value ? "border-accent bg-accent/10 text-text-primary" : "border-border text-text-secondary hover:text-text-primary hover:bg-bg-secondary",
+            )}
+          >
+            <span className={clsx("w-2 h-2 rounded-full", c.state === "running" ? "bg-success" : c.state === "restarting" ? "bg-warning" : "bg-text-muted")} />
+            <span className="font-mono text-xs">{c.service || c.name}</span>
+          </button>
+        ))}
+      <Link href={`/endpoints/${endpointId}/containers/${value}`} className="ml-auto text-xs text-text-muted hover:text-accent">Container details</Link>
+    </div>
+  );
+}
 
 function duration(d: Deployment) {
   if (!d.startedAt) return "";
@@ -143,6 +173,7 @@ export default function AppPage({ params }: { params: Promise<{ id: string }> })
   const [pending, setPending] = useState("");
   const [busy, setBusy] = useState("");
   const [selected, setSelected] = useState<Deployment | null>(null);
+  const [containerId, setContainerId] = useState("");
   const [env, setEnv] = useState<EnvRow[]>([]);
   const [settings, setSettings] = useState<AppFormValue | null>(null);
   const [domain, setDomain] = useState({ host: "", path: "/", containerPort: "", service: "", https: true, kind: "route", redirectTo: "", redirectCode: "308", basicAuthUser: "", basicAuthPassword: "" });
@@ -263,6 +294,22 @@ export default function AppPage({ params }: { params: Promise<{ id: string }> })
   const current = app.deployments.find((d) => d.id === app.currentDeploymentId);
   const active = app.deployments.find((d) => d.status === "queued" || d.status === "running");
   const isCompose = app.sourceType === "compose" || app.sourceType === "git-compose";
+  const containers = app.containers ?? [];
+  const container = containers.find((c) => c.id === containerId) ?? containers.find((c) => c.state === "running") ?? containers[0];
+  const openContainer = (c: AppContainer, t: Tab) => {
+    setContainerId(c.id);
+    setTab(t);
+  };
+  // What the Logs and Console tabs show when there is no container to attach to
+  const noContainer =
+    app.containers === null ? (
+      <p className="text-sm text-warning">Couldn&apos;t reach {app.endpoint.name}. Check that the endpoint is online.</p>
+    ) : (
+      <div className="text-sm text-text-muted space-y-3 py-6 text-center">
+        <p>{app.deployments.length ? "No containers are running for this app." : "Deploy the app to see its logs and open a console."}</p>
+        {app.can.deploy && !active && <Button onClick={deploy} loading={busy === "deploy"}><Rocket className="w-4 h-4" /> Deploy now</Button>}
+      </div>
+    );
 
   return (
     <div className="max-w-6xl">
@@ -325,11 +372,17 @@ export default function AppPage({ params }: { params: Promise<{ id: string }> })
             <div className="mt-4 space-y-1.5">
               {app.containers === null && <p className="text-xs text-warning">Couldn&apos;t reach {app.endpoint.name}</p>}
               {app.containers?.map((c) => (
-                <Link key={c.id} href={`/endpoints/${app.endpoint.id}/containers/${c.id}`} className="flex items-center gap-2 text-sm hover:text-accent">
+                <div key={c.id} className="flex items-center gap-2 text-sm">
                   <Badge tone={stateTone(c.state)}>{c.state}</Badge>
-                  <span className="font-mono text-xs">{c.service || c.name}</span>
-                  <span className="text-xs text-text-muted truncate">{c.status}</span>
-                </Link>
+                  <Link href={`/endpoints/${app.endpoint.id}/containers/${c.id}`} className="font-mono text-xs hover:text-accent">{c.service || c.name}</Link>
+                  <span className="text-xs text-text-muted truncate min-w-0 flex-1">{c.status}</span>
+                  {app.can.containerLogs && (
+                    <Button variant="ghost" className="!px-2 !py-1 text-xs" aria-label={`Logs of ${c.service || c.name}`} onClick={() => openContainer(c, "logs")}><ScrollText className="w-3.5 h-3.5" /> Logs</Button>
+                  )}
+                  {app.can.console && c.state === "running" && (
+                    <Button variant="ghost" className="!px-2 !py-1 text-xs" aria-label={`Console in ${c.service || c.name}`} onClick={() => openContainer(c, "console")}><SquareTerminal className="w-3.5 h-3.5" /> Console</Button>
+                  )}
+                </div>
               ))}
             </div>
           </Card>
@@ -357,6 +410,40 @@ export default function AppPage({ params }: { params: Promise<{ id: string }> })
             ))}
           </Card>
         </div>
+      )}
+
+      {tab === "logs" && (
+        <Card className="p-4">
+          {!app.can.containerLogs ? (
+            <p className="text-sm text-text-muted">Operators and above can read app logs.</p>
+          ) : !container ? (
+            noContainer
+          ) : (
+            <>
+              <ContainerPicker containers={containers} value={container.id} onChange={setContainerId} endpointId={app.endpoint.id} />
+              <ContainerLogs key={container.id} endpointId={app.endpoint.id} containerId={container.id} />
+            </>
+          )}
+        </Card>
+      )}
+
+      {tab === "console" && (
+        <Card className="p-4">
+          {!app.can.console ? (
+            <p className="text-sm text-text-muted">Operators and above can open a console.</p>
+          ) : !container ? (
+            noContainer
+          ) : (
+            <>
+              <ContainerPicker containers={containers} value={container.id} onChange={setContainerId} endpointId={app.endpoint.id} />
+              {container.state === "running" ? (
+                <ContainerConsole key={container.id} api={api} endpointId={app.endpoint.id} containerId={container.id} />
+              ) : (
+                <p className="text-sm text-text-muted">{container.service || container.name} isn&apos;t running. Deploy or start it to open a console.</p>
+              )}
+            </>
+          )}
+        </Card>
       )}
 
       {tab === "deployments" && (
