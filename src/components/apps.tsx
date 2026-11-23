@@ -135,7 +135,7 @@ export function AppForm({
       </Field>
 
       {value.sourceType === "image" && (
-        <Field label="Image" hint="Private GHCR images use the GitHub token from Settings">
+        <Field label="Image" hint="Private images pull with a matching registry login (yours or a service account); pick a specific one on the app's Settings tab">
           <Input value={value.image} onChange={(e) => set("image", e.target.value)} placeholder="ghcr.io/encorp-io/app:latest" className="font-mono" />
         </Field>
       )}

@@ -7,7 +7,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { Boxes, CheckCircle2, Plus, Send, Trash2, UserRound, XCircle } from "lucide-react";
 import { useApi } from "@/components/AppShell";
-import { Badge, Button, Card, ErrorText, Field, Input, Select } from "@/components/ui";
+import { Badge, Button, Card, ErrorText, Field, IconButton, Input, Select } from "@/components/ui";
+import { useConfirm } from "@/components/feedback";
 
 const MASK = "••••••••";
 
@@ -139,6 +140,7 @@ function LoginForm({
 
 function RegistryLoginList({ ownerType }: { ownerType: "shared" | "personal" }) {
   const api = useApi();
+  const confirm = useConfirm();
   const [rows, setRows] = useState<RegistryLogin[] | null>(null);
   const [projects, setProjects] = useState<{ id: string; name: string }[]>([]);
   const [form, setForm] = useState<Form | null>(null);
@@ -188,7 +190,7 @@ function RegistryLoginList({ ownerType }: { ownerType: "shared" | "personal" }) 
     load();
   };
   const remove = async (row: RegistryLogin) => {
-    if (!window.confirm(`Remove ${row.name}? Apps can't use it any more.`)) return;
+    if (!(await confirm({ title: `Remove ${row.name}?`, message: "Apps that pull with it can't use it any more.", confirmLabel: "Remove" }))) return;
     const r = await api(`/api/registries/${row.id}`, { method: "DELETE" });
     if (!r.ok) setError(r.data.error ?? "Could not remove it");
     load();
@@ -214,9 +216,9 @@ function RegistryLoginList({ ownerType }: { ownerType: "shared" | "personal" }) 
             </div>
             {r.canManage && (
               <div className="flex gap-1">
-                <Button type="button" variant="ghost" onClick={() => test(r.id)} loading={busy === r.id} aria-label={`Test ${r.name}`} title="Test sign-in"><Send className="w-4 h-4" /></Button>
+                <IconButton type="button" label={`Test sign-in to ${r.name}`} onClick={() => test(r.id)} loading={busy === r.id}><Send className="w-4 h-4" /></IconButton>
                 <Button type="button" variant="ghost" onClick={() => setForm({ ...r })}>Edit</Button>
-                <Button type="button" variant="ghost" onClick={() => remove(r)} aria-label={`Remove ${r.name}`}><Trash2 className="w-4 h-4" /></Button>
+                <IconButton type="button" label={`Remove ${r.name}`} onClick={() => remove(r)}><Trash2 className="w-4 h-4" /></IconButton>
               </div>
             )}
           </div>
