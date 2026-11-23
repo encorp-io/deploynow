@@ -53,6 +53,8 @@ services:
       # Your GitHub username + PAT with read:packages scope
       GITHUB_USER: ${GITHUB_USER:-}
       GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+      # GitHub Enterprise hosts that may also receive that token when cloning (comma separated)
+      GITHUB_HOSTS: ${GITHUB_HOSTS:-}
 
       # ── TLS certificate (optional) ──────────────────────────────────────────
       # Leave unset to use the auto-generated self-signed cert.

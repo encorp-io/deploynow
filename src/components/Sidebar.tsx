@@ -153,7 +153,7 @@ export default function Sidebar({ me, onSignOut, onNavigate }: { me: Me | null; 
           rel="noreferrer"
           className="block px-2 pt-1 text-[11px] text-text-muted hover:text-text-secondary transition-colors"
         >
-          DeployNow v{VERSION}
+          DeployNow {/^\d/.test(VERSION) ? `v${VERSION}` : VERSION}
         </a>
       </div>
     </div>

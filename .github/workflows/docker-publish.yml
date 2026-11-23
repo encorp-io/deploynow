@@ -62,7 +62,8 @@ jobs:
           # arm64 builds only for releases (QEMU is slow); main and PRs build amd64
           platforms: ${{ startsWith(github.ref, 'refs/tags/v') && 'linux/amd64,linux/arm64' || 'linux/amd64' }}
           push: ${{ github.event_name != 'pull_request' }}
-          build-args: DEPLOYNOW_VERSION=${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || '' }}
+          # Builds of main report edge-<sha>, so their agent join command uses the edge agent
+          build-args: DEPLOYNOW_VERSION=${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || format('edge-{0}', github.sha) }}
           tags: ${{ steps.meta-ghcr.outputs.tags }}
           labels: ${{ steps.meta-ghcr.outputs.labels }}
           cache-from: type=gha

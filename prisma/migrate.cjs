@@ -6,8 +6,8 @@
  *      <data dir>/db-backups/ (the last 5 are kept), so a failed upgrade can be undone
  *      by stopping DeployNow and copying the file back.
  *   2. Databases from before versioned migrations (made by `prisma db push`) are
- *      brought to the baseline with a non-destructive push, then marked as being
- *      at migration 0_init.
+ *      brought to the current schema with a non-destructive push, then every
+ *      migration shipped with this version is marked as applied.
  *   3. `prisma migrate deploy` applies the migrations in prisma/migrations.
  *   4. SQLite runs in WAL mode, so the UI keeps reading while background jobs write.
  *
@@ -20,7 +20,6 @@ const { PrismaClient } = require("@prisma/client");
 
 const SCHEMA = path.join(__dirname, "schema.prisma");
 const MIGRATIONS = path.join(__dirname, "migrations");
-const BASELINE = "0_init";
 const KEEP_BACKUPS = 5;
 const log = (m) => console.log(`[deploynow] ${m}`);
 
@@ -83,7 +82,9 @@ async function main() {
     // adds what is missing and refuses anything that would lose data.
     log("Upgrading a database from before versioned migrations");
     prismaCli(["db", "push", "--skip-generate"]);
-    prismaCli(["migrate", "resolve", "--applied", BASELINE]);
+    // The push made the database match the whole current schema, so every migration
+    // shipped with this version is already in it, not just the baseline.
+    for (const name of migrationNames()) prismaCli(["migrate", "resolve", "--applied", name]);
   }
   prismaCli(["migrate", "deploy"]);
 

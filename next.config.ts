@@ -29,7 +29,7 @@ const securityHeaders = [
 const nextConfig: NextConfig = {
   output: "standalone",
   // Shown in the sidebar and at /api/health. Release images pass the git tag as DEPLOYNOW_VERSION.
-  env: { NEXT_PUBLIC_DEPLOYNOW_VERSION: (process.env.DEPLOYNOW_VERSION || pkg.version).replace(/^v/, "") },
+  env: { NEXT_PUBLIC_DEPLOYNOW_VERSION: (process.env.DEPLOYNOW_VERSION || pkg.version).replace(/^v(?=\d)/, "").replace(/^(edge-[0-9a-f]{7})[0-9a-f]*$/, "$1") },
   serverExternalPackages: ["@prisma/client", "bcryptjs", "dockerode", "docker-modem", "ssh2", "cpu-features", "ws", "qrcode"],
   // OAuth discovery (RFC 8414, RFC 9728) and the MCP endpoint for AI connectors
   async rewrites() {
