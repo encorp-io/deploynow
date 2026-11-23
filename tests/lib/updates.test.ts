@@ -8,7 +8,7 @@ const mockPrisma = vi.hoisted(() => ({
     update: vi.fn(async ({ data }: { data: Record<string, unknown> }) => (store.s = { ...store.s, ...data })),
   },
 }));
-const notify = vi.hoisted(() => vi.fn(async () => {}));
+const notify = vi.hoisted(() => vi.fn(async (_n: unknown) => {}));
 vi.mock("@/lib/prisma", () => ({ prisma: mockPrisma }));
 vi.mock("@/lib/notify", () => ({ notify }));
 vi.mock("@/lib/version", () => ({ VERSION: "2.0.0" }));

@@ -3,10 +3,11 @@
 import { use, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Boxes, Globe, Plus, Trash2 } from "lucide-react";
+import { Boxes, Globe, LayoutTemplate, Plus, Trash2 } from "lucide-react";
 import { useApi } from "@/components/AppShell";
 import { Badge, Button, Card, ErrorText, Field, IconButton, Input, Modal, PageHeader, PageSkeleton, timeAgo } from "@/components/ui";
 import { useConfirm, useToast } from "@/components/feedback";
+import { TemplatePicker } from "@/components/Templates";
 import { AppForm, appStatusTone, emptyApp, selectClass, SOURCE_LABELS, type AppFormValue } from "@/components/apps";
 
 interface AppRow {
@@ -34,6 +35,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
   const [endpoints, setEndpoints] = useState<{ id: string; name: string }[]>([]);
   const [error, setError] = useState("");
   const [newApp, setNewApp] = useState<{ envId: string; value: AppFormValue } | null>(null);
+  const [fromTemplate, setFromTemplate] = useState<EnvRow | null>(null);
   const [newEnv, setNewEnv] = useState<{ name: string; endpointId: string } | null>(null);
   const [formError, setFormError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -122,6 +124,9 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
                   {env.apps.length === 0 && project.environments.length > 1 && (
                     <IconButton label={`Delete ${env.name}`} onClick={() => deleteEnv(env)}><Trash2 className="w-4 h-4" /></IconButton>
                   )}
+                  <Button variant="secondary" onClick={() => setFromTemplate(env)}>
+                    <LayoutTemplate className="w-4 h-4" /> From template
+                  </Button>
                   <Button variant="secondary" onClick={() => setNewApp({ envId: env.id, value: { ...emptyApp, endpointId: env.defaultEndpoint?.id ?? endpoints[0]?.id ?? "" } })}>
                     <Plus className="w-4 h-4" /> New app
                   </Button>
@@ -133,11 +138,16 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
                 <div className="p-8 text-center">
                   <Boxes className="w-8 h-8 text-text-muted mx-auto mb-2" />
                   <p className="text-sm text-text-primary mb-1">No apps in {env.name} yet</p>
-                  <p className="text-xs text-text-muted mb-4">Deploy a container image, a Dockerfile or a docker-compose file from Git.</p>
+                  <p className="text-xs text-text-muted mb-4">Deploy a container image, a Dockerfile or a docker-compose file from Git, or start from one of the ready templates.</p>
                   {project.canManage && (
+<div className="flex flex-wrap justify-center gap-2">
                     <Button onClick={() => setNewApp({ envId: env.id, value: { ...emptyApp, endpointId: env.defaultEndpoint?.id ?? endpoints[0]?.id ?? "" } })}>
                       <Plus className="w-4 h-4" /> Add an app
                     </Button>
+                      <Button variant="secondary" onClick={() => setFromTemplate(env)}>
+                        <LayoutTemplate className="w-4 h-4" /> Start from a template
+                      </Button>
+                    </div>
                   )}
                 </div>
               ) : (
@@ -183,6 +193,10 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
           <AppForm value={newApp.value} onChange={(value) => setNewApp({ ...newApp, value })} endpoints={endpoints} isNew />
           <div className="mt-3"><ErrorText>{formError}</ErrorText></div>
         </Modal>
+      )}
+
+      {fromTemplate && (
+        <TemplatePicker environmentId={fromTemplate.id} defaultEndpointId={fromTemplate.defaultEndpoint?.id ?? endpoints[0]?.id ?? ""} endpoints={endpoints} onClose={() => setFromTemplate(null)} />
       )}
 
       {newEnv && (

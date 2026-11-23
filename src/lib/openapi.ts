@@ -62,6 +62,8 @@ export const OPERATIONS: Op[] = [
   { method: "post", path: `/projects/${ID}/environments`, summary: "Add an environment", tag: "Apps", access: "admin" },
   { method: "patch", path: `/environments/${ID}`, summary: "Update an environment", tag: "Apps", access: "admin" },
   { method: "delete", path: `/environments/${ID}`, summary: "Delete an environment", tag: "Apps", access: "admin" },
+  { method: "get", path: "/templates", summary: "One-click app templates", tag: "Apps", access: "viewer" },
+  { method: "post", path: "/templates", summary: "Create an app from a template, with its domain and backup policy, and deploy it", tag: "Apps", access: "admin", body: { templateId: "string", environmentId: "string", endpointId: "string", name: "string", domain: "string", hostPort: "number", values: "object", backupDestinationId: "string", deploy: "boolean" } },
   { method: "post", path: "/apps", summary: "Create an app (image, Dockerfile, compose from Git, or inline compose)", tag: "Apps", access: "admin" },
   { method: "get", path: `/apps/${ID}`, summary: "Get an app", tag: "Apps", access: "viewer" },
   { method: "patch", path: `/apps/${ID}`, summary: "Update an app", tag: "Apps", access: "admin" },
