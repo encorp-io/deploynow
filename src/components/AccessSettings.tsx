@@ -1,8 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Boxes, LogIn, Plus, Send, Trash2 } from "lucide-react";
+import { LogIn, Plus, Trash2 } from "lucide-react";
 import { useApi } from "@/components/AppShell";
+import { SharedRegistryLogins } from "@/components/RegistryLogins";
 import { Badge, Button, ErrorText, Field, Input, Select } from "@/components/ui";
 import { useConfirm } from "@/components/feedback";
 
@@ -149,98 +150,7 @@ export function SsoSettings() {
   );
 }
 
-interface RegistryRow {
-  id: string;
-  name: string;
-  host: string;
-  username: string;
-  password: string;
-  namespace: string;
-}
-
+/** Shared registry logins (service accounts); personal ones live on the Account page. */
 export function RegistrySettings() {
-  const api = useApi();
-  const [rows, setRows] = useState<RegistryRow[] | null>(null);
-  const [form, setForm] = useState<Partial<RegistryRow> | null>(null);
-  const [error, setError] = useState("");
-  const [msg, setMsg] = useState("");
-  const [busy, setBusy] = useState("");
-
-  const load = useCallback(async () => {
-    const r = await api<RegistryRow[]>("/api/registries");
-    if (r.ok) setRows(r.data as unknown as RegistryRow[]);
-  }, [api]);
-  useEffect(() => {
-    load();
-  }, [load]);
-  if (!rows) return null;
-
-  const save = async () => {
-    if (!form) return;
-    setBusy("save");
-    setError("");
-    const r = await api(form.id ? `/api/registries/${form.id}` : "/api/registries", { method: form.id ? "PATCH" : "POST", body: form });
-    setBusy("");
-    if (!r.ok) return setError(r.data.error ?? "Could not save");
-    setForm(null);
-    load();
-  };
-  const test = async (id: string) => {
-    setBusy(id);
-    setMsg("");
-    setError("");
-    const r = await api<{ ok: boolean; message: string }>(`/api/registries/${id}`, { method: "POST" });
-    setBusy("");
-    if (r.ok && (r.data as { ok: boolean }).ok) setMsg((r.data as { message: string }).message || "Signed in");
-    else setError((r.data as { message?: string; error?: string }).message ?? r.data.error ?? "Test failed");
-  };
-  const remove = async (row: RegistryRow) => {
-    if (!window.confirm(`Remove ${row.name}?`)) return;
-    const r = await api(`/api/registries/${row.id}`, { method: "DELETE" });
-    if (!r.ok) setError(r.data.error ?? "Could not remove it");
-    load();
-  };
-
-  return (
-    <section className="bg-bg-card border border-border rounded-xl p-6">
-      <h2 className="text-sm font-semibold text-text-primary mb-1 flex items-center gap-2"><Boxes className="w-4 h-4" /> Container registries</h2>
-      <p className="text-xs text-text-muted mb-4">Credentials for pulling private images and for pushing images built on a build server. Matched by host.</p>
-      <div className="divide-y divide-border">
-        {rows.map((r) => (
-          <div key={r.id} className="flex items-center justify-between py-2.5 text-sm">
-            <div>
-              <p className="text-text-primary">{r.name} <Badge tone="muted">{r.host}</Badge></p>
-              <p className="text-xs text-text-muted">{r.username}{r.namespace ? ` · pushes to ${r.namespace}` : ""}</p>
-            </div>
-            <div className="flex gap-1">
-              <Button type="button" variant="ghost" onClick={() => test(r.id)} loading={busy === r.id} aria-label="Test"><Send className="w-4 h-4" /></Button>
-              <Button type="button" variant="ghost" onClick={() => setForm(r)}>Edit</Button>
-              <Button type="button" variant="ghost" onClick={() => remove(r)} aria-label={`Remove ${r.name}`}><Trash2 className="w-4 h-4" /></Button>
-            </div>
-          </div>
-        ))}
-      </div>
-      {form ? (
-        <div className="space-y-3 mt-4 pt-4 border-t border-border">
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Name"><Input value={form.name ?? ""} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="GitHub packages" /></Field>
-            <Field label="Host"><Input value={form.host ?? ""} onChange={(e) => setForm({ ...form, host: e.target.value })} placeholder="ghcr.io" /></Field>
-            <Field label="User name"><Input value={form.username ?? ""} onChange={(e) => setForm({ ...form, username: e.target.value })} autoComplete="off" /></Field>
-            <Field label="Password or token"><Input type="password" value={form.password ?? ""} onFocus={() => form.password === MASK && setForm({ ...form, password: "" })} onChange={(e) => setForm({ ...form, password: e.target.value })} autoComplete="new-password" /></Field>
-            <div className="col-span-2">
-              <Field label="Push namespace (optional)" hint="Where the build server pushes images, e.g. ghcr.io/acme"><Input value={form.namespace ?? ""} onChange={(e) => setForm({ ...form, namespace: e.target.value })} /></Field>
-            </div>
-          </div>
-          <div className="flex gap-2">
-            <Button type="button" onClick={save} loading={busy === "save"}>{form.id ? "Save" : "Add registry"}</Button>
-            <Button type="button" variant="ghost" onClick={() => setForm(null)}>Cancel</Button>
-          </div>
-        </div>
-      ) : (
-        <Button type="button" variant="secondary" className="mt-4" onClick={() => setForm({})}><Plus className="w-4 h-4" /> Add registry</Button>
-      )}
-      {msg && <p className="text-xs text-success mt-2">{msg}</p>}
-      <ErrorText>{error}</ErrorText>
-    </section>
-  );
+  return <SharedRegistryLogins />;
 }

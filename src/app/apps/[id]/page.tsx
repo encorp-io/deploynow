@@ -9,6 +9,7 @@ import { useApi } from "@/components/AppShell";
 import { Badge, Button, Card, ErrorText, Field, IconButton, Input, Modal, PageHeader, PageSkeleton, stateTone, timeAgo } from "@/components/ui";
 import { useConfirm, useToast } from "@/components/feedback";
 import { AppBuildSettings } from "@/components/AppBuildSettings";
+import { AppRegistryLogin } from "@/components/RegistryLogins";
 import { AppForm, appStatusTone, emptyApp, EnvEditor, SOURCE_LABELS, type AppFormValue, type EnvRow } from "@/components/apps";
 
 interface Deployment {
@@ -41,6 +42,7 @@ interface AppView extends Omit<AppFormValue, "endpointId"> {
   can: { deploy: boolean; manage: boolean; secrets: boolean; logs: boolean };
   buildEndpointId: string | null;
   registryId: string | null;
+  pullRegistryId: string | null;
   previewsEnabled: boolean;
   previewDomain: string;
   previewOfId: string | null;
@@ -498,6 +500,8 @@ export default function AppPage({ params }: { params: Promise<{ id: string }> })
               </div>
             )}
           </Card>
+
+          {app.can.manage && (app.sourceType !== "image" || !!app.image) && <AppRegistryLogin app={app} onSave={save} busy={busy === "save"} />}
 
           {(app.sourceType === "git-dockerfile" || (app.sourceType === "git-compose" && !app.previewOfId)) && app.can.manage && (
             <AppBuildSettings app={app} onSave={save} busy={busy === "save"} />

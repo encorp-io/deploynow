@@ -24,7 +24,7 @@ export async function POST(request: Request) {
   let input;
   try {
     input = validateAppInput(body);
-    input = { ...input, ...(await validateAppExtras(body, input.sourceType, endpointId)) };
+    input = { ...input, ...(await validateAppExtras(body, input.sourceType, endpointId, { actor: gate.user, projectId: env.projectId })) };
   } catch (err) {
     if (err instanceof ConfigError || err instanceof EnvError) return NextResponse.json({ error: err.message }, { status: 400 });
     throw err;
