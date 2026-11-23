@@ -149,7 +149,7 @@ describe("apps", () => {
     expect(r.status).toBe(200);
     expect(JSON.stringify(r.body)).not.toContain("tok-123456");
     expect(r.body.env).toEqual([{ key: "A", kind: "plain", value: "1" }, { key: "TOKEN", kind: "secret", value: null, hasValue: true }]);
-    expect(r.body.can).toEqual({ deploy: true, manage: true, secrets: true, logs: true });
+    expect(r.body.can).toEqual({ deploy: true, manage: true, secrets: true, logs: true, containerLogs: true, console: true });
     expect(r.body.containers).toBeNull();
     const stored = await prisma.application.findUniqueOrThrow({ where: { id } });
     expect(stored.env).not.toContain("tok-123456");
