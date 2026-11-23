@@ -8,11 +8,10 @@
 **Ship to every Docker machine you own.**<br>
 Self-hosted control plane for your Docker machines: deploy apps, manage containers, back up data and watch it all from one place.
 
-[Website](https://encorp-io.github.io/deploynow/) · [Quick start](#quick-start) · [Docs](docs/v2.md) · [encorp.ai](https://encorp.ai)
+[Quick start](#quick-start) · [Docs](docs/v2.md) · [encorp.ai](https://encorp.ai)
 
 [![CI](https://github.com/encorp-io/deploynow/actions/workflows/ci.yml/badge.svg)](https://github.com/encorp-io/deploynow/actions/workflows/ci.yml)
 [![Docker](https://github.com/encorp-io/deploynow/actions/workflows/docker-publish.yml/badge.svg)](https://github.com/encorp-io/deploynow/actions/workflows/docker-publish.yml)
-[![Landing page](https://github.com/encorp-io/deploynow/actions/workflows/pages.yml/badge.svg)](https://github.com/encorp-io/deploynow/actions/workflows/pages.yml)
 
 <img src="site/assets/og.png" alt="DeployNow landing page" width="820">
 
@@ -139,7 +138,7 @@ Schema changes are applied on start and only add tables and columns. Back up the
 
 ## Landing page
 
-The product website lives in [`site/`](site/): static HTML and CSS with no build step, published to GitHub Pages by [`.github/workflows/pages.yml`](.github/workflows/pages.yml) on every push to `main` that changes it. Brand files and colours come from the brand kit; see [`site/README.md`](site/README.md).
+The product website lives in [`site/`](site/): static HTML and CSS with no build step, hosted on Cloudflare Pages (build command empty, output directory `site`). Setup steps and brand notes are in [`site/README.md`](site/README.md).
 
 ## How it's built
 
@@ -160,7 +159,7 @@ src/lib/        Docker, deploys, backups, agent hub, auth, notifications
 agent/          deploynow-agent (Go)
 cli/            deploynow CLI
 tests/          unit, API and real-Docker integration tests
-site/           landing page (GitHub Pages)
+site/           landing page (Cloudflare Pages)
 docs/           user documentation
 ```
 
