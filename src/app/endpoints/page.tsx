@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { Plus, Server, RefreshCw, Cpu, MemoryStick, Boxes } from "lucide-react";
+import { Boxes, Cpu, MemoryStick, Plus, RefreshCw, Server } from "lucide-react";
 import { useApi } from "@/components/AppShell";
 import EndpointForm, { type EndpointView } from "@/components/EndpointForm";
 import { Badge, Button, Card, Modal, PageHeader, formatBytes, stateTone, timeAgo, Skeleton } from "@/components/ui";
@@ -96,7 +96,7 @@ export default function EndpointsPage() {
       )}
 
       {adding && (
-        <Modal title="Add endpoint" onClose={() => setAdding(false)} wide>
+        <Modal icon={Server} title="Add endpoint" onClose={() => setAdding(false)} wide>
           <EndpointForm
             api={api}
             onCancel={() => setAdding(false)}

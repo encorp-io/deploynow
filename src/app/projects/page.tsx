@@ -3,9 +3,9 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { FolderKanban, Plus } from "lucide-react";
+import { FolderKanban, FolderPlus, Plus } from "lucide-react";
 import { useApi } from "@/components/AppShell";
-import { Badge, Button, Card, EmptyState, ErrorText, Field, Input, Modal, PageHeader, Skeleton } from "@/components/ui";
+import { Badge, Button, Card, EmptyState, ErrorText, Field, Input, Modal, PageHeader, Select, Skeleton } from "@/components/ui";
 import { appStatusTone } from "@/components/apps";
 
 interface ProjectRow {
@@ -108,7 +108,7 @@ export default function ProjectsPage() {
       )}
 
       {creating && (
-        <Modal title="New project" onClose={() => setCreating(false)}>
+        <Modal icon={FolderPlus} title="New project" onClose={() => setCreating(false)}>
           <form
             className="space-y-3"
             onSubmit={(e) => {
@@ -119,9 +119,9 @@ export default function ProjectsPage() {
             <Field label="Name"><Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Client portal" autoFocus /></Field>
             <Field label="Description (optional)"><Input value={description} onChange={(e) => setDescription(e.target.value)} /></Field>
             <Field label="Default endpoint" hint="The machine new apps run on. You can change it per app.">
-              <select value={endpointId} onChange={(e) => setEndpointId(e.target.value)} className="w-full px-3 py-2 bg-bg-secondary border border-border rounded-lg text-sm text-text-primary">
+              <Select value={endpointId} onChange={(e) => setEndpointId(e.target.value)}>
                 {endpoints.map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}
-              </select>
+              </Select>
             </Field>
             <ErrorText>{error}</ErrorText>
             <div className="flex justify-end gap-2 pt-2">

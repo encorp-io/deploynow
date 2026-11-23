@@ -3,9 +3,8 @@ import clsx from "clsx";
 
 import { useState } from "react";
 import { Eye, Lock, Plus, Trash2, Vault } from "lucide-react";
-import { Button, Field, IconButton, Input, TextArea } from "./ui";
+import { Button, Field, IconButton, Input, Select, TextArea } from "./ui";
 
-export const selectClass = "w-full px-3 py-2 bg-bg-secondary border border-border rounded-lg text-sm text-text-primary";
 
 export function appStatusTone(status: string): "success" | "warning" | "danger" | "accent" | "muted" {
   if (status === "running" || status === "success") return "success";
@@ -112,9 +111,9 @@ export function AppForm({
       </div>
 
       <Field label="Endpoint">
-        <select value={value.endpointId} onChange={(e) => set("endpointId", e.target.value)} className={selectClass} disabled={!isNew}>
+        <Select value={value.endpointId} onChange={(e) => set("endpointId", e.target.value)} disabled={!isNew}>
           {endpoints.map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}
-        </select>
+        </Select>
       </Field>
 
       <Field label="Source">
@@ -176,10 +175,10 @@ export function AppForm({
                   <Input type="number" placeholder="host" value={p.host ?? ""} onChange={(e) => set("ports", value.ports.map((q, j) => (j === i ? { ...q, host: e.target.value ? Number(e.target.value) : null } : q)))} />
                   <span className="text-text-muted">→</span>
                   <Input type="number" placeholder="container" value={p.container || ""} onChange={(e) => set("ports", value.ports.map((q, j) => (j === i ? { ...q, container: Number(e.target.value) } : q)))} />
-                  <select value={p.protocol} onChange={(e) => set("ports", value.ports.map((q, j) => (j === i ? { ...q, protocol: e.target.value as "tcp" | "udp" } : q)))} className={selectClass + " w-24"}>
+                  <Select value={p.protocol} onChange={(e) => set("ports", value.ports.map((q, j) => (j === i ? { ...q, protocol: e.target.value as "tcp" | "udp" } : q)))} className="w-24 flex-shrink-0">
                     <option value="tcp">tcp</option>
                     <option value="udp">udp</option>
-                  </select>
+                  </Select>
                   <IconButton label="Remove port" onClick={() => set("ports", value.ports.filter((_, j) => j !== i))}><Trash2 className="w-4 h-4" /></IconButton>
                 </div>
               ))}
@@ -204,18 +203,18 @@ export function AppForm({
               <Input value={value.command} onChange={(e) => set("command", e.target.value)} className="font-mono" />
             </Field>
             <Field label="Restart policy">
-              <select value={value.restartPolicy} onChange={(e) => set("restartPolicy", e.target.value)} className={selectClass}>
+              <Select value={value.restartPolicy} onChange={(e) => set("restartPolicy", e.target.value)}>
                 {["unless-stopped", "always", "on-failure", "no"].map((r) => <option key={r} value={r}>{r}</option>)}
-              </select>
+              </Select>
             </Field>
           </div>
         </>
       )}
 
       <Field label="Updates">
-        <select value={value.updatePolicy} onChange={(e) => set("updatePolicy", e.target.value)} className={selectClass}>
+        <Select value={value.updatePolicy} onChange={(e) => set("updatePolicy", e.target.value)}>
           {policies.map(([k, label]) => <option key={k} value={k}>{label}</option>)}
-        </select>
+        </Select>
       </Field>
     </div>
   );
@@ -261,16 +260,15 @@ export function EnvEditor({ rows, onChange, onReveal, canReveal }: { rows: EnvRo
       {rows.map((r, i) => (
         <div key={i} className="grid grid-cols-[minmax(0,12rem)_6.5rem_minmax(0,1fr)_auto] gap-2 items-start">
           <Input value={r.key} onChange={(e) => update(i, { key: e.target.value })} placeholder="NAME" className="font-mono" />
-          <select
+          <Select
             value={r.kind}
             onChange={(e) => update(i, { kind: e.target.value as EnvRow["kind"], value: r.kind === "secret" ? "" : r.value, hasValue: false })}
-            className={selectClass}
             title={KIND_HINT[r.kind]}
           >
             <option value="plain">plain</option>
             <option value="secret">secret</option>
             <option value="vault">vault</option>
-          </select>
+          </Select>
           <div className="relative min-w-0">
             <Input
               type={r.kind === "secret" ? "password" : "text"}

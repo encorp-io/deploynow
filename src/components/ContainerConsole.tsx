@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import "@xterm/xterm/css/xterm.css";
-import { Button } from "./ui";
+import { Button, Select } from "./ui";
 
 type Api = <T = Record<string, unknown>>(url: string, init?: { method?: string; body?: unknown }) => Promise<{ ok: boolean; data: T & { error?: string } }>;
 
@@ -67,16 +67,16 @@ export default function ContainerConsole({ api, endpointId, containerId }: { api
   return (
     <div className="space-y-3">
       <div className="flex items-center gap-2">
-        <select
+        <Select
           value={shell}
           onChange={(e) => setShell(e.target.value)}
-          className="px-3 py-2 bg-bg-secondary border border-border rounded-lg text-sm text-text-primary"
+          className="w-auto" aria-label="Shell"
           disabled={status === "open" || status === "connecting"}
         >
           <option value="/bin/sh">/bin/sh</option>
           <option value="/bin/bash">/bin/bash</option>
           <option value="/bin/ash">/bin/ash</option>
-        </select>
+        </Select>
         {status === "open" ? (
           <Button variant="secondary" onClick={() => cleanup.current?.()}>Disconnect</Button>
         ) : (

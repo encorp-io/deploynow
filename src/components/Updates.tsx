@@ -136,7 +136,7 @@ export function DeployNowUpdates() {
           <span className="text-xs text-text-muted">Turned off with DEPLOYNOW_UPDATE_CHECK=off.</span>
         ) : (
           <label className="flex items-center gap-2 text-xs text-text-secondary">
-            <input type="checkbox" checked={!!info.enabled} onChange={(e) => post({ enabled: e.target.checked }, "toggle")} disabled={busy === "toggle"} />
+            <input type="checkbox" role="switch" checked={!!info.enabled} onChange={(e) => post({ enabled: e.target.checked }, "toggle")} disabled={busy === "toggle"} />
             Check for new releases
           </label>
         )}

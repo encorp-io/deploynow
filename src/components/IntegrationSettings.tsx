@@ -3,8 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Bell, Plus, Send, Trash2, Vault } from "lucide-react";
 import { useApi } from "./AppShell";
-import { Badge, Button, ErrorText, Field, Input, TextArea } from "./ui";
-import { selectClass } from "./apps";
+import { Badge, Button, ErrorText, Field, Input, Select, TextArea } from "./ui";
 
 const MASK = "••••••••";
 const section = "dn-surface border border-border rounded-2xl p-6";
@@ -56,10 +55,10 @@ export function VaultSettings() {
           <Field label="Namespace (Enterprise/HCP)"><Input value={v.namespace} onChange={(e) => set("namespace", e.target.value)} placeholder="admin" /></Field>
         </div>
         <Field label="Login">
-          <select value={v.auth} onChange={(e) => set("auth", e.target.value)} className={selectClass}>
+          <Select value={v.auth} onChange={(e) => set("auth", e.target.value)}>
             <option value="approle">AppRole (recommended)</option>
             <option value="token">Token</option>
-          </select>
+          </Select>
         </Field>
         {v.auth === "token" ? (
           <Field label="Token"><Input type="password" value={v.token} onFocus={() => v.token === MASK && set("token", "")} onChange={(e) => set("token", e.target.value)} /></Field>
@@ -176,25 +175,25 @@ export function NotificationSettings() {
           <div className="grid sm:grid-cols-2 gap-3">
             <Field label="Name"><Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="#deploys" /></Field>
             <Field label="Type">
-              <select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })} className={selectClass}>
+              <Select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })}>
                 <option value="slack">Slack</option>
                 <option value="discord">Discord</option>
                 <option value="telegram">Telegram</option>
                 <option value="email">Email (SMTP)</option>
                 <option value="mailgun">Email (Mailgun)</option>
                 <option value="webhook">Webhook</option>
-              </select>
+              </Select>
             </Field>
           </div>
           {form.type === "email" ? (
             <div className="grid sm:grid-cols-3 gap-3">
               <Field label="SMTP server"><Input value={form.host ?? ""} onChange={(e) => setForm({ ...form, host: e.target.value })} placeholder="smtp.example.com" /></Field>
               <Field label="Security">
-                <select value={form.security ?? "starttls"} onChange={(e) => setForm({ ...form, security: e.target.value, port: e.target.value === "tls" ? "465" : e.target.value === "none" ? "25" : "587" })} className={selectClass}>
+                <Select value={form.security ?? "starttls"} onChange={(e) => setForm({ ...form, security: e.target.value, port: e.target.value === "tls" ? "465" : e.target.value === "none" ? "25" : "587" })}>
                   <option value="starttls">STARTTLS</option>
                   <option value="tls">TLS</option>
                   <option value="none">None</option>
-                </select>
+                </Select>
               </Field>
               <Field label="Port"><Input value={form.port ?? "587"} onChange={(e) => setForm({ ...form, port: e.target.value })} inputMode="numeric" /></Field>
               <Field label="User name"><Input value={form.user ?? ""} onChange={(e) => setForm({ ...form, user: e.target.value })} autoComplete="off" /></Field>
@@ -206,10 +205,10 @@ export function NotificationSettings() {
             <div className="grid sm:grid-cols-3 gap-3">
               <Field label="Sending domain"><Input value={form.domain ?? ""} onChange={(e) => setForm({ ...form, domain: e.target.value })} placeholder="mg.example.com" /></Field>
               <Field label="Region">
-                <select value={form.region ?? "us"} onChange={(e) => setForm({ ...form, region: e.target.value })} className={selectClass}>
+                <Select value={form.region ?? "us"} onChange={(e) => setForm({ ...form, region: e.target.value })}>
                   <option value="us">US (api.mailgun.net)</option>
                   <option value="eu">EU (api.eu.mailgun.net)</option>
-                </select>
+                </Select>
               </Field>
               <Field label="API key" hint="A Sending API key for the domain"><Input type="password" value={form.apiKey ?? ""} onChange={(e) => setForm({ ...form, apiKey: e.target.value })} autoComplete="new-password" /></Field>
               <Field label="From (optional)"><Input value={form.from ?? ""} onChange={(e) => setForm({ ...form, from: e.target.value })} placeholder="DeployNow <alerts@mg.example.com>" /></Field>

@@ -1,9 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { UserPlus, Copy, ShieldCheck, ShieldOff, Trash2, Ban, RotateCcw, KeyRound, Plus, X } from "lucide-react";
+import { Ban, Copy, KeyRound, Plus, RotateCcw, ShieldCheck, ShieldOff, Trash2, UserPlus, X } from "lucide-react";
 import { useApi } from "@/components/AppShell";
-import { Badge, Button, Card, ErrorText, Field, Input, Modal, PageHeader, timeAgo, IconButton, PageSkeleton, TableWrap } from "@/components/ui";
+import { Badge, Button, Card, ErrorText, Field, Input, Modal, PageHeader, Select, timeAgo, IconButton, PageSkeleton, TableWrap } from "@/components/ui";
 import { useConfirm } from "@/components/feedback";
 
 const ROLES = ["viewer", "operator", "admin", "owner"] as const;
@@ -101,13 +101,13 @@ export default function TeamPage() {
                   </td>
                   <td className="px-4 py-3">
                     {canEdit ? (
-                      <select
+                      <Select
                         value={u.role}
                         onChange={(e) => post({ action: "updateRole", userId: u.id, role: e.target.value })}
-                        className="px-2 py-1 bg-bg-secondary border border-border rounded-md text-sm text-text-primary capitalize"
+                        size="sm" className="w-auto min-w-[8.5rem]" aria-label="Role"
                       >
-                        {ROLES.filter((r) => r !== "owner" || data.me.role === "owner").map((r) => <option key={r} value={r}>{r}</option>)}
-                      </select>
+                        {ROLES.filter((r) => r !== "owner" || data.me.role === "owner").map((r) => <option key={r} value={r}>{r[0].toUpperCase() + r.slice(1)}</option>)}
+                      </Select>
                     ) : (
                       <span className="text-sm capitalize text-text-primary">{u.role}</span>
                     )}
@@ -176,7 +176,7 @@ export default function TeamPage() {
       </Card>
 
       {invite.open && (
-        <Modal title="Invite someone" onClose={() => setInvite({ ...invite, open: false })}>
+        <Modal icon={UserPlus} title="Invite someone" onClose={() => setInvite({ ...invite, open: false })}>
           {invite.link ? (
             <div className="space-y-3">
               <p className="text-sm text-text-secondary">Send this link to {invite.email}. It works once and expires in 7 days.</p>
@@ -190,9 +190,9 @@ export default function TeamPage() {
             <div className="space-y-4">
               <Field label="Email"><Input type="email" value={invite.email} onChange={(e) => setInvite({ ...invite, email: e.target.value })} /></Field>
               <Field label="Role" hint={ROLE_HELP[invite.role]}>
-                <select value={invite.role} onChange={(e) => setInvite({ ...invite, role: e.target.value })} className="w-full px-3 py-2 bg-bg-secondary border border-border rounded-lg text-sm text-text-primary capitalize">
-                  {ROLES.filter((r) => r !== "owner" || data.me.role === "owner").map((r) => <option key={r} value={r}>{r}</option>)}
-                </select>
+                <Select value={invite.role} onChange={(e) => setInvite({ ...invite, role: e.target.value })}>
+                  {ROLES.filter((r) => r !== "owner" || data.me.role === "owner").map((r) => <option key={r} value={r}>{r[0].toUpperCase() + r.slice(1)}</option>)}
+                </Select>
               </Field>
               <div className="flex justify-end gap-2">
                 <Button variant="ghost" onClick={() => setInvite({ ...invite, open: false })}>Cancel</Button>
@@ -204,17 +204,17 @@ export default function TeamPage() {
       )}
 
       {grantFor && (
-        <Modal title={`Grant ${grantFor.name} access to an endpoint`} onClose={() => setGrantFor(null)}>
+        <Modal icon={KeyRound} title={`Grant ${grantFor.name} access to an endpoint`} onClose={() => setGrantFor(null)}>
           <div className="space-y-4">
             <Field label="Endpoint">
-              <select value={grant.endpointId} onChange={(e) => setGrant({ ...grant, endpointId: e.target.value })} className="w-full px-3 py-2 bg-bg-secondary border border-border rounded-lg text-sm text-text-primary">
+              <Select value={grant.endpointId} onChange={(e) => setGrant({ ...grant, endpointId: e.target.value })}>
                 {data.endpoints.map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}
-              </select>
+              </Select>
             </Field>
             <Field label="Role on that endpoint" hint={ROLE_HELP[grant.role]}>
-              <select value={grant.role} onChange={(e) => setGrant({ ...grant, role: e.target.value })} className="w-full px-3 py-2 bg-bg-secondary border border-border rounded-lg text-sm text-text-primary capitalize">
-                {["viewer", "operator", "admin"].map((r) => <option key={r} value={r}>{r}</option>)}
-              </select>
+              <Select value={grant.role} onChange={(e) => setGrant({ ...grant, role: e.target.value })}>
+                {["viewer", "operator", "admin"].map((r) => <option key={r} value={r}>{r[0].toUpperCase() + r.slice(1)}</option>)}
+              </Select>
             </Field>
             <div className="flex justify-end gap-2">
               <Button variant="ghost" onClick={() => setGrantFor(null)}>Cancel</Button>

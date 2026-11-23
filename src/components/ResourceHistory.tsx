@@ -12,7 +12,7 @@ import { useEffect, useMemo, useState, type PointerEvent } from "react";
 import Link from "next/link";
 import { clsx } from "clsx";
 import { useApi } from "./AppShell";
-import { Card, formatBytes } from "./ui";
+import { Card, formatBytes, Select } from "./ui";
 
 const RANGES = ["1h", "6h", "24h", "7d", "30d"] as const;
 type Range = (typeof RANGES)[number];
@@ -279,10 +279,10 @@ export default function ResourceHistory({ appId, endpointId, containerId, title 
       <div className="flex flex-wrap items-center gap-2 mb-4">
         <h3 className="text-sm font-semibold text-text-primary mr-auto">{title}</h3>
         {series.length > 1 && (
-          <select value={pick} onChange={(e) => setPick(e.target.value)} aria-label="Service" className="bg-bg-secondary border border-border rounded-lg text-xs px-2 py-1 text-text-primary">
+          <Select value={pick} onChange={(e) => setPick(e.target.value)} aria-label="Service" size="sm" className="w-auto max-w-[16rem]">
             <option value="all">All services</option>
             {series.map((x) => <option key={x.key} value={x.key}>{seriesLabel(x.key, x.service, x.container)}</option>)}
-          </select>
+          </Select>
         )}
         <RangePicker value={range} onChange={setRange} />
         {hasData && (

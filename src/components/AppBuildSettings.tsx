@@ -62,7 +62,7 @@ export function AppBuildSettings({
             Each pull request from this repository gets its own copy at <code>pr-&lt;number&gt;.{v.previewDomain || "preview.example.com"}</code>, removed when the PR closes. Point <code>*.{v.previewDomain || "preview.example.com"}</code> at {app.endpoint.name}, and send GitHub&apos;s <b>pull request</b> events to the webhook{app.webhookUrl ? <> (<code>{app.webhookUrl}</code>)</> : null}. Pull requests from forks are ignored.
           </p>
           <label className="flex items-center gap-2 text-sm text-text-secondary">
-            <input type="checkbox" checked={v.previewsEnabled} onChange={(e) => setV({ ...v, previewsEnabled: e.target.checked })} /> Create previews for pull requests
+            <input type="checkbox" role="switch" checked={v.previewsEnabled} onChange={(e) => setV({ ...v, previewsEnabled: e.target.checked })} /> Create previews for pull requests
           </label>
           {v.previewsEnabled && (
             <Field label="Preview domain"><Input value={v.previewDomain} onChange={(e) => setV({ ...v, previewDomain: e.target.value })} placeholder="preview.example.com" /></Field>

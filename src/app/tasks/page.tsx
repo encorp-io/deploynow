@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { CalendarClock, Play, Pencil, Trash2, Plus } from "lucide-react";
+import { CalendarClock, History, Pencil, Play, Plus, Trash2 } from "lucide-react";
 import { useApi } from "@/components/AppShell";
 import { Badge, Button, Card, ErrorText, Field, Input, Modal, PageHeader, Select, TextArea, formatTime, timeAgo, IconButton, Skeleton } from "@/components/ui";
 import { useConfirm } from "@/components/feedback";
@@ -123,7 +123,7 @@ export default function TasksPage() {
         )}
       </Card>
       {editing && (
-        <Modal title={editing === "new" ? "New scheduled task" : `Edit ${editing.name}`} onClose={() => setEditing(null)} wide>
+        <Modal icon={CalendarClock} title={editing === "new" ? "New scheduled task" : `Edit ${editing.name}`} onClose={() => setEditing(null)} wide>
           <TaskForm api={api} existing={editing === "new" ? undefined : editing} endpoints={endpoints} onCancel={() => setEditing(null)} onSaved={() => { setEditing(null); load(); }} />
         </Modal>
       )}
@@ -195,7 +195,7 @@ function TaskForm({ api, existing, endpoints, onSaved, onCancel }: { api: Api; e
         </>
       )}
       <Field label="Command" hint="Run with sh -c"><TextArea rows={3} value={f.command} onChange={(e) => setF({ ...f, command: e.target.value })} placeholder="php artisan cache:clear" /></Field>
-      <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={f.enabled} onChange={(e) => setF({ ...f, enabled: e.target.checked })} /> Run on schedule</label>
+      <label className="flex items-center gap-2 text-sm"><input type="checkbox" role="switch" checked={f.enabled} onChange={(e) => setF({ ...f, enabled: e.target.checked })} /> Run on schedule</label>
       <ErrorText>{error}</ErrorText>
       <div className="flex justify-end gap-2">
         <Button variant="ghost" onClick={onCancel}>Cancel</Button>
@@ -224,7 +224,7 @@ function HistoryModal({ api, task, onClose }: { api: Api; task: Task; onClose: (
     };
   }, [api, task.id]);
   return (
-    <Modal title={`${task.name}: recent runs`} onClose={onClose} wide>
+    <Modal icon={History} title={`${task.name}: recent runs`} onClose={onClose} wide>
       {!runs ? (
         <div className="space-y-2" aria-busy="true"><Skeleton className="h-10" /><Skeleton className="h-10" /></div>
       ) : runs.length === 0 ? (

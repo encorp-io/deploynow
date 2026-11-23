@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { clsx } from "clsx";
-import { Archive, Play, Pencil, Trash2, Plus, RotateCcw, ShieldCheck, Download, FlaskConical, KeyRound, X, PlugZap } from "lucide-react";
+import { Archive, DatabaseBackup, Download, FlaskConical, HardDrive, KeyRound, Pencil, Play, PlugZap, Plus, RotateCcw, ScrollText, ShieldCheck, Trash2, X } from "lucide-react";
 import { useApi } from "@/components/AppShell";
 import { Badge, Button, Card, ErrorText, Field, Input, Modal, PageHeader, Select, Tabs, TextArea, formatBytes, formatTime, timeAgo, TableWrap, IconButton } from "@/components/ui";
 import { useConfirm } from "@/components/feedback";
@@ -343,7 +343,7 @@ export default function BackupsPage() {
       )}
 
       {editing && (
-        <Modal title={editing === "new" ? "New backup policy" : `Edit ${editing.name}`} onClose={() => setEditing(null)} wide>
+        <Modal icon={DatabaseBackup} title={editing === "new" ? "New backup policy" : `Edit ${editing.name}`} onClose={() => setEditing(null)} wide>
           <PolicyForm
             api={api}
             existing={editing === "new" ? undefined : editing}
@@ -360,7 +360,7 @@ export default function BackupsPage() {
         </Modal>
       )}
       {editingDest && (
-        <Modal title={editingDest === "new" ? "Add a destination" : `Edit ${editingDest.name}`} onClose={() => setEditingDest(null)} wide>
+        <Modal icon={HardDrive} title={editingDest === "new" ? "Add a destination" : `Edit ${editingDest.name}`} onClose={() => setEditingDest(null)} wide>
           <DestinationForm api={api} existing={editingDest === "new" ? undefined : editingDest} onCancel={() => setEditingDest(null)} onSaved={() => { setEditingDest(null); load(); }} />
         </Modal>
       )}
@@ -688,7 +688,7 @@ function PolicyForm({
         </>
       )}
       <label className="flex items-center gap-2 text-sm text-text-primary">
-        <input type="checkbox" checked={f.enabled} onChange={(e) => setF({ ...f, enabled: e.target.checked })} /> Run on schedule
+        <input type="checkbox" role="switch" checked={f.enabled} onChange={(e) => setF({ ...f, enabled: e.target.checked })} /> Run on schedule
       </label>
       <ErrorText>{error}</ErrorText>
       <div className="flex justify-end gap-2 pt-2">
@@ -796,7 +796,7 @@ function SnapshotsTab({ api, repos, endpoints, onKit, onStarted }: { api: Api; r
         )}
       </Card>
       {restoring && repo && (
-        <Modal title={`Restore ${restoring.source}`} onClose={() => setRestoring(null)} wide>
+        <Modal icon={RotateCcw} tone="warning" title={`Restore ${restoring.source}`} onClose={() => setRestoring(null)} wide>
           <RestoreForm api={api} repo={repo} snap={restoring} endpoints={endpoints} onCancel={() => setRestoring(null)} onStarted={() => { setRestoring(null); onStarted(); }} />
         </Modal>
       )}
@@ -893,7 +893,7 @@ function KitModal({ api, repoId, onClose }: { api: Api; repoId: string; onClose:
     URL.revokeObjectURL(url);
   }
   return (
-    <Modal title="Recovery kit" onClose={async () => { if (!kit || (await confirm({ title: "Did you save the kit?", message: "It can't be shown again.", confirmLabel: "Yes, close", danger: false }))) onClose(); }} wide>
+    <Modal icon={KeyRound} tone="warning" title="Recovery kit" onClose={async () => { if (!kit || (await confirm({ title: "Did you save the kit?", message: "It can't be shown again.", confirmLabel: "Yes, close", danger: false }))) onClose(); }} wide>
       {!kit ? (
         <div className="space-y-3">
           <p className="text-sm text-text-secondary">
@@ -936,7 +936,7 @@ function RunModal({ api, runId, onClose }: { api: Api; runId: string; onClose: (
     };
   }, [api, runId]);
   return (
-    <Modal title={run ? `${run.kind[0].toUpperCase()}${run.kind.slice(1)}: ${run.status}` : "Run"} onClose={onClose} wide>
+    <Modal icon={ScrollText} title={run ? `${run.kind[0].toUpperCase()}${run.kind.slice(1)}: ${run.status}` : "Run"} onClose={onClose} wide>
       {run?.error && <ErrorText>{run.error}</ErrorText>}
       <pre className="mt-3 bg-bg-primary border border-border rounded-lg p-3 text-xs font-mono text-text-secondary whitespace-pre-wrap max-h-[60vh] overflow-y-auto">{run?.log || "Waiting…"}</pre>
     </Modal>
