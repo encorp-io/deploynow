@@ -18,7 +18,7 @@ import { prisma } from "../prisma";
 import { dockerFor, toConnection } from "../endpoints";
 import { dockerErrorMessage } from "../docker/client";
 import { pullImage } from "../docker/recreate";
-import { allRegistryLogins, registryAuthFor, registryById } from "../registryAuth";
+import { allRegistryLogins, appPullContext, registryAuthFor, registryById, type PullContext } from "../registryAuth";
 import { withDockerCli, runCommand, type RegistryLogin } from "../docker/cliBridge";
 import { decryptSecret } from "../secretsCrypto";
 import { audit } from "../audit";
@@ -48,8 +48,8 @@ async function githubToken(): Promise<string> {
   return s?.githubToken ? decryptSecret(s.githubToken) : "";
 }
 
-async function registryLogins(): Promise<RegistryLogin[]> {
-  return allRegistryLogins();
+async function registryLogins(ctx: PullContext): Promise<RegistryLogin[]> {
+  return allRegistryLogins(ctx);
 }
 
 function insideDir(root: string, rel: string): string {
@@ -156,7 +156,10 @@ export async function runDeployment(deploymentId: string, ctx: RunContext = {}):
     result.envSnapshot = envJson;
     const stored = readStoredEnv(envJson);
     const env = await resolveEnv(stored);
-    log.setMask(makeMasker(env.sensitive));
+    // Registry passwords never go to the log either, even if a tool echoes them
+    const pullCtx = appPullContext(app);
+    const logins = await allRegistryLogins(pullCtx);
+    log.setMask(makeMasker([...env.sensitive, ...logins.map((l) => l.password)]));
     const counts = { secret: stored.filter((e) => e.kind === "secret").length, vault: stored.filter((e) => e.kind === "vault").length };
     if (stored.length) log(`${stored.length} environment variable${stored.length === 1 ? "" : "s"} (${counts.secret} secret, ${counts.vault} from Vault)`);
     const envMap: Record<string, string | undefined> = Object.fromEntries(env.vars.map((v) => [v.key, v.value]));
@@ -179,7 +182,7 @@ export async function runDeployment(deploymentId: string, ctx: RunContext = {}):
         image = rollbackOf?.imageRef || app.image;
         log(`Pulling ${image}`);
         try {
-          await pullImage(docker, image, await registryAuthFor(image));
+          await pullImage(docker, image, await registryAuthFor(image, pullCtx));
         } catch (err) {
           // Registry down or rate-limited: a rollback or redeploy can still use the local copy
           const local = await docker.getImage(image).inspect().then(() => true, () => false);
@@ -198,7 +201,7 @@ export async function runDeployment(deploymentId: string, ctx: RunContext = {}):
           // Built and pushed elsewhere: the registry may still have it
           if (image.startsWith("dn/")) throw new Error(`The image ${image} from that deployment was removed; only the last ${KEEP_IMAGES} builds are kept`);
           log(`Pulling ${image}`);
-          await pullImage(docker, image, await registryAuthFor(image));
+          await pullImage(docker, image, await registryAuthFor(image, pullCtx));
         }
         result.imageRef = image;
         result.imageDigest = rollbackOf.imageDigest;
@@ -217,7 +220,7 @@ export async function runDeployment(deploymentId: string, ctx: RunContext = {}):
         args.push(context);
         const builder = buildEndpoint ?? app.endpoint;
         log(`Building ${image}${buildEndpoint ? ` on ${buildEndpoint.name}` : ""}`);
-        await withDockerCli(toConnection(builder), await registryLogins(), async (cli) => {
+        await withDockerCli(toConnection(builder), await registryLogins(pullCtx), async (cli) => {
           await runCommand("docker", args, { cwd: repoDir, env: cli.env, onOutput: log, signal: ctx.signal, timeoutMs: 30 * 60_000 });
           if (pushRepo) {
             log(`Pushing ${image} to ${registry!.name}`);
@@ -228,7 +231,7 @@ export async function runDeployment(deploymentId: string, ctx: RunContext = {}):
           // The build server doesn't need to keep it (removed before the pull, in case both are one daemon)
           await dockerFor(buildEndpoint).getImage(image).remove().catch(() => {});
           log(`Pulling ${image} on ${app.endpoint.name}`);
-          await pullImage(docker, image, await registryAuthFor(image));
+          await pullImage(docker, image, await registryAuthFor(image, pullCtx));
         }
         const info = await docker.getImage(image).inspect();
         result.imageRef = image;
@@ -278,7 +281,7 @@ export async function runDeployment(deploymentId: string, ctx: RunContext = {}):
       fs.writeFileSync(file, rendered, { mode: 0o600 });
 
       const base = ["compose", "--progress", "plain", "-p", app.slug, "-f", file];
-      await withDockerCli(toConnection(app.endpoint), await registryLogins(), async (cli) => {
+      await withDockerCli(toConnection(app.endpoint), await registryLogins(pullCtx), async (cli) => {
         const run = (args: string[], timeoutMs = 30 * 60_000) =>
           runCommand("docker", [...base, ...args], { cwd: composeDir, env: { ...envMap, ...cli.env }, onOutput: log, signal: ctx.signal, timeoutMs });
         if (!rollbackOf) {

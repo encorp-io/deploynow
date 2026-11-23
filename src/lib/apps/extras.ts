@@ -5,17 +5,38 @@
 import type { Application } from "@prisma/client";
 import { prisma } from "../prisma";
 import { ConfigError, validateHost } from "./config";
+import { canUseRegistry, normalizeRegistryHost, type Actor } from "../registryAuth";
+import { parseImageRef } from "../imageRef";
 
-type Existing = Pick<Application, "sourceType" | "endpointId" | "buildEndpointId" | "registryId" | "previewsEnabled" | "previewDomain" | "previewOfId"> | null | undefined;
+type Existing = Pick<Application, "sourceType" | "endpointId" | "buildEndpointId" | "registryId" | "pullRegistryId" | "image" | "previewsEnabled" | "previewDomain" | "previewOfId"> | null | undefined;
 
-export async function validateAppExtras(body: Record<string, unknown>, sourceType: string, endpointId: string, existing?: Existing) {
-  const out: { buildEndpointId?: string | null; registryId?: string | null; previewsEnabled?: boolean; previewDomain?: string } = {};
+/** Who is saving, and the project the app is in: registry logins are checked against both. */
+export interface ExtrasContext {
+  actor: Actor;
+  projectId: string;
+}
+
+async function usableRegistry(raw: unknown, ctx: ExtrasContext, current: string | null | undefined) {
+  const id = raw ? String(raw) : null;
+  if (!id || id === current) return id; // unchanged: keep it even if someone else picked it
+  const r = await prisma.registry.findUnique({ where: { id } });
+  if (!r || !canUseRegistry(ctx.actor, r, ctx.projectId)) throw new ConfigError("That registry login doesn't exist, or this app can't use it");
+  return id;
+}
+
+export async function validateAppExtras(body: Record<string, unknown>, sourceType: string, endpointId: string, ctx: ExtrasContext, existing?: Existing) {
+  const out: { buildEndpointId?: string | null; registryId?: string | null; pullRegistryId?: string | null; previewsEnabled?: boolean; previewDomain?: string } = {};
   const has = (k: string) => body[k] !== undefined;
 
-  if (has("registryId")) {
-    const id = body.registryId ? String(body.registryId) : null;
-    if (id && !(await prisma.registry.findUnique({ where: { id } }))) throw new ConfigError("That registry doesn't exist");
-    out.registryId = id;
+  if (has("registryId")) out.registryId = await usableRegistry(body.registryId, ctx, existing?.registryId);
+  if (has("pullRegistryId")) {
+    out.pullRegistryId = await usableRegistry(body.pullRegistryId, ctx, existing?.pullRegistryId);
+    const image = typeof body.image === "string" ? body.image : existing?.image;
+    if (out.pullRegistryId && sourceType === "image" && image) {
+      const r = await prisma.registry.findUniqueOrThrow({ where: { id: out.pullRegistryId } });
+      const host = normalizeRegistryHost(parseImageRef(image).registry);
+      if (r.host !== host) throw new ConfigError(`The image is on ${host}, but ${r.name} is a login for ${r.host}`);
+    }
   }
   if (has("buildEndpointId")) {
     const id = body.buildEndpointId && body.buildEndpointId !== endpointId ? String(body.buildEndpointId) : null;

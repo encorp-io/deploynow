@@ -101,11 +101,11 @@ export const OPERATIONS: Op[] = [
   { method: "get", path: "/monitoring", summary: "Active and recent alerts, and host usage", tag: "Monitoring", access: "viewer" },
 
   // Registries
-  { method: "get", path: "/registries", summary: "List registry credentials", tag: "Registries", access: "admin" },
-  { method: "post", path: "/registries", summary: "Add registry credentials", tag: "Registries", access: "admin", body: { name: "string", host: "string", username: "string", password: "string", namespace: "string" } },
-  { method: "patch", path: `/registries/${ID}`, summary: "Update registry credentials", tag: "Registries", access: "admin" },
-  { method: "post", path: `/registries/${ID}`, summary: "Test registry credentials", tag: "Registries", access: "admin" },
-  { method: "delete", path: `/registries/${ID}`, summary: "Remove registry credentials", tag: "Registries", access: "admin" },
+  { method: "get", path: "/registries", summary: "List your registry logins and the shared ones (masked); ?projectId= lists those an app in that project may use", tag: "Registries", access: "viewer" },
+  { method: "post", path: "/registries", summary: "Add a registry login: personal (yours) or shared (a service account, admins; project admins with projectId)", tag: "Registries", access: "viewer", body: { ownerType: "personal | shared", projectId: "string", name: "string", host: "string", username: "string", password: "string", namespace: "string" } },
+  { method: "patch", path: `/registries/${ID}`, summary: "Update a registry login you manage", tag: "Registries", access: "viewer" },
+  { method: "post", path: `/registries/${ID}`, summary: "Test a registry login you manage", tag: "Registries", access: "viewer" },
+  { method: "delete", path: `/registries/${ID}`, summary: "Remove a registry login you manage", tag: "Registries", access: "viewer" },
 
   // Admin
   { method: "get", path: "/activity", summary: "Audit log", tag: "Admin", access: "operator" },
@@ -144,7 +144,7 @@ const TAG_TEXT: Record<string, string> = {
   Backups: "restic backups to S3-compatible storage, restores and drills",
   Tasks: "Scheduled commands",
   Monitoring: "Alerts and host metrics",
-  Registries: "Container registry credentials",
+  Registries: "Registry logins: personal and shared service accounts",
   Admin: "Instance administration",
   Updates: "Image update tracking for unmanaged containers",
   Account: "Your API tokens (needs a signed-in session)",

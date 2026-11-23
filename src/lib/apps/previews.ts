@@ -91,6 +91,7 @@ export async function handlePullRequest(parent: Application, ev: PullRequestEven
         updatePolicy: "manual",
         buildEndpointId: parent.buildEndpointId,
         registryId: parent.registryId,
+        pullRegistryId: parent.pullRegistryId,
         previewOfId: parent.id,
         prNumber: n,
         webhookSecret: encryptSecret(crypto.randomBytes(24).toString("hex")),
