@@ -157,7 +157,7 @@ docs/           user documentation
 npm install
 cp .env.example .env        # set AUTH_SECRET
 npx prisma db push
-npx prisma db seed          # creates admin@encorp.io / admin
+ADMIN_PASSWORD=dev-password-123 npx prisma db seed   # creates admin@encorp.io
 npm run dev                 # http://localhost:3000
 npm test                    # unit and API tests; integration tests run when Docker is available
 ```
