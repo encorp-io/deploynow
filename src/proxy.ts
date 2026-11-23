@@ -6,6 +6,13 @@ import type { NextRequest } from "next/server";
 const MUTATING_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 
 /**
+ * Endpoints that AI apps and other OAuth clients call machine to machine. They
+ * take no cookies (bearer tokens or client credentials only), so they are
+ * public here and skip the browser CSRF check; each route authenticates itself.
+ */
+const MACHINE_PATHS = /^\/(mcp|api\/mcp|api\/oauth\/(token|register|revoke|metadata|resource-metadata)|\.well-known\/oauth-(authorization-server|protected-resource)(\/.*)?)$/;
+
+/**
  * Reconstruct the public-facing origin from the request headers.
  *
  * Behind nginx, Next.js sees http://127.0.0.1:3001 as the origin.
@@ -26,7 +33,8 @@ export default auth((req: NextRequest & { auth: unknown }) => {
   // Behind nginx, req.nextUrl.origin is http://127.0.0.1:3001 — useless.
   // We reconstruct the real origin from forwarded headers and compare against
   // the browser's Origin header.
-  if (MUTATING_METHODS.has(method) && !pathname.startsWith("/api/auth")) {
+  const machine = MACHINE_PATHS.test(pathname);
+  if (MUTATING_METHODS.has(method) && !pathname.startsWith("/api/auth") && !machine) {
     const requestOrigin = req.headers.get("origin");
     if (requestOrigin) {
       const publicOrigin = getPublicOrigin(req);
@@ -39,6 +47,14 @@ export default auth((req: NextRequest & { auth: unknown }) => {
   // ── Authentication gates ────────────────────────────────────────────────────
   // NextAuth routes — always public
   if (pathname.startsWith("/api/auth")) return NextResponse.next();
+
+  // OAuth discovery, client registration, tokens and the MCP endpoint
+  if (machine) return NextResponse.next();
+
+  // OAuth access tokens are bound to /mcp (RFC 8707): refuse them everywhere else
+  if (/^Bearer\s+dno_/i.test(req.headers.get("authorization") ?? "")) {
+    return NextResponse.json({ error: "This token only works with the MCP endpoint (/mcp)" }, { status: 401 });
+  }
 
   // Login, setup pages — public
   if (pathname === "/login" || pathname.startsWith("/setup")) {
@@ -75,9 +91,11 @@ export default auth((req: NextRequest & { auth: unknown }) => {
     if (pathname.startsWith("/api/")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-    // Redirect to /login on the same origin the browser is using
+    // Redirect to /login on the same origin the browser is using, and come back afterwards
     const publicOrigin = getPublicOrigin(req);
-    return NextResponse.redirect(new URL("/login", publicOrigin));
+    const login = new URL("/login", publicOrigin);
+    if (pathname !== "/") login.searchParams.set("next", pathname + req.nextUrl.search);
+    return NextResponse.redirect(login);
   }
 
   // ── Admins and owners must set up 2FA before doing anything else ──────────

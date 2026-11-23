@@ -55,6 +55,7 @@ Self-hosted control plane for your Docker machines: deploy apps, manage containe
 - Roles (viewer, operator, admin, owner) with per-endpoint and per-project grants.
 - A fresh 2FA code for destructive actions, server-side sessions you can revoke, and an audit log.
 - API tokens, an OpenAPI description at `/api/openapi.json`, and the `deploynow` CLI.
+- AI connectors: a built-in MCP server at `/mcp` with OAuth sign-in, so you can run DeployNow from Claude, ChatGPT and other AI apps. See [docs/ai-connectors.md](docs/ai-connectors.md).
 
 ## Quick start
 
@@ -126,6 +127,7 @@ deploynow api GET /endpoints
 | `AGENT_PUBLIC_URL` | No | the platform domain's or `NEXTAUTH_URL`'s host on `AGENT_PORT` | Address agents dial. Can also be set under Settings |
 | `AGENT_IMAGE` | No | `ghcr.io/encorp-io/deploynow-agent:latest` | Agent image in the join command |
 | `RESTIC_IMAGE` | No | `restic/restic:0.18.1` | restic image used for backups on endpoints |
+| `DEPLOYNOW_MCP` | No | `on` | `off` turns off the MCP server and OAuth for AI apps |
 | `BACKUP_PARALLEL` | No | `2` | Backups that run at the same time |
 | `GITHUB_USER`, `GITHUB_TOKEN` | No | | GHCR and private GitHub access. Can also be set under Settings |
 | `CERT_FILE`, `KEY_FILE`, `TLS_HOSTNAME` | No | | Your own certificate, or a hostname for the self-signed one |
