@@ -7,6 +7,7 @@ import { Bell, Boxes, CheckCircle, AlertCircle, Globe, KeyRound, Loader2, Refres
 import { NotificationSettings, VaultSettings } from "@/components/IntegrationSettings";
 import { RegistrySettings, SsoSettings } from "@/components/AccessSettings";
 import { PlatformDomainSettings } from "@/components/PlatformDomainSettings";
+import { DeployNowUpdates } from "@/components/Updates";
 import { useToast } from "@/components/feedback";
 import { Button, Field, Input, PageHeader, Skeleton, TextArea } from "@/components/ui";
 
@@ -272,6 +273,7 @@ function SettingsContent() {
 
           {section === "updates" && (
             <>
+              <DeployNowUpdates />
               <FormCard
                 title="Image update checks"
                 description="DeployNow checks the registries of running containers for newer images. Results show under Image updates."

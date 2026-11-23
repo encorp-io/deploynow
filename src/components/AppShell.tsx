@@ -8,6 +8,7 @@ import { Menu, X } from "lucide-react";
 import { BrandLockup } from "./Brand";
 import Sidebar, { type Me } from "./Sidebar";
 import { FeedbackProvider } from "./feedback";
+import { UpdateBanner } from "./Updates";
 import { Button, ErrorText, Input, Modal } from "./ui";
 
 type ApiResult<T> = { ok: boolean; status: number; data: T & { error?: string } };
@@ -145,7 +146,10 @@ export default function AppShell({ children }: { children: ReactNode }) {
           </div>
         )}
 
-        <main id="main" className="lg:ml-64 px-4 py-6 sm:px-6 lg:px-10 lg:py-10 min-w-0">{children}</main>
+        <main id="main" className="lg:ml-64 px-4 py-6 sm:px-6 lg:px-10 lg:py-10 min-w-0">
+          <UpdateBanner role={me?.role} />
+          {children}
+        </main>
       </div>
       {prompt && (
         <Modal title="Confirm it's you" onClose={cancel}>

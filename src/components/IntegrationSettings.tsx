@@ -95,6 +95,7 @@ const EVENT_LABELS: Record<string, string> = {
   "task.failure": "Scheduled task failed",
   "alert.firing": "Alert started (disk, memory, crash loop, agent offline…)",
   "alert.resolved": "Alert cleared",
+  "update.available": "New DeployNow version",
 };
 
 export function NotificationSettings() {
@@ -235,7 +236,7 @@ export function NotificationSettings() {
           </div>
         </div>
       ) : (
-        <Button type="button" variant="secondary" className="mt-4" onClick={() => setForm({ name: "", type: "slack", url: "", botToken: "", chatId: "", events: ["deploy.failure", "backup.failure", "restore.failure", "task.failure", "alert.firing", "alert.resolved"] })}>
+        <Button type="button" variant="secondary" className="mt-4" onClick={() => setForm({ name: "", type: "slack", url: "", botToken: "", chatId: "", events: ["deploy.failure", "backup.failure", "restore.failure", "task.failure", "alert.firing", "alert.resolved", "update.available"] })}>
           <Plus className="w-4 h-4" /> Add channel
         </Button>
       )}

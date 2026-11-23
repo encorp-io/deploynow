@@ -148,12 +148,12 @@ model Endpoint {
   hostMetrics        String    @default("")
   hostMetricsAt      DateTime?
 
-  services       Service[]
-  applications   Application[]
-  environments   Environment[]
-  backupPolicies BackupPolicy[]
-  scheduledTasks ScheduledTask[]
-  metricSamples  MetricSample[]
+  services         Service[]
+  applications     Application[]
+  environments     Environment[]
+  backupPolicies   BackupPolicy[]
+  scheduledTasks   ScheduledTask[]
+  metricSamples    MetricSample[]
   containerSamples ContainerSample[]
   containerUsage   ContainerUsageHourly[]
 }
@@ -161,38 +161,45 @@ model Endpoint {
 // ─── Settings ─────────────────────────────────────────────────────────────────
 
 model Settings {
-  id                  String  @id @default("singleton")
-  schemaVersion       Int     @default(1)
-  githubUser          String  @default("") // GitHub username for GHCR auth
-  githubToken         String  @default("") // AES-256-GCM encrypted at rest
-  pollingInterval     Int     @default(60) // seconds, range 30–3600
-  autoUpdateLatest    Boolean @default(false)
-  require2faForAdmins Boolean @default(true)
+  id                  String    @id @default("singleton")
+  schemaVersion       Int       @default(1)
+  githubUser          String    @default("") // GitHub username for GHCR auth
+  githubToken         String    @default("") // AES-256-GCM encrypted at rest
+  pollingInterval     Int       @default(60) // seconds, range 30–3600
+  autoUpdateLatest    Boolean   @default(false)
+  require2faForAdmins Boolean   @default(true)
   // Optional HashiCorp Vault: env vars of kind "vault" hold <mount>/<path>#<field>
-  vaultAddr           String  @default("") // https://vault.example.com:8200
-  vaultNamespace      String  @default("") // Vault Enterprise / HCP namespace
-  vaultAuth           String  @default("token") // token, approle
-  vaultToken          String  @default("") // encrypted
-  vaultRoleId         String  @default("")
-  vaultSecretId       String  @default("") // encrypted
-  vaultCaCert         String  @default("") // PEM, for a private CA
+  vaultAddr           String    @default("") // https://vault.example.com:8200
+  vaultNamespace      String    @default("") // Vault Enterprise / HCP namespace
+  vaultAuth           String    @default("token") // token, approle
+  vaultToken          String    @default("") // encrypted
+  vaultRoleId         String    @default("")
+  vaultSecretId       String    @default("") // encrypted
+  vaultCaCert         String    @default("") // PEM, for a private CA
   // Agent hub PKI: a private CA signs each agent's client certificate and the hub's server certificate
-  agentCaCert         String  @default("")
-  agentCaKey          String  @default("") // encrypted
-  agentServerCert     String  @default("")
-  agentServerKey      String  @default("") // encrypted
-  agentPublicUrl      String  @default("") // what agents dial, e.g. https://deploynow.example.com:8444
+  agentCaCert         String    @default("")
+  agentCaKey          String    @default("") // encrypted
+  agentServerCert     String    @default("")
+  agentServerKey      String    @default("") // encrypted
+  agentPublicUrl      String    @default("") // what agents dial, e.g. https://deploynow.example.com:8444
   // The domain DeployNow's own UI is served on through the local endpoint's Traefik
   // (e.g. deploy.example.com). Only set after the domain answered with a valid certificate.
-  platformDomain      String  @default("")
+  platformDomain      String    @default("")
   // Alerts
-  alertDiskPercent    Int     @default(90) // alert when a host disk is this full
-  alertMemPercent     Int     @default(95)
-  alertCrashRestarts  Int     @default(3) // restarts within 10 minutes that count as a crash loop
+  alertDiskPercent    Int       @default(90) // alert when a host disk is this full
+  alertMemPercent     Int       @default(95)
+  alertCrashRestarts  Int       @default(3) // restarts within 10 minutes that count as a crash loop
+  // New DeployNow releases, read from GitHub (Settings → Updates; DEPLOYNOW_UPDATE_CHECK=off disables)
+  releaseCheck        Boolean   @default(true)
+  latestRelease       String    @default("") // e.g. 2.1.0
+  latestReleaseUrl    String    @default("")
+  latestReleaseNotes  String    @default("") // markdown, trimmed
+  releaseCheckedAt    DateTime?
+  releaseNotified     String    @default("") // the release last sent to notification channels
   // ── v1 legacy (read once by the v2 upgrade step, no longer used) ──
-  portainerUrl        String  @default("")
-  portainerApiKey     String  @default("")
-  portainerEndpointId Int     @default(1)
+  portainerUrl        String    @default("")
+  portainerApiKey     String    @default("")
+  portainerEndpointId Int       @default(1)
 }
 
 // A container tracked for image updates (v1 concept, kept until phase 2
@@ -732,22 +739,22 @@ model AuthChallenge {
 // Several logins may share a host; an app picks one with pullRegistryId, else
 // the project's shared login wins over the instance-wide one.
 model Registry {
-  id          String   @id @default(cuid())
-  name        String // unique per owner (checked in code)
-  host        String // ghcr.io, registry.example.com:5000, docker.io
-  username    String
-  password    String // encrypted
-  namespace   String   @default("") // where built images are pushed, e.g. ghcr.io/acme
-  ownerType   String   @default("shared") // shared, personal
-  userId      String? // personal: the owner
-  user        User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  projectId   String? // shared: only this project's apps may use it
-  project     Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  createdBy   String   @default("") // email of whoever added it
-  lastTestAt  DateTime?
-  lastTestOk  Boolean?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id         String    @id @default(cuid())
+  name       String // unique per owner (checked in code)
+  host       String // ghcr.io, registry.example.com:5000, docker.io
+  username   String
+  password   String // encrypted
+  namespace  String    @default("") // where built images are pushed, e.g. ghcr.io/acme
+  ownerType  String    @default("shared") // shared, personal
+  userId     String? // personal: the owner
+  user       User?     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  projectId  String? // shared: only this project's apps may use it
+  project    Project?  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  createdBy  String    @default("") // email of whoever added it
+  lastTestAt DateTime?
+  lastTestOk Boolean?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
 
   @@index([host])
   @@index([userId])

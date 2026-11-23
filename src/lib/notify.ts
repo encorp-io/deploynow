@@ -19,6 +19,7 @@ export const EVENTS = [
   "task.failure",
   "alert.firing",
   "alert.resolved",
+  "update.available",
 ] as const;
 export type NotifyEvent = (typeof EVENTS)[number];
 
