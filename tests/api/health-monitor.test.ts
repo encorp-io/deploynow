@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-vi.mock("@/lib/auth", () => ({ auth: vi.fn() }));
+vi.mock("@/lib/apiAuth", () => import("../helpers/apiAuthMock"));
+vi.mock("@/lib/audit", () => ({ audit: vi.fn(), clientIp: () => "1.2.3.4" }));
 
 const mockPrisma = {
   healthMonitor: {
@@ -10,24 +11,21 @@ const mockPrisma = {
 };
 vi.mock("@/lib/prisma", () => ({ prisma: mockPrisma }));
 
-vi.mock("@/lib/sessionHelpers", () => ({
-  isAdmin: vi.fn((session: any) => session?.user?.role === "admin"),
-}));
 
-import { auth } from "@/lib/auth";
+import { signInAs, signOut } from "../helpers/apiAuthMock";
 
 describe("GET /api/health-monitor", () => {
   beforeEach(() => vi.clearAllMocks());
 
   it("returns 401 when not authenticated", async () => {
-    vi.mocked(auth).mockResolvedValue(null as any);
+    signOut();
     const { GET } = await import("@/app/api/health-monitor/route");
     const res = await GET();
     expect(res.status).toBe(401);
   });
 
   it("returns defaults when no config exists", async () => {
-    vi.mocked(auth).mockResolvedValue({ user: { role: "member" } } as any);
+    signInAs("operator");
     mockPrisma.healthMonitor.findUnique.mockResolvedValue(null);
     const { GET } = await import("@/app/api/health-monitor/route");
     const res = await GET();
@@ -42,7 +40,7 @@ describe("GET /api/health-monitor", () => {
   });
 
   it("returns existing config values", async () => {
-    vi.mocked(auth).mockResolvedValue({ user: { role: "member" } } as any);
+    signInAs("operator");
     mockPrisma.healthMonitor.findUnique.mockResolvedValue({
       enabled: true,
       prefixes: "n8n-worker\nglances",
@@ -65,7 +63,7 @@ describe("PUT /api/health-monitor", () => {
   beforeEach(() => vi.clearAllMocks());
 
   it("returns 401 when not authenticated", async () => {
-    vi.mocked(auth).mockResolvedValue(null as any);
+    signOut();
     const { PUT } = await import("@/app/api/health-monitor/route");
     const req = new Request("http://localhost/api/health-monitor", {
       method: "PUT",
@@ -76,7 +74,7 @@ describe("PUT /api/health-monitor", () => {
   });
 
   it("returns 403 for non-admin", async () => {
-    vi.mocked(auth).mockResolvedValue({ user: { role: "member" } } as any);
+    signInAs("operator");
     const { PUT } = await import("@/app/api/health-monitor/route");
     const req = new Request("http://localhost/api/health-monitor", {
       method: "PUT",
@@ -88,7 +86,7 @@ describe("PUT /api/health-monitor", () => {
   });
 
   it("returns 400 for invalid JSON body", async () => {
-    vi.mocked(auth).mockResolvedValue({ user: { role: "admin" } } as any);
+    signInAs("admin");
     const { PUT } = await import("@/app/api/health-monitor/route");
     const req = new Request("http://localhost/api/health-monitor", {
       method: "PUT",
@@ -100,7 +98,7 @@ describe("PUT /api/health-monitor", () => {
   });
 
   it("rejects logPatterns with only blank lines", async () => {
-    vi.mocked(auth).mockResolvedValue({ user: { role: "admin" } } as any);
+    signInAs("admin");
     const { PUT } = await import("@/app/api/health-monitor/route");
     const req = new Request("http://localhost/api/health-monitor", {
       method: "PUT",
@@ -114,7 +112,7 @@ describe("PUT /api/health-monitor", () => {
   });
 
   it("accepts empty prefixes (monitor all containers)", async () => {
-    vi.mocked(auth).mockResolvedValue({ user: { role: "admin" } } as any);
+    signInAs("admin");
     mockPrisma.healthMonitor.upsert.mockResolvedValue({});
     const { PUT } = await import("@/app/api/health-monitor/route");
     const req = new Request("http://localhost/api/health-monitor", {
@@ -127,7 +125,7 @@ describe("PUT /api/health-monitor", () => {
   });
 
   it("rejects logWindow below minimum", async () => {
-    vi.mocked(auth).mockResolvedValue({ user: { role: "admin" } } as any);
+    signInAs("admin");
     const { PUT } = await import("@/app/api/health-monitor/route");
     const req = new Request("http://localhost/api/health-monitor", {
       method: "PUT",
@@ -139,7 +137,7 @@ describe("PUT /api/health-monitor", () => {
   });
 
   it("rejects logWindow above maximum", async () => {
-    vi.mocked(auth).mockResolvedValue({ user: { role: "admin" } } as any);
+    signInAs("admin");
     const { PUT } = await import("@/app/api/health-monitor/route");
     const req = new Request("http://localhost/api/health-monitor", {
       method: "PUT",
@@ -151,7 +149,7 @@ describe("PUT /api/health-monitor", () => {
   });
 
   it("rejects cooldown below minimum", async () => {
-    vi.mocked(auth).mockResolvedValue({ user: { role: "admin" } } as any);
+    signInAs("admin");
     const { PUT } = await import("@/app/api/health-monitor/route");
     const req = new Request("http://localhost/api/health-monitor", {
       method: "PUT",
@@ -163,7 +161,7 @@ describe("PUT /api/health-monitor", () => {
   });
 
   it("rejects cooldown above maximum", async () => {
-    vi.mocked(auth).mockResolvedValue({ user: { role: "admin" } } as any);
+    signInAs("admin");
     const { PUT } = await import("@/app/api/health-monitor/route");
     const req = new Request("http://localhost/api/health-monitor", {
       method: "PUT",
@@ -175,7 +173,7 @@ describe("PUT /api/health-monitor", () => {
   });
 
   it("saves valid config with multiple prefixes and patterns", async () => {
-    vi.mocked(auth).mockResolvedValue({ user: { role: "admin" } } as any);
+    signInAs("admin");
     mockPrisma.healthMonitor.upsert.mockResolvedValue({});
     const { PUT } = await import("@/app/api/health-monitor/route");
     const req = new Request("http://localhost/api/health-monitor", {
@@ -199,7 +197,7 @@ describe("PUT /api/health-monitor", () => {
   });
 
   it("accepts partial updates (only enabled flag)", async () => {
-    vi.mocked(auth).mockResolvedValue({ user: { role: "admin" } } as any);
+    signInAs("admin");
     mockPrisma.healthMonitor.upsert.mockResolvedValue({});
     const { PUT } = await import("@/app/api/health-monitor/route");
     const req = new Request("http://localhost/api/health-monitor", {

@@ -1,280 +1,222 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import {
-  UserPlus,
-  Loader2,
-  Trash2,
-  Copy,
-  CheckCircle,
-  Shield,
-  User,
-  Mail,
-} from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import { UserPlus, Copy, ShieldCheck, ShieldOff, Trash2, Ban, RotateCcw, KeyRound, Plus, X } from "lucide-react";
+import { useApi } from "@/components/AppShell";
+import { Badge, Button, Card, ErrorText, Field, Input, Modal, PageHeader, timeAgo } from "@/components/ui";
 
-interface TeamUser {
+const ROLES = ["viewer", "operator", "admin", "owner"] as const;
+const ROLE_HELP: Record<string, string> = {
+  viewer: "See endpoints and containers. No logs, env values or actions.",
+  operator: "Viewer + logs, console, start/stop/restart and image updates.",
+  admin: "Operator + remove resources, manage endpoints, users and settings.",
+  owner: "Admin + manage owners and turn off required 2FA.",
+};
+
+interface Binding { id: string; role: string; scopeType: string; scopeId: string }
+interface UserRow {
   id: string;
   email: string;
   name: string;
   role: string;
   createdAt: string;
+  lastLoginAt: string | null;
+  disabledAt: string | null;
+  totpEnabled: boolean;
+  roleBindings: Binding[];
 }
-
-interface Invite {
-  id: string;
-  email: string;
-  token: string;
-  role: string;
-  expiresAt: string;
-}
+interface Invite { id: string; email: string; role: string; expiresAt: string }
+interface TeamData { users: UserRow[]; invites: Invite[]; endpoints: { id: string; name: string }[]; me: { id: string; role: string } }
 
 export default function TeamPage() {
-  const [users, setUsers] = useState<TeamUser[]>([]);
-  const [invites, setInvites] = useState<Invite[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [inviteEmail, setInviteEmail] = useState("");
-  const [inviteRole, setInviteRole] = useState("member");
-  const [inviting, setInviting] = useState(false);
-  const [copiedToken, setCopiedToken] = useState<string | null>(null);
-  const [newInviteLink, setNewInviteLink] = useState<string | null>(null);
+  const api = useApi();
+  const [data, setData] = useState<TeamData | null>(null);
+  const [error, setError] = useState("");
+  const [invite, setInvite] = useState({ open: false, email: "", role: "operator", link: "" });
+  const [grantFor, setGrantFor] = useState<UserRow | null>(null);
+  const [grant, setGrant] = useState({ endpointId: "", role: "operator" });
 
-  async function fetchTeam() {
-    const res = await fetch("/api/team");
-    if (res.ok) {
-      const data = await res.json();
-      setUsers(data.users);
-      setInvites(data.invites);
-    }
-    setLoading(false);
-  }
+  const load = useCallback(async () => {
+    const res = await api<TeamData>("/api/team");
+    if (res.ok) setData(res.data as TeamData);
+  }, [api]);
 
   useEffect(() => {
-    fetchTeam();
-  }, []);
+    load();
+  }, [load]);
 
-  async function handleInvite(e: React.FormEvent) {
-    e.preventDefault();
-    setInviting(true);
-    setNewInviteLink(null);
-
-    const res = await fetch("/api/team", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        action: "invite",
-        email: inviteEmail,
-        role: inviteRole,
-      }),
-    });
-
-    if (res.ok) {
-      const data = await res.json();
-      const link = `${window.location.origin}/setup?token=${data.token}`;
-      setNewInviteLink(link);
-      setInviteEmail("");
-      await fetchTeam();
-    }
-
-    setInviting(false);
+  async function post(body: Record<string, unknown>, confirmText?: string) {
+    if (confirmText && !confirm(confirmText)) return;
+    setError("");
+    const res = await api<{ token?: string }>("/api/team", { body });
+    if (!res.ok) setError(res.data.error ?? "Action failed");
+    await load();
+    return res;
   }
 
-  async function handleRemove(userId: string) {
-    if (!confirm("Are you sure you want to remove this team member?")) return;
-
-    await fetch("/api/team", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "remove", userId }),
-    });
-
-    await fetchTeam();
+  async function sendInvite() {
+    const res = await post({ action: "invite", email: invite.email, role: invite.role });
+    if (res?.ok && res.data.token) setInvite({ ...invite, link: `${window.location.origin}/setup?token=${res.data.token}` });
   }
 
-  async function handleRoleChange(userId: string, role: string) {
-    await fetch("/api/team", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "updateRole", userId, role }),
-    });
-
-    await fetchTeam();
-  }
-
-  function copyToClipboard(text: string, id: string) {
-    navigator.clipboard.writeText(text);
-    setCopiedToken(id);
-    setTimeout(() => setCopiedToken(null), 2000);
-  }
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-[60vh]">
-        <Loader2 className="w-8 h-8 text-accent animate-spin" />
-      </div>
-    );
-  }
+  if (!data) return <p className="text-sm text-text-muted">Loading…</p>;
+  const isAdmin = data.me.role === "admin" || data.me.role === "owner";
+  const endpointName = (id: string) => data.endpoints.find((e) => e.id === id)?.name ?? "removed endpoint";
 
   return (
-    <div className="max-w-3xl">
-      <div className="mb-8">
-        <h1 className="text-2xl font-bold text-text-primary">Team</h1>
-        <p className="text-sm text-text-muted mt-1">
-          Manage team members and invite new users
-        </p>
-      </div>
+    <div className="max-w-5xl">
+      <PageHeader
+        title="Team"
+        subtitle="Everyone has an instance role; endpoint grants raise it on one machine"
+        actions={isAdmin && <Button onClick={() => setInvite({ open: true, email: "", role: "operator", link: "" })}><UserPlus className="w-4 h-4" /> Invite</Button>}
+      />
+      <ErrorText>{error}</ErrorText>
 
-      {/* Invite form */}
-      <section className="bg-bg-card border border-border rounded-xl p-6 mb-8">
-        <h2 className="text-sm font-semibold text-text-primary mb-4">
-          Invite Team Member
-        </h2>
-        <form onSubmit={handleInvite} className="flex items-end gap-3">
-          <div className="flex-1">
-            <label className="block text-xs font-medium text-text-secondary mb-1.5">
-              Email
-            </label>
-            <input
-              type="email"
-              value={inviteEmail}
-              onChange={(e) => setInviteEmail(e.target.value)}
-              className="w-full px-3 py-2.5 bg-bg-secondary border border-border rounded-lg text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent/30 transition-colors"
-              placeholder="colleague@company.com"
-              required
-            />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-text-secondary mb-1.5">
-              Role
-            </label>
-            <select
-              value={inviteRole}
-              onChange={(e) => setInviteRole(e.target.value)}
-              className="px-3 py-2.5 bg-bg-secondary border border-border rounded-lg text-sm text-text-primary focus:outline-none focus:border-accent transition-colors"
-            >
-              <option value="member">Member</option>
-              <option value="admin">Admin</option>
-            </select>
-          </div>
-          <button
-            type="submit"
-            disabled={inviting}
-            className="flex items-center gap-2 px-4 py-2.5 bg-accent hover:bg-accent-hover text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
-          >
-            {inviting ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
-            ) : (
-              <UserPlus className="w-4 h-4" />
-            )}
-            Invite
-          </button>
-        </form>
+      <Card className="overflow-hidden mt-2">
+        <table className="w-full">
+          <thead className="border-b border-border">
+            <tr className="text-left text-xs text-text-muted">
+              <th className="px-4 py-2.5 font-medium">Person</th>
+              <th className="px-4 py-2.5 font-medium">Role</th>
+              <th className="px-4 py-2.5 font-medium">Endpoint grants</th>
+              <th className="px-4 py-2.5 font-medium">2FA</th>
+              <th className="px-4 py-2.5 font-medium">Last sign-in</th>
+              <th className="px-4 py-2.5"></th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-border">
+            {data.users.map((u) => {
+              const self = u.id === data.me.id;
+              const canEdit = isAdmin && !self && (data.me.role === "owner" || (u.role !== "owner" && u.role !== "admin"));
+              return (
+                <tr key={u.id} className={u.disabledAt ? "opacity-50" : ""}>
+                  <td className="px-4 py-3 text-sm">
+                    <p className="text-text-primary">{u.name} {self && <Badge tone="accent">you</Badge>} {u.disabledAt && <Badge tone="danger">disabled</Badge>}</p>
+                    <p className="text-xs text-text-muted">{u.email}</p>
+                  </td>
+                  <td className="px-4 py-3">
+                    {canEdit ? (
+                      <select
+                        value={u.role}
+                        onChange={(e) => post({ action: "updateRole", userId: u.id, role: e.target.value })}
+                        className="px-2 py-1 bg-bg-secondary border border-border rounded-md text-sm text-text-primary capitalize"
+                      >
+                        {ROLES.filter((r) => r !== "owner" || data.me.role === "owner").map((r) => <option key={r} value={r}>{r}</option>)}
+                      </select>
+                    ) : (
+                      <span className="text-sm capitalize text-text-primary">{u.role}</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="flex flex-wrap gap-1 items-center">
+                      {u.roleBindings.filter((b) => b.scopeType === "endpoint").map((b) => (
+                        <Badge key={b.id} tone="accent">
+                          {endpointName(b.scopeId)}: {b.role}
+                          {canEdit && (
+                            <button title="Remove grant" onClick={() => post({ action: "revokeGrant", userId: u.id, bindingId: b.id })}>
+                              <X className="w-3 h-3" />
+                            </button>
+                          )}
+                        </Badge>
+                      ))}
+                      {canEdit && data.endpoints.length > 0 && (
+                        <button className="text-xs text-text-muted hover:text-accent flex items-center gap-0.5" onClick={() => { setGrantFor(u); setGrant({ endpointId: data.endpoints[0].id, role: "operator" }); }}>
+                          <Plus className="w-3 h-3" /> grant
+                        </button>
+                      )}
+                    </div>
+                  </td>
+                  <td className="px-4 py-3">{u.totpEnabled ? <ShieldCheck className="w-4 h-4 text-success" /> : <ShieldOff className="w-4 h-4 text-warning" />}</td>
+                  <td className="px-4 py-3 text-xs text-text-muted">{timeAgo(u.lastLoginAt)}</td>
+                  <td className="px-4 py-3 text-right whitespace-nowrap">
+                    {canEdit && (
+                      <>
+                        {u.totpEnabled && (
+                          <Button variant="ghost" title="Reset 2FA" onClick={() => post({ action: "reset2fa", userId: u.id }, `Reset 2FA for ${u.email}? They will set it up again at next sign-in.`)}>
+                            <KeyRound className="w-4 h-4" />
+                          </Button>
+                        )}
+                        {u.disabledAt ? (
+                          <Button variant="ghost" title="Re-enable" onClick={() => post({ action: "enable", userId: u.id })}><RotateCcw className="w-4 h-4" /></Button>
+                        ) : (
+                          <Button variant="ghost" title="Disable and sign out" onClick={() => post({ action: "disable", userId: u.id }, `Disable ${u.email}? They are signed out everywhere.`)}><Ban className="w-4 h-4" /></Button>
+                        )}
+                        <Button variant="ghost" title="Remove" onClick={() => post({ action: "remove", userId: u.id }, `Remove ${u.email} permanently?`)}><Trash2 className="w-4 h-4" /></Button>
+                      </>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </Card>
 
-        {newInviteLink && (
-          <div className="mt-4 bg-success/10 border border-success/20 rounded-lg p-3">
-            <p className="text-xs text-success font-medium mb-2">
-              Invite link created! Share this with the team member:
-            </p>
-            <div className="flex items-center gap-2">
-              <code className="flex-1 text-xs text-text-primary bg-bg-secondary rounded px-2 py-1.5 truncate">
-                {newInviteLink}
-              </code>
-              <button
-                onClick={() => copyToClipboard(newInviteLink, "new")}
-                className="p-2 hover:bg-bg-secondary rounded-lg transition-colors"
-              >
-                {copiedToken === "new" ? (
-                  <CheckCircle className="w-4 h-4 text-success" />
-                ) : (
-                  <Copy className="w-4 h-4 text-text-muted" />
-                )}
-              </button>
-            </div>
-          </div>
-        )}
-      </section>
+      {data.invites.length > 0 && (
+        <Card className="p-5 mt-4">
+          <h3 className="text-sm font-semibold mb-2">Pending invites</h3>
+          {data.invites.map((i) => (
+            <p key={i.id} className="text-xs text-text-secondary">{i.email} as {i.role}, expires {new Date(i.expiresAt).toLocaleDateString()}</p>
+          ))}
+        </Card>
+      )}
 
-      {/* Members list */}
-      <section className="bg-bg-card border border-border rounded-xl overflow-hidden mb-8">
-        <div className="px-6 py-4 border-b border-border">
-          <h2 className="text-sm font-semibold text-text-primary">
-            Members ({users.length})
-          </h2>
-        </div>
-        <div className="divide-y divide-border">
-          {users.map((user) => (
-            <div
-              key={user.id}
-              className="flex items-center justify-between px-6 py-4"
-            >
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-full bg-bg-secondary flex items-center justify-center">
-                  {user.role === "admin" ? (
-                    <Shield className="w-4 h-4 text-accent" />
-                  ) : (
-                    <User className="w-4 h-4 text-text-muted" />
-                  )}
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-text-primary">
-                    {user.name}
-                  </p>
-                  <p className="text-xs text-text-muted">{user.email}</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-3">
-                <select
-                  value={user.role}
-                  onChange={(e) => handleRoleChange(user.id, e.target.value)}
-                  className="px-2 py-1 bg-bg-secondary border border-border rounded text-xs text-text-secondary focus:outline-none"
-                >
-                  <option value="member">Member</option>
-                  <option value="admin">Admin</option>
-                </select>
-                {users.length > 1 && (
-                  <button
-                    onClick={() => handleRemove(user.id)}
-                    className="p-1.5 text-text-muted hover:text-danger hover:bg-danger/10 rounded-lg transition-colors"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                )}
-              </div>
-            </div>
+      <Card className="p-5 mt-4">
+        <h3 className="text-sm font-semibold mb-2">What each role can do</h3>
+        <div className="grid grid-cols-2 gap-2 text-xs">
+          {ROLES.map((r) => (
+            <p key={r}><span className="capitalize text-text-primary font-medium">{r}:</span> <span className="text-text-secondary">{ROLE_HELP[r]}</span></p>
           ))}
         </div>
-      </section>
+      </Card>
 
-      {/* Pending invites */}
-      {invites.length > 0 && (
-        <section className="bg-bg-card border border-border rounded-xl overflow-hidden">
-          <div className="px-6 py-4 border-b border-border">
-            <h2 className="text-sm font-semibold text-text-primary">
-              Pending Invites ({invites.length})
-            </h2>
-          </div>
-          <div className="divide-y divide-border">
-            {invites.map((invite) => (
-              <div
-                key={invite.id}
-                className="flex items-center justify-between px-6 py-4"
-              >
-                <div className="flex items-center gap-3">
-                  <Mail className="w-4 h-4 text-text-muted" />
-                  <div>
-                    <p className="text-sm text-text-primary">{invite.email}</p>
-                    <p className="text-xs text-text-muted">
-                      Expires{" "}
-                      {new Date(invite.expiresAt).toLocaleDateString()}
-                    </p>
-                  </div>
-                </div>
-                <span className="text-xs text-text-muted bg-bg-secondary px-2 py-1 rounded">
-                  {invite.role}
-                </span>
+      {invite.open && (
+        <Modal title="Invite someone" onClose={() => setInvite({ ...invite, open: false })}>
+          {invite.link ? (
+            <div className="space-y-3">
+              <p className="text-sm text-text-secondary">Send this link to {invite.email}. It works once and expires in 7 days.</p>
+              <p className="text-xs font-mono break-all bg-bg-card border border-border rounded-lg p-3">{invite.link}</p>
+              <div className="flex justify-end gap-2">
+                <Button variant="secondary" onClick={() => navigator.clipboard?.writeText(invite.link)}><Copy className="w-4 h-4" /> Copy</Button>
+                <Button onClick={() => setInvite({ ...invite, open: false })}>Done</Button>
               </div>
-            ))}
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <Field label="Email"><Input type="email" value={invite.email} onChange={(e) => setInvite({ ...invite, email: e.target.value })} /></Field>
+              <Field label="Role" hint={ROLE_HELP[invite.role]}>
+                <select value={invite.role} onChange={(e) => setInvite({ ...invite, role: e.target.value })} className="w-full px-3 py-2 bg-bg-secondary border border-border rounded-lg text-sm text-text-primary capitalize">
+                  {ROLES.filter((r) => r !== "owner" || data.me.role === "owner").map((r) => <option key={r} value={r}>{r}</option>)}
+                </select>
+              </Field>
+              <div className="flex justify-end gap-2">
+                <Button variant="ghost" onClick={() => setInvite({ ...invite, open: false })}>Cancel</Button>
+                <Button onClick={sendInvite}>Create invite link</Button>
+              </div>
+            </div>
+          )}
+        </Modal>
+      )}
+
+      {grantFor && (
+        <Modal title={`Grant ${grantFor.name} access to an endpoint`} onClose={() => setGrantFor(null)}>
+          <div className="space-y-4">
+            <Field label="Endpoint">
+              <select value={grant.endpointId} onChange={(e) => setGrant({ ...grant, endpointId: e.target.value })} className="w-full px-3 py-2 bg-bg-secondary border border-border rounded-lg text-sm text-text-primary">
+                {data.endpoints.map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}
+              </select>
+            </Field>
+            <Field label="Role on that endpoint" hint={ROLE_HELP[grant.role]}>
+              <select value={grant.role} onChange={(e) => setGrant({ ...grant, role: e.target.value })} className="w-full px-3 py-2 bg-bg-secondary border border-border rounded-lg text-sm text-text-primary capitalize">
+                {["viewer", "operator", "admin"].map((r) => <option key={r} value={r}>{r}</option>)}
+              </select>
+            </Field>
+            <div className="flex justify-end gap-2">
+              <Button variant="ghost" onClick={() => setGrantFor(null)}>Cancel</Button>
+              <Button onClick={async () => { await post({ action: "grant", userId: grantFor.id, ...grant }); setGrantFor(null); }}>Grant</Button>
+            </div>
           </div>
-        </section>
+        </Modal>
       )}
     </div>
   );

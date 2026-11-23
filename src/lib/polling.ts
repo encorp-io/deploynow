@@ -1,201 +1,221 @@
+/**
+ * Image auto-update, now per endpoint and straight to Docker (no Portainer).
+ *
+ *   syncServices()     list containers on every online endpoint → Service rows
+ *   checkForUpdates()  compare running image id with the registry digest;
+ *                      recreate floating tags when auto-update is on
+ *   performUpdate()    pull + recreate one service
+ */
+import os from "os";
+import type Docker from "dockerode";
+import type { Endpoint } from "@prisma/client";
 import { prisma } from "./prisma";
-import {
-  getContainers,
-  getConfiguredEndpointId,
-  getImageInspect,
-  parseImageRef,
-  isFloatingTag,
-  recreateContainer,
-} from "./portainer";
-import { getRemoteDigest } from "./ghcr";
+import { getRemoteDigests } from "./ghcr";
+import { isFloatingTag, parseImageRef } from "./imageRef";
+import { dockerFor, refreshEndpoint } from "./endpoints";
+import { recreateContainer } from "./docker/recreate";
+import { withTimeout, dockerErrorMessage } from "./docker/client";
+import { registryAuthFor } from "./registryAuth";
+import { audit, type AuditActor } from "./audit";
 
-export async function syncServicesFromPortainer() {
-  const settings = await prisma.settings.findUnique({ where: { id: "singleton" } });
-  if (!settings?.portainerUrl || !settings?.portainerApiKey) return;
+/** Never auto-update the control plane itself or a Portainer that may still be in use. */
+export function isProtectedContainer(image: string, containerId: string, labels: Record<string, string> = {}): boolean {
+  if (labels["io.deploynow.self"] === "true") return true;
+  const img = image.toLowerCase();
+  if (img.includes("portainer") || img.includes("deployer-for-portainer") || img.includes("deploynow")) return true;
+  const host = os.hostname();
+  return !!host && /^[0-9a-f]{12}$/.test(host) && containerId.startsWith(host);
+}
 
-  const endpointId = settings.portainerEndpointId ?? 1;
-  const containers = await getContainers(endpointId);
+async function syncEndpoint(endpoint: Endpoint, docker: Docker): Promise<void> {
+  const containers = await withTimeout(docker.listContainers({ all: true }), 20_000, "Listing containers");
+  const imageCache = new Map<string, { arch: string; repoDigests: string }>();
 
-  for (const container of containers) {
-    const name   = container.Names[0]?.replace(/^\//, "") || container.Id.slice(0, 12);
-    const parsed = parseImageRef(container.Image);
+  for (const c of containers) {
+    // Containers of DeployNow applications are updated by their own deploy pipeline
+    if (c.Labels?.["deploynow.app"] || c.Labels?.["deploynow.role"]) continue;
+    const name = c.Names?.[0]?.replace(/^\//, "") || c.Id.slice(0, 12);
+    const parsed = parseImageRef(c.Image);
+    // Containers started from an image id or pinned to a digest have no tag to follow
+    if (/^sha256:/.test(c.Image) || /^[0-9a-f]{12,64}$/.test(c.Image) || c.Image.includes("@sha256:")) continue;
 
-    // ImageID from Portainer is the config digest of the image actually running.
-    // This is the ground truth for "what version is deployed".
-    const localDigest = container.ImageID || "";
-
-    // Detect architecture from the running image via Portainer's image inspect.
-    // This ensures we compare against the same arch in the registry manifest list.
-    let arch = "amd64"; // safe default
-    if (container.ImageID) {
+    let img = imageCache.get(c.ImageID);
+    if (!img) {
       try {
-        const imgInfo = await getImageInspect(endpointId, container.ImageID);
-        if (imgInfo.Architecture) {
-          arch = imgInfo.Architecture;
-        }
+        const info = await docker.getImage(c.ImageID).inspect();
+        img = { arch: info.Architecture || "amd64", repoDigests: (info.RepoDigests ?? []).join(",") };
       } catch {
-        // Non-fatal — fall back to amd64
+        img = { arch: "amd64", repoDigests: "" };
       }
+      imageCache.set(c.ImageID, img);
     }
 
+    const data = {
+      containerName: name,
+      image: parsed.full,
+      registry: parsed.registry,
+      tag: parsed.tag,
+      status: c.State?.toLowerCase() || "unknown",
+      isFloatingTag: isFloatingTag(parsed.tag),
+      currentDigest: c.ImageID || "",
+      repoDigests: img.repoDigests,
+      arch: img.arch,
+      endpointId: endpoint.id,
+    };
     await prisma.service.upsert({
-      where: { containerId: container.Id },
-      update: {
-        containerName:       name,
-        image:               parsed.full,
-        registry:            parsed.registry,
-        tag:                 parsed.tag,
-        status:              container.State?.toLowerCase() || "unknown",
-        isFloatingTag:       isFloatingTag(parsed.tag),
-        currentDigest:       localDigest,
-        arch,
-        portainerEndpointId: endpointId,
-      },
-      create: {
-        containerId:         container.Id,
-        containerName:       name,
-        image:               parsed.full,
-        registry:            parsed.registry,
-        tag:                 parsed.tag,
-        status:              container.State?.toLowerCase() || "unknown",
-        isFloatingTag:       isFloatingTag(parsed.tag),
-        currentDigest:       localDigest,
-        arch,
-        portainerEndpointId: endpointId,
-      },
+      where: { containerId: c.Id },
+      update: data,
+      create: { containerId: c.Id, ...data },
     });
   }
 
-  // Remove tracked services for containers that no longer exist on this endpoint
-  const activeIds = containers.map((c) => c.Id);
   await prisma.service.deleteMany({
-    where: { containerId: { notIn: activeIds }, portainerEndpointId: endpointId },
+    where: {
+      endpointId: endpoint.id,
+      containerId: { notIn: containers.filter((c) => !c.Labels?.["deploynow.app"] && !c.Labels?.["deploynow.role"]).map((c) => c.Id) },
+    },
   });
 }
 
-export async function checkForUpdates() {
-  const services = await prisma.service.findMany();
-  const settings = await prisma.settings.findUnique({ where: { id: "singleton" } });
-
-  for (const service of services) {
+export async function syncServices(): Promise<void> {
+  const endpoints = await prisma.endpoint.findMany();
+  for (const ep of endpoints) {
+    const fresh = await refreshEndpoint(ep);
+    if (fresh.status !== "online") continue;
     try {
-      const parsed       = parseImageRef(service.image);
-      const remoteDigest = await getRemoteDigest(parsed.registry, parsed.repository, parsed.tag, service.arch);
-
-      if (!remoteDigest) {
-        // Still mark as checked even if no digest was returned
-        await prisma.service.update({
-          where: { id: service.id },
-          data: { lastChecked: new Date() },
-        });
-        continue;
-      }
-
-      // currentDigest is the local ImageID from Portainer (set during sync).
-      // remoteDigest is the config digest of the latest image in the registry.
-      // If they differ, an update is available.
-      const hasUpdate =
-        service.currentDigest !== "" && service.currentDigest !== remoteDigest;
-
-      await prisma.service.update({
-        where: { id: service.id },
-        data: {
-          remoteDigest,
-          updateAvailable: hasUpdate,
-          lastChecked: new Date(),
-        },
-      });
-
-      // Auto-update floating tags if enabled, but NEVER auto-update Portainer itself.
-      // Auto-updating Portainer can break the API we depend on and crash the whole system.
-      const isPortainer = service.image.includes("portainer");
-      if (hasUpdate && service.isFloatingTag && settings?.autoUpdateLatest && !isPortainer) {
-        await performUpdate(service.id);
-      } else if (hasUpdate) {
-        await prisma.activityLog.create({
-          data: {
-            serviceId: service.id,
-            action:    "update_available",
-            message:   `New version available for ${service.containerName}`,
-            details:   `Current: ${service.currentDigest.slice(0, 16)}…  Remote: ${remoteDigest.slice(0, 16)}…`,
-          },
-        });
-      }
-    } catch (error) {
-      // Still mark as checked so the UI doesn't show "Never"
-      await prisma.service.update({
-        where: { id: service.id },
-        data: { lastChecked: new Date() },
-      }).catch(() => {});
-
-      // Log only the message — never the full error object (may contain tokens)
-      const message = error instanceof Error ? error.message : "Unknown error";
-      await prisma.activityLog.create({
-        data: {
-          serviceId: service.id,
-          action:    "error",
-          message:   `Check failed for ${service.containerName}: ${message}`,
-        },
-      });
+      await syncEndpoint(fresh, dockerFor(fresh));
+    } catch (err) {
+      console.error(`[deployer] Sync failed for endpoint ${ep.name}:`, dockerErrorMessage(err));
     }
-  }
-}
-
-export async function performUpdate(serviceId: string) {
-  const service = await prisma.service.findUnique({ where: { id: serviceId } });
-  if (!service) throw new Error("Service not found");
-
-  const endpointId = service.portainerEndpointId ?? (await getConfiguredEndpointId());
-
-  await prisma.service.update({ where: { id: serviceId }, data: { status: "updating" } });
-
-  try {
-    // Use Portainer's native recreate with PullImage: true.
-    // This safely pulls the new image and recreates the container in one step,
-    // preserving all config (volumes, networks, env vars, labels, etc.).
-    const newContainerId = await recreateContainer(endpointId, service.containerId, true);
-
-    const parsed    = parseImageRef(service.image);
-    const newDigest = await getRemoteDigest(parsed.registry, parsed.repository, parsed.tag, service.arch);
-
-    await prisma.service.update({
-      where: { id: serviceId },
-      data: {
-        containerId:    newContainerId,
-        currentDigest:  newDigest || "",
-        remoteDigest:   newDigest || "",
-        updateAvailable: false,
-        status:         "running",
-        lastUpdated:    new Date(),
-      },
-    });
-
-    await prisma.activityLog.create({
-      data: {
-        serviceId,
-        action:  "update",
-        message: `Updated ${service.containerName} successfully`,
-        details: `New digest: ${newDigest?.slice(0, 16) ?? "unknown"}…`,
-      },
-    });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "Unknown error";
-    await prisma.service.update({ where: { id: serviceId }, data: { status: "error" } });
-    await prisma.activityLog.create({
-      data: {
-        serviceId,
-        action:  "error",
-        message: `Update failed for ${service.containerName}: ${message}`,
-      },
-    });
-    throw error;
   }
 }
 
 /**
- * @deprecated currentDigest is now set from Portainer's ImageID during sync.
- * Kept for backward compat but effectively a no-op if sync ran first.
+ * Is the local image the one the tag points to now? The classic image store's
+ * ImageID is the config digest; the containerd store (Docker 29+ default) uses
+ * the index digest, which also appears in RepoDigests.
  */
-export async function initializeDigests() {
-  // No-op — currentDigest is set during syncServicesFromPortainer from container.ImageID
+export function isCurrent(local: { currentDigest: string; repoDigests?: string }, remote: { config: string; manifest: string }): boolean {
+  if (!local.currentDigest) return true; // nothing to compare yet
+  if (local.currentDigest === remote.config) return true;
+  if (!remote.manifest) return false;
+  if (local.currentDigest === remote.manifest) return true;
+  return (local.repoDigests ?? "").split(",").some((d) => d.endsWith(`@${remote.manifest}`));
+}
+
+export async function checkForUpdates(): Promise<void> {
+  const services = await prisma.service.findMany({ where: { endpointId: { not: null } } });
+  const settings = await prisma.settings.findUnique({ where: { id: "singleton" } });
+
+  for (const service of services) {
+    try {
+      const parsed = parseImageRef(service.image);
+      const remote = await getRemoteDigests(parsed.registry, parsed.repository, parsed.tag, service.arch);
+
+      if (!remote) {
+        await prisma.service.update({ where: { id: service.id }, data: { lastChecked: new Date() } });
+        continue;
+      }
+
+      const remoteDigest = remote.config;
+      const hasUpdate = !isCurrent(service, remote);
+      const wasKnown = service.updateAvailable && service.remoteDigest === remoteDigest;
+
+      await prisma.service.update({
+        where: { id: service.id },
+        data: { remoteDigest, updateAvailable: hasUpdate, lastChecked: new Date() },
+      });
+
+      if (
+        hasUpdate &&
+        service.isFloatingTag &&
+        settings?.autoUpdateLatest &&
+        !isProtectedContainer(service.image, service.containerId)
+      ) {
+        await performUpdate(service.id);
+      } else if (hasUpdate && !wasKnown) {
+        await audit({
+          action: "service.update_available",
+          message: `New version available for ${service.containerName}`,
+          targetType: "container",
+          targetId: service.containerId,
+          endpointId: service.endpointId,
+          serviceId: service.id,
+          details: `Current: ${service.currentDigest.slice(0, 19)}…  Remote: ${remoteDigest.slice(0, 19)}…`,
+        });
+      }
+    } catch (error) {
+      await prisma.service.update({ where: { id: service.id }, data: { lastChecked: new Date() } }).catch(() => {});
+      const message = error instanceof Error ? error.message : "Unknown error";
+      await audit({
+        action: "service.check",
+        outcome: "failure",
+        message: `Check failed for ${service.containerName}: ${message}`,
+        targetType: "container",
+        targetId: service.containerId,
+        endpointId: service.endpointId,
+        serviceId: service.id,
+      });
+    }
+  }
+}
+
+export async function performUpdate(serviceId: string, actor?: AuditActor | null, ip?: string): Promise<void> {
+  const service = await prisma.service.findUnique({ where: { id: serviceId }, include: { endpoint: true } });
+  if (!service) throw new Error("Service not found");
+  if (!service.endpoint) throw new Error("Service has no endpoint");
+
+  await prisma.service.update({ where: { id: serviceId }, data: { status: "updating" } });
+
+  try {
+    const docker = dockerFor(service.endpoint);
+    const authconfig = await registryAuthFor(service.image);
+    const newContainerId = await recreateContainer(docker, service.containerId, { pull: true, authconfig });
+    const newInfo = await docker.getContainer(newContainerId).inspect();
+    const repoDigests = await docker
+      .getImage(newInfo.Image)
+      .inspect()
+      .then((i) => (i.RepoDigests ?? []).join(","))
+      .catch(() => "");
+
+    await prisma.service.update({
+      where: { id: serviceId },
+      data: {
+        containerId: newContainerId,
+        currentDigest: newInfo.Image,
+        repoDigests,
+        // We just pulled what the tag points to
+        updateAvailable: false,
+        status: newInfo.State.Running ? "running" : newInfo.State.Status,
+        lastUpdated: new Date(),
+      },
+    });
+
+    await audit({
+      actor,
+      ip,
+      action: "service.update",
+      message: `Updated ${service.containerName} on ${service.endpoint.name}`,
+      targetType: "container",
+      targetId: newContainerId,
+      endpointId: service.endpointId,
+      serviceId,
+      details: `New image: ${newInfo.Image.slice(0, 19)}…`,
+    });
+  } catch (error) {
+    const message = dockerErrorMessage(error);
+    await prisma.service.update({ where: { id: serviceId }, data: { status: "error" } });
+    await audit({
+      actor,
+      ip,
+      action: "service.update",
+      outcome: "failure",
+      message: `Update failed for ${service.containerName}: ${message}`,
+      targetType: "container",
+      targetId: service.containerId,
+      endpointId: service.endpointId,
+      serviceId,
+    });
+    throw new Error(message);
+  }
 }

@@ -1,383 +1,175 @@
 <div align="center">
 
-<img src="https://raw.githubusercontent.com/encorp-io/deployer-for-portainer/main/.github/assets/logo.png" alt="Encorp Deployer" width="80" />
+<img src="https://raw.githubusercontent.com/encorp-io/deployer-for-portainer/main/.github/assets/logo.png" alt="DeployNow" width="80" />
 
-# Encorp Deployer
+# DeployNow
 
-**Keep your Portainer containers in sync with the latest images — automatically.**
+**Self-hosted control plane for your Docker machines: deploy apps, manage containers, back up data and watch it all from one place.**
 
 [![CI](https://github.com/encorp-io/deployer-for-portainer/actions/workflows/ci.yml/badge.svg)](https://github.com/encorp-io/deployer-for-portainer/actions/workflows/ci.yml)
 [![Docker](https://github.com/encorp-io/deployer-for-portainer/actions/workflows/docker-publish.yml/badge.svg)](https://github.com/encorp-io/deployer-for-portainer/actions/workflows/docker-publish.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Image: ghcr.io](https://img.shields.io/badge/image-ghcr.io-blue?logo=github)](https://github.com/encorp-io/deployer-for-portainer/pkgs/container/deployer-for-portainer)
 
 </div>
 
----
+DeployNow replaces Portainer and Dokploy with one app. It talks to Docker directly on the machine it runs on and on remote machines, deploys your apps from images or Git, puts them behind Traefik with SSL, and backs up their data with encrypted restic snapshots. It runs as a single container with an embedded SQLite database.
 
-## What is this?
-
-**Encorp Deployer** is an open-source, self-hosted dashboard that sits alongside your [Portainer CE](https://www.portainer.io/) instance and gives you full visibility into the state of your Docker image versions — then acts on them automatically.
-
-If you push a new build of your app to GitHub Container Registry, Encorp Deployer detects the new digest within 60 seconds and either:
-
-- **Auto-updates** the container (for floating tags like `latest`, `main`, `dev`) — pulls the new image, stops the old container, starts a fresh one, all without touching Portainer
-- **Shows an update badge** (for pinned semver tags like `1.2.3`) — so you can review and trigger the update manually from the dashboard
-
-No webhooks. No Portainer Business license. No cloud dependency. Everything runs in a single Docker container on your own server.
-
----
-
-## Screenshots
-
-> Dashboard, settings, and team management views
-
-```
-┌─────────────────────────────────────────────────────────┐
-│  Encorp Deployer                     [Check Updates] [Sync] │
-├─────────────────┬────────────┬──────────────┬───────────┤
-│  4 Services     │  3 Running │  1 Update    │  0 Errors │
-├─────────────────┴────────────┴──────────────┴───────────┤
-│                                                          │
-│  ┌──────────────────────┐  ┌──────────────────────────┐ │
-│  │ api-gateway  ● Running│  │ web-app  ● Running       │ │
-│  │ latest  ghcr.io  auto │  │ latest  ghcr.io  auto    │ │
-│  │ ↑ Auto-updating...   │  │ ✓ Up to date             │ │
-│  └──────────────────────┘  └──────────────────────────┘ │
-│                                                          │
-│  ┌──────────────────────┐  ┌──────────────────────────┐ │
-│  │ worker  ● Running    │  │ scheduler  ● Running     │ │
-│  │ 1.4.2   ghcr.io      │  │ 2.0.0  ghcr.io           │ │
-│  │ ⚠ New version: 1.5.0 │  │ ✓ Up to date             │ │
-│  │              [Update]│  │                          │ │
-│  └──────────────────────┘  └──────────────────────────┘ │
-└─────────────────────────────────────────────────────────┘
-```
-
----
+> DeployNow is v2 of Encorp Deployer, the Portainer update helper. Coming from v1? See [Upgrading from v1](docs/v2.md#upgrading-from-v1).
 
 ## Features
 
-- **Auto-update on floating tags** — containers using `latest`, `main`, `dev`, `staging`, etc. are automatically recreated when a new image digest is detected
-- **Update notifications for pinned versions** — semver-tagged containers show a badge when a newer version exists, with a one-click update button
-- **Portainer CE integration** — connects to your existing Portainer API, reads all container configs, and uses Portainer's Docker proxy to pull & recreate
-- **GHCR + Docker Hub support** — checks image digests from GitHub Container Registry and Docker Hub
-- **Background polling** — configurable interval (default 60s), runs inside the same container, no cron or external orchestration needed
-- **Activity log** — full audit trail of every check, update, and error
-- **Team access** — invite team members via a link; manage roles (Admin / Member)
-- **Single Docker image** — SQLite database embedded, no Postgres/Redis/external DB required
-- **No vendor lock-in** — 100% self-hosted, open-source, MIT licensed
+**Machines and containers**
+- Manage the local Docker socket, machines over SSH or TLS, and machines behind NAT through a small outbound agent (mutual TLS, no open port needed).
+- Container explorer: start, stop, restart, remove, inspect, live logs and stats, and an in-browser console.
+- Images, volumes, networks and prune. Image update checks with auto-update for floating tags such as `latest`.
 
----
+**Apps and deploys**
+- Projects with environments (`production`, `staging`, ...) holding apps.
+- Deploy from a GHCR or Docker Hub image, a Dockerfile in Git, a compose file in Git, or a pasted compose file.
+- Zero-downtime replace for stateless apps, a full log for every deployment, and one-click rollback.
+- Push-to-deploy from GitHub webhooks, and pull request previews at `pr-<n>.<your preview domain>`.
+- Optional build server that builds and pushes to your registry, then pulls on the target. Private registry logins.
+- Environment variables and secrets: secrets are encrypted at rest and masked in logs, with optional HashiCorp Vault references.
 
-## How it works
+**Domains and SSL**
+- Managed Traefik with Let's Encrypt, by HTTP challenge or Cloudflare DNS. Or join an existing Traefik, such as Dokploy's, to migrate one app at a time.
+- Redirects (301 to 308) and password protection per domain.
 
-```
-┌─────────────────────────────────────────────────────────┐
-│                  Encorp Deployer                         │
-│                                                          │
-│  ┌─────────────────────────────────────────────────┐    │
-│  │  Background Poller (every N seconds)            │    │
-│  │                                                 │    │
-│  │  1. GET /api/endpoints/{id}/docker/containers   │    │
-│  │     → sync container list from Portainer        │    │
-│  │                                                 │    │
-│  │  2. For each container:                         │    │
-│  │     → GET digest from ghcr.io / docker.io       │    │
-│  │     → compare with stored digest                │    │
-│  │                                                 │    │
-│  │  3a. Floating tag + digest changed?             │    │
-│  │      → POST pull image via Portainer proxy      │    │
-│  │      → DELETE old container                     │    │
-│  │      → POST create + start new container        │    │
-│  │                                                 │    │
-│  │  3b. Pinned tag + digest changed?               │    │
-│  │      → mark updateAvailable = true              │    │
-│  │      → log to ActivityLog                       │    │
-│  └─────────────────────────────────────────────────┘    │
-│                                                          │
-│  ┌──────────────┐    ┌─────────────────────────────┐    │
-│  │  SQLite DB   │    │  Next.js Dashboard (port 3000) │  │
-│  │  (Prisma)    │    │  Auth · Services · Settings  │  │
-│  └──────────────┘    └─────────────────────────────┘    │
-└─────────────────────────────────────────────────────────┘
-        │                          │
-        ▼                          ▼
-┌──────────────┐         ┌─────────────────┐
-│ Portainer CE │         │ ghcr.io /       │
-│ (same server)│         │ docker.io       │
-└──────────────┘         └─────────────────┘
-```
+**Backups**
+- restic backups to Cloudflare R2, AWS S3, Backblaze B2 or any S3 service, encrypted before upload.
+- Volumes, host folders, databases (Postgres, MySQL/MariaDB, MongoDB, Redis), whole apps, and DeployNow itself, with retention.
+- Restore to the original place, a new volume or a database, and monthly automatic restore drills.
 
-### Floating vs. pinned tags
+**Operations**
+- Scheduled tasks (cron) in a container or a one-off container.
+- Monitoring and alerts for disk, memory, crash loops, offline agents and failed deploys, backups or tasks.
+- Notifications to Slack, Discord, Telegram, email (SMTP) or a signed webhook.
 
-| Tag type | Examples | Behaviour |
-|---|---|---|
-| **Floating** | `latest`, `main`, `dev`, `staging`, `edge`, `nightly` | Container is automatically re-created when a new digest is detected |
-| **Pinned** | `1.2.3`, `v2.0.0`, `20240101` | Dashboard shows an update badge; human clicks to update |
-
----
-
-## Requirements
-
-- Docker (on the target server)
-- Portainer CE running on the same server (or reachable via URL)
-- A Portainer API key (generated in Portainer → Settings → API Keys)
-- A GitHub Personal Access Token with `read:packages` scope (for private GHCR images; not needed for public images)
-
----
+**Security and access**
+- Two-factor authentication (TOTP), passkeys, and single sign-on with Google, Microsoft or any OpenID Connect provider.
+- Roles (viewer, operator, admin, owner) with per-endpoint and per-project grants.
+- A fresh 2FA code for destructive actions, server-side sessions you can revoke, and an audit log.
+- API tokens, an OpenAPI description at `/api/openapi.json`, and the `deploynow` CLI.
 
 ## Quick start
 
-### 1. Pull and run
+You need a Linux machine with Docker.
 
 ```bash
-docker run -d \
-  --name encorp-deployer \
-  --restart unless-stopped \
-  -p 3000:3000 \
-  -v deployer_data:/data \
-  -e AUTH_SECRET="$(openssl rand -base64 32)" \
-  -e ADMIN_EMAIL="admin@yourcompany.com" \
-  -e ADMIN_PASSWORD="changeme" \
-  ghcr.io/encorp-io/deployer-for-portainer:latest
-```
+git clone https://github.com/encorp-io/deployer-for-portainer.git deploynow
+cd deploynow
 
-Open **http://your-server:3000** and sign in.
-
----
-
-### 2. Docker Compose (recommended)
-
-Create a `.env` file:
-
-```bash
-# Generate a secure secret
+cat > .env <<EOF
 AUTH_SECRET=$(openssl rand -base64 32)
-ADMIN_EMAIL=admin@yourcompany.com
-ADMIN_PASSWORD=changeme            # change after first login
-NEXTAUTH_URL=http://your-server:3000
-```
+ADMIN_EMAIL=you@example.com
+ADMIN_PASSWORD=choose-a-long-password
+NEXTAUTH_URL=https://your-server:9444
+DOCKER_GID=$(stat -c %g /var/run/docker.sock)
+EOF
 
-Create `docker-compose.yml`:
-
-```yaml
-services:
-  deployer:
-    image: ghcr.io/encorp-io/deployer-for-portainer:latest
-    container_name: encorp-deployer
-    restart: unless-stopped
-    ports:
-      - "3000:3000"
-    volumes:
-      - deployer_data:/data
-    environment:
-      AUTH_SECRET: ${AUTH_SECRET}
-      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@encorp.io}
-      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin}
-      DATABASE_URL: file:/data/deployer.db
-      NEXTAUTH_URL: ${NEXTAUTH_URL:-http://localhost:3000}
-
-volumes:
-  deployer_data:
-```
-
-```bash
 docker compose up -d
 ```
 
----
+Open `https://your-server:9444` and sign in. The certificate is self-signed until you mount your own (see `docker-compose.yml`).
 
-### 3. Configure Portainer connection
+1. Set up 2FA or a passkey when asked. Admins must have one.
+2. The local machine is already added as the `local` endpoint. Add others under **Endpoints**: SSH, TLS, or **Agent** for a machine behind NAT, where you copy the `docker run` command shown.
+3. On an endpoint, set up the edge proxy (managed Traefik or an existing one) if you want domains.
+4. Create a project and an app, add its domain and environment variables, and deploy.
+5. Under **Backups**, add an R2 or S3 destination and a policy. Save the recovery kit it shows you.
 
-1. Open the dashboard → **Settings**
-2. Enter your **Portainer URL** (e.g. `http://localhost:9000`)
-3. Paste your **Portainer API Key** (Portainer → User menu → My Account → API Keys → Add API Key)
-4. Optionally add a **GitHub PAT** with `read:packages` for private GHCR images
-5. Click **Test Connection** to verify
-6. Click **Save Settings**
+Ports: `9444` for the dashboard and `8444` for agents. You can leave 8444 closed if you don't use agents.
 
-### 4. Sync your services
+> Mounting the Docker socket gives root on that machine. Anyone who is an admin in DeployNow, or an operator with console access, can act as root on every endpoint they can reach. Keep 2FA on.
 
-On the Dashboard, click **Sync Portainer** — the app reads all containers from Portainer, stores their current image digests, and begins tracking them.
+## Documentation
 
-From this point, the background poller runs every 60 seconds (configurable) and keeps everything in sync automatically.
+- [docs/v2.md](docs/v2.md): everything in v2, phase by phase. It covers endpoints, apps, secrets, domains, roles, the agent, SSO, API tokens, previews, moving apps off Dokploy, and upgrading from v1.
+- [docs/backups.md](docs/backups.md): backup setup, the recovery kit, restores, drills, and restoring DeployNow itself.
 
----
+## CLI
+
+```bash
+npm install -g ./cli
+deploynow login --url https://your-server:9444 --token dn_...   # token from Account → API tokens
+deploynow apps
+deploynow deploy shop/production/web
+deploynow rollback shop/production/web <deployment-id>
+deploynow backup <policy-id>
+deploynow api GET /endpoints
+```
+
+`DEPLOYNOW_URL` and `DEPLOYNOW_TOKEN` override the saved login, for CI. Run `deploynow help` for every command.
 
 ## Environment variables
 
 | Variable | Required | Default | Description |
 |---|---|---|---|
-| `AUTH_SECRET` | **Yes** | — | Random secret for JWT signing. Generate with `openssl rand -base64 32` |
-| `DATABASE_URL` | No | `file:/data/deployer.db` | SQLite path inside the container |
-| `NEXTAUTH_URL` | No | `http://localhost:3000` | Public URL — used for invite links |
-| `ADMIN_EMAIL` | No | `admin@encorp.io` | Admin email created on first boot |
-| `ADMIN_PASSWORD` | No | `admin` | Admin password created on first boot. **Change this.** |
-| `PORT` | No | `3000` | HTTP port |
-
-> **Security note:** `ADMIN_EMAIL` and `ADMIN_PASSWORD` are only used if no users exist in the database (first boot). After the first login, change the password from your account settings.
-
----
+| `AUTH_SECRET` | **Yes** | | Signs sessions and encrypts stored secrets. Keep it safe: if it changes, stored secrets can't be read. `openssl rand -base64 32` |
+| `ADMIN_EMAIL` | No | `admin@encorp.io` | Owner account created on first boot |
+| `ADMIN_PASSWORD` | First boot | | Password for that account, at least 12 characters |
+| `NEXTAUTH_URL` | Recommended | from the request | Public URL. Used for links, SSO, passkeys and the agent address |
+| `DATABASE_URL` | No | `file:/data/deployer.db` | SQLite path |
+| `DOCKER_GID` | With the socket | `999` | Group of `/var/run/docker.sock` |
+| `DEPLOYNOW_DATA_DIR` | No | the database's folder | Deploy logs, build checkouts and backup staging |
+| `AGENT_PORT` | No | `8444` | Port agents connect to; `off` disables it |
+| `AGENT_PUBLIC_URL` | No | `NEXTAUTH_URL`'s host on `AGENT_PORT` | Address agents dial. Can also be set under Settings |
+| `AGENT_IMAGE` | No | `ghcr.io/encorp-io/deploynow-agent:latest` | Agent image in the join command |
+| `RESTIC_IMAGE` | No | `restic/restic:0.18.1` | restic image used for backups on endpoints |
+| `BACKUP_PARALLEL` | No | `2` | Backups that run at the same time |
+| `GITHUB_USER`, `GITHUB_TOKEN` | No | | GHCR and private GitHub access. Can also be set under Settings |
+| `CERT_FILE`, `KEY_FILE`, `TLS_HOSTNAME` | No | | Your own certificate, or a hostname for the self-signed one |
 
 ## Upgrading
 
-Because the database lives in a named volume, upgrading is safe:
-
 ```bash
-# Pull the latest image
 docker compose pull
-
-# Recreate the container (migrations run automatically on boot)
 docker compose up -d
 ```
 
-For pinned version upgrades, check the [releases page](https://github.com/encorp-io/deployer-for-portainer/releases) for any breaking changes.
+Schema changes are applied on start and only add tables and columns. Back up the `/data` volume first, or set up a DeployNow backup policy for the instance.
 
----
+## How it's built
 
-## Team management
-
-Encorp Deployer supports multi-user access with two roles:
-
-| Role | Capabilities |
+| Part | Technology |
 |---|---|
-| **Admin** | Full access: settings, team management, manual updates, sync |
-| **Member** | Read-only dashboard + manual update trigger |
-
-### Inviting a team member
-
-1. Go to **Team** → enter the email and select a role → **Invite**
-2. Copy the generated invite link
-3. Share it with your colleague — they visit the link and set their name and password
-4. The invite expires after 7 days
-
----
-
-## Portainer API key setup
-
-1. Log into Portainer
-2. Click your username in the top-right → **My Account**
-3. Scroll to **API Keys** → **Add API key**
-4. Give it a name (e.g. `encorp-deployer`) and copy the key — it is only shown once
-5. Paste it into Encorp Deployer → Settings → **API Key**
-
-The key only needs access to the local endpoint. No admin-level permissions are required beyond reading container info and managing containers on your endpoint.
-
----
-
-## GitHub PAT setup (for private images)
-
-1. Go to GitHub → Settings → Developer settings → **Personal access tokens** → Tokens (classic)
-2. Click **Generate new token**
-3. Select scope: `read:packages`
-4. Copy the token and paste it into Encorp Deployer → Settings → **GitHub Token**
-
-> For public images on `ghcr.io`, no token is needed.
-
----
-
-## Architecture
+| App | Next.js 16, React 19, Tailwind CSS v4 |
+| Auth | NextAuth v5 with server-side sessions, TOTP, WebAuthn passkeys, OIDC |
+| Data | SQLite through Prisma |
+| Docker | dockerode, plus the Docker CLI with compose and buildx for builds |
+| Edge | Traefik v3 |
+| Backups | restic |
+| Agent | Go (`agent/`), mutual TLS over WebSockets |
+| CLI | Node 20, no dependencies (`cli/`) |
 
 ```
-encorp-deployer/
-├── src/
-│   ├── app/                        # Next.js App Router
-│   │   ├── api/
-│   │   │   ├── auth/[...nextauth]/ # NextAuth.js handler
-│   │   │   ├── services/           # Container list + manual update trigger
-│   │   │   ├── polling/            # Manual check + activity log
-│   │   │   ├── settings/           # Read / write app settings
-│   │   │   ├── team/               # Invite, register, role management
-│   │   │   └── portainer/test/     # Test Portainer connection
-│   │   ├── dashboard/              # Main services view
-│   │   ├── settings/               # Settings page
-│   │   ├── team/                   # Team management
-│   │   ├── login/                  # Sign-in page
-│   │   └── setup/                  # Invite registration
-│   ├── components/
-│   │   ├── Sidebar.tsx
-│   │   ├── ServiceCard.tsx         # Per-container card with update UI
-│   │   └── ActivityFeed.tsx        # Real-time activity log
-│   └── lib/
-│       ├── auth.ts                 # NextAuth v5 + credentials provider
-│       ├── portainer.ts            # Portainer CE API client
-│       ├── ghcr.ts                 # GHCR + Docker Hub digest checker
-│       ├── polling.ts              # Sync, check, update logic
-│       ├── backgroundPoller.ts     # Server-side interval (Node.js runtime)
-│       └── prisma.ts               # Singleton Prisma client
-├── prisma/
-│   └── schema.prisma               # SQLite schema
-├── Dockerfile                      # Multi-stage, non-root, standalone output
-├── docker-entrypoint.sh            # Runs migrations + seeds admin on boot
-└── docker-compose.yml
+src/app/        pages and API routes
+src/lib/        Docker, deploys, backups, agent hub, auth, notifications
+agent/          deploynow-agent (Go)
+cli/            deploynow CLI
+tests/          unit, API and real-Docker integration tests
+docs/           user documentation
 ```
 
-**Tech stack:**
-
-| Layer | Technology |
-|---|---|
-| Frontend | Next.js 16, React 19, Tailwind CSS v4 |
-| Backend | Next.js API Routes (Node.js runtime) |
-| Auth | NextAuth.js v5 (credentials provider, JWT sessions) |
-| Database | SQLite via Prisma ORM |
-| Container | Docker — single image, non-root user, named volume for data |
-
----
-
-## CI / CD
-
-| Workflow | Trigger | What it does |
-|---|---|---|
-| **CI** | Every push / PR | TypeScript check + full Next.js build against a real SQLite DB |
-| **Docker publish** | Push to `main` or tag | Builds multi-arch image (`amd64` + `arm64`), pushes to GHCR |
-| **Release** | `v*.*.*` tag | Waits for CI, creates a GitHub Release with auto-generated changelog |
-
-### Tagging a release
+## Development
 
 ```bash
-git tag v1.2.0
-git push origin v1.2.0
-```
-
-This triggers the release workflow, creates a GitHub Release, and publishes the tagged image to GHCR alongside the updated `:latest`.
-
----
-
-## Contributing
-
-Contributions are welcome! Please open an issue first to discuss significant changes.
-
-```bash
-# Clone and install
-git clone https://github.com/encorp-io/deployer-for-portainer.git
-cd deployer-for-portainer
 npm install
-
-# Set up local env
-cp .env.example .env
-# Edit .env — set AUTH_SECRET to any random string for local dev
-
-# Run migrations and seed
+cp .env.example .env        # set AUTH_SECRET
 npx prisma db push
-npx prisma db seed   # creates admin@encorp.io / admin locally
-
-# Start dev server
-npm run dev
+ADMIN_PASSWORD=dev-password-123 npx prisma db seed   # creates admin@encorp.io
+npm run dev                 # http://localhost:3000
+npm test                    # unit and API tests; integration tests run when Docker is available
 ```
 
-Open [http://localhost:3000](http://localhost:3000).
-
----
+CI runs the type check, tests with coverage (including real-Docker integration tests), the Go agent tests and a production build on every push. Pushing a `v*.*.*` tag publishes the app and agent images and creates a GitHub release.
 
 ## License
 
-MIT — see [LICENSE](LICENSE) for details.
-
----
+MIT, see [LICENSE](LICENSE).
 
 <div align="center">
 
-Built by [Encorp](https://encorp.io) · Open-source, MIT licensed · Contributions welcome
+Built by [Encorp](https://encorp.io)
 
 </div>

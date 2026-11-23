@@ -1,25 +1,30 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
 import { performUpdate } from "@/lib/polling";
+import { requireUser, readJson } from "@/lib/apiAuth";
+import { can } from "@/lib/rbac";
+import { clientIp } from "@/lib/audit";
 
-// cuid v1 pattern — all Prisma-generated IDs match this
+// cuid v1 pattern: all Prisma-generated IDs match this
 const CUID_PATTERN = /^c[a-z0-9]{24}$/;
 
 export async function POST(request: Request) {
-  const session = await auth();
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  // Members can trigger a manual update for a specific service;
-  // only admins can trigger bulk sync / polling cycles (see /api/services and /api/polling)
+  const gate = await requireUser();
+  if (!gate.ok) return gate.response;
 
-  const body = await request.json();
-  const { serviceId } = body;
-
+  const { serviceId } = await readJson(request);
   if (!serviceId || typeof serviceId !== "string" || !CUID_PATTERN.test(serviceId)) {
     return NextResponse.json({ error: "Invalid serviceId" }, { status: 400 });
   }
 
+  const service = await prisma.service.findUnique({ where: { id: serviceId } });
+  if (!service) return NextResponse.json({ error: "Service not found" }, { status: 404 });
+  if (!can(gate.user, "service.update", { endpointId: service.endpointId ?? undefined })) {
+    return NextResponse.json({ error: "You don't have permission to do that" }, { status: 403 });
+  }
+
   try {
-    await performUpdate(serviceId);
+    await performUpdate(serviceId, { id: gate.user.id, email: gate.user.email }, clientIp(request));
     return NextResponse.json({ success: true });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Update failed";

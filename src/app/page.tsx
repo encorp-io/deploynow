@@ -4,16 +4,10 @@ import { prisma } from "@/lib/prisma";
 
 export default async function HomePage() {
   const session = await auth();
+  if (!session) redirect("/login");
 
-  if (!session) {
-    redirect("/login");
-  }
-
-  // Check if onboarding is needed (no Portainer URL configured)
-  const settings = await prisma.settings.findUnique({ where: { id: "singleton" } });
-  if (!settings?.portainerUrl) {
-    redirect("/onboarding");
-  }
+  // No machines connected yet: start the onboarding wizard
+  if ((await prisma.endpoint.count()) === 0) redirect("/onboarding");
 
   redirect("/dashboard");
 }

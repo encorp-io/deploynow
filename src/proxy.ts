@@ -45,6 +45,25 @@ export default auth((req: NextRequest & { auth: unknown }) => {
     return NextResponse.next();
   }
 
+  // GitHub push webhooks — authenticated by their HMAC signature in the route
+  if (pathname.startsWith("/api/webhooks/github/") && method === "POST") {
+    return NextResponse.next();
+  }
+
+  // API tokens: the route handlers check the token (requireUser)
+  if (pathname.startsWith("/api/") && /^Bearer\s+dn_/i.test(req.headers.get("authorization") ?? "")) {
+    // Account, token and sign-in management stay with signed-in people
+    if (/^\/api\/(account|tokens|passkeys|sso|team)(\/|$)/.test(pathname)) {
+      return NextResponse.json({ error: "Not available with an API token" }, { status: 403 });
+    }
+    return NextResponse.next();
+  }
+
+  // The OpenAPI description, SSO callbacks and passkey sign-in are public
+  if (pathname === "/api/openapi.json" || pathname.startsWith("/api/sso/") || pathname.startsWith("/api/passkeys/login")) {
+    return NextResponse.next();
+  }
+
   // ONLY PUT /api/team is public (invite registration — user has no session yet)
   if (pathname.startsWith("/api/team") && method === "PUT") {
     return NextResponse.next();
@@ -58,6 +77,15 @@ export default auth((req: NextRequest & { auth: unknown }) => {
     // Redirect to /login on the same origin the browser is using
     const publicOrigin = getPublicOrigin(req);
     return NextResponse.redirect(new URL("/login", publicOrigin));
+  }
+
+  // ── Admins and owners must set up 2FA before doing anything else ──────────
+  const user = (req.auth as { user?: { mfaSetupRequired?: boolean } } | null)?.user;
+  if (user?.mfaSetupRequired && !pathname.startsWith("/account") && !pathname.startsWith("/api/account") && !pathname.startsWith("/api/passkeys")) {
+    if (pathname.startsWith("/api/")) {
+      return NextResponse.json({ error: "Set up two-factor authentication first", mfaSetupRequired: true }, { status: 403 });
+    }
+    return NextResponse.redirect(new URL("/account?setup=2fa", getPublicOrigin(req)));
   }
 
   return NextResponse.next();

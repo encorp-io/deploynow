@@ -35,7 +35,9 @@ WORKDIR /app
 
 # openssl  — needed for self-signed cert generation at startup
 # nginx    — SSL termination proxy (port 9444 → internal Next.js on 3001)
-RUN apk add --no-cache openssl nginx
+# git, docker CLI with compose and buildx — the deploy pipeline (clone, build, compose up)
+# restic — backs up DeployNow's own data (endpoint data is backed up by a restic container there)
+RUN apk add --no-cache openssl nginx git docker-cli docker-cli-compose docker-cli-buildx restic
 
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
@@ -72,7 +74,7 @@ COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
 COPY --from=builder /app/prisma              ./prisma
 COPY --from=builder /app/node_modules/prisma ./node_modules/prisma
-# bcryptjs — used by seed script in docker-entrypoint.sh
+# bcryptjs — verifies v1 password hashes until they are rehashed on login
 COPY --from=builder /app/node_modules/bcryptjs ./node_modules/bcryptjs
 
 # ── Entrypoint ────────────────────────────────────────────────────────────────
@@ -84,8 +86,9 @@ RUN chmod +x /app/docker-entrypoint.sh
 VOLUME ["/data", "/certs"]
 
 # 9444 — HTTPS (nginx frontend)
+# 8444 — agent hub (mutual TLS; remote agents connect out to it)
 # 3001 is intentionally NOT exposed — it is loopback-only inside the container
-EXPOSE 9444
+EXPOSE 9444 8444
 
 USER nextjs
 

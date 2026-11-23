@@ -19,7 +19,7 @@ const securityHeaders = [
       "style-src 'self' 'unsafe-inline'",
       "img-src 'self' data:",
       "font-src 'self'",
-      "connect-src 'self'",
+      "connect-src 'self'", // also covers the same-origin console WebSocket at /ws/exec
       "frame-ancestors 'none'",
     ].join("; "),
   },
@@ -27,7 +27,7 @@ const securityHeaders = [
 
 const nextConfig: NextConfig = {
   output: "standalone",
-  serverExternalPackages: ["@prisma/client", "bcryptjs"],
+  serverExternalPackages: ["@prisma/client", "bcryptjs", "dockerode", "docker-modem", "ssh2", "cpu-features", "ws", "qrcode"],
   async headers() {
     return [
       {

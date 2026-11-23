@@ -1,18 +1,16 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-vi.mock("@/lib/auth", () => ({ auth: vi.fn() }));
+vi.mock("@/lib/apiAuth", () => import("../helpers/apiAuthMock"));
+vi.mock("@/lib/audit", () => ({ audit: vi.fn(), clientIp: () => "1.2.3.4" }));
 
-vi.mock("@/app/api/settings/route", () => ({
-  getDecryptedSettings: vi.fn(),
-}));
+vi.mock("@/lib/secretsCrypto", () => ({ decryptSecret: (v: string) => v }));
 
 const mockPrisma = {
-  settings: { update: vi.fn() },
+  settings: { update: vi.fn(), findUnique: vi.fn() },
 };
 vi.mock("@/lib/prisma", () => ({ prisma: mockPrisma }));
 
-import { auth } from "@/lib/auth";
-import { getDecryptedSettings } from "@/app/api/settings/route";
+import { signInAs, signOut } from "../helpers/apiAuthMock";
 
 describe("POST /api/github/test", () => {
   beforeEach(() => {
@@ -21,7 +19,7 @@ describe("POST /api/github/test", () => {
   });
 
   it("returns 401 when not authenticated", async () => {
-    vi.mocked(auth).mockResolvedValue(null as any);
+    signOut();
     const { POST } = await import("@/app/api/github/test/route");
     const req = new Request("http://localhost/api/github/test", {
       method: "POST",
@@ -32,8 +30,8 @@ describe("POST /api/github/test", () => {
   });
 
   it("uses body token over DB token", async () => {
-    vi.mocked(auth).mockResolvedValue({ user: { role: "admin" } } as any);
-    vi.mocked(getDecryptedSettings).mockResolvedValue(null);
+    signInAs("admin");
+    mockPrisma.settings.findUnique.mockResolvedValue(null);
 
     const mockFetch = vi.fn()
       .mockResolvedValueOnce({
@@ -62,8 +60,8 @@ describe("POST /api/github/test", () => {
   });
 
   it("falls back to DB token when body token is masked", async () => {
-    vi.mocked(auth).mockResolvedValue({ user: { role: "admin" } } as any);
-    vi.mocked(getDecryptedSettings).mockResolvedValue({
+    signInAs("admin");
+    mockPrisma.settings.findUnique.mockResolvedValue({
       githubToken: "ghp_from_db",
       githubUser: "dbuser",
     } as any);
@@ -93,8 +91,8 @@ describe("POST /api/github/test", () => {
   });
 
   it("returns error for invalid token (401)", async () => {
-    vi.mocked(auth).mockResolvedValue({ user: { role: "admin" } } as any);
-    vi.mocked(getDecryptedSettings).mockResolvedValue({
+    signInAs("admin");
+    mockPrisma.settings.findUnique.mockResolvedValue({
       githubToken: "bad_token",
       githubUser: "user",
     } as any);
@@ -116,9 +114,16 @@ describe("POST /api/github/test", () => {
     expect(data.error).toContain("Invalid token");
   });
 
+  it("is admin only", async () => {
+    signInAs("operator");
+    const { POST } = await import("@/app/api/github/test/route");
+    const res = await POST(new Request("http://localhost/api/github/test", { method: "POST", body: "{}" }));
+    expect(res.status).toBe(403);
+  });
+
   it("returns error when no token configured", async () => {
-    vi.mocked(auth).mockResolvedValue({ user: { role: "admin" } } as any);
-    vi.mocked(getDecryptedSettings).mockResolvedValue({
+    signInAs("admin");
+    mockPrisma.settings.findUnique.mockResolvedValue({
       githubToken: "",
       githubUser: "",
     } as any);

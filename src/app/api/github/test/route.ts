@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
-import { getDecryptedSettings } from "@/app/api/settings/route";
+import { requireUser } from "@/lib/apiAuth";
+import { decryptSecret } from "@/lib/secretsCrypto";
 import { prisma } from "@/lib/prisma";
 
 /**
@@ -11,8 +11,9 @@ import { prisma } from "@/lib/prisma";
  * directly without requiring a save first. Falls back to DB values.
  */
 export async function POST(request: Request) {
-  const session = await auth();
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  // Testing a token can be used to probe arbitrary tokens, so keep it to admins
+  const gate = await requireUser("settings.manage");
+  if (!gate.ok) return gate.response;
 
   let bodyUser = "";
   let bodyToken = "";
@@ -29,7 +30,8 @@ export async function POST(request: Request) {
   let ghToken = bodyToken;
 
   if (!ghToken || ghToken === "••••••••") {
-    const settings = await getDecryptedSettings();
+    const stored = await prisma.settings.findUnique({ where: { id: "singleton" } });
+    const settings = stored ? { ...stored, githubToken: decryptSecret(stored.githubToken) } : null;
     if (!settings?.githubToken) {
       return NextResponse.json({ success: false, error: "GitHub token not configured" }, { status: 400 });
     }
@@ -45,7 +47,7 @@ export async function POST(request: Request) {
       headers: {
         Authorization: `token ${ghToken}`,
         Accept: "application/vnd.github+json",
-        "User-Agent": "encorp-deployer",
+        "User-Agent": "deploynow",
         "X-GitHub-Api-Version": "2022-11-28",
       },
     });

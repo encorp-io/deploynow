@@ -86,10 +86,31 @@ export async function getRemoteDigest(
   tag: string,
   arch?: string,
 ): Promise<string | null> {
+  return (await getRemoteDigests(registry, repository, tag, arch))?.config ?? null;
+}
+
+export interface RemoteDigests {
+  /** Image config digest for the platform: Docker's ImageID with the classic image store */
+  config: string;
+  /** Digest of what the tag points to (index or manifest): the ImageID with the containerd image store, and the RepoDigest */
+  manifest: string;
+}
+
+/**
+ * Both digests for a tag, so a local image can be matched whichever image store
+ * the Docker daemon uses (Docker 29+ defaults to containerd, where the ImageID
+ * is the index digest rather than the config digest).
+ */
+export async function getRemoteDigests(
+  registry: string,
+  repository: string,
+  tag: string,
+  arch?: string,
+): Promise<RemoteDigests | null> {
   const targetArch = normalizeArch(arch);
 
   if (registry !== "ghcr.io") {
-    return getDockerHubDigest(repository, tag, targetArch);
+    return getDockerHubDigests(repository, tag, targetArch);
   }
 
   const { user: ghUser, token: ghToken } = await getGithubCredentials();
@@ -111,6 +132,8 @@ export async function getRemoteDigest(
 
   const body = await res.json();
   const mediaType: string = body.mediaType || "";
+  const tagDigest = res.headers?.get?.("docker-content-digest") ?? "";
+  const both = (config: string | undefined) => (config ? { config, manifest: tagDigest } : null);
 
   // Step 2: If it's a manifest list / OCI index, resolve to the correct arch manifest
   if (
@@ -143,15 +166,15 @@ export async function getRemoteDigest(
 
     const platformManifest: ImageManifest = await platformRes.json();
     // The config.digest is the image config hash — same as Docker's ImageID
-    return platformManifest.config?.digest ?? null;
+    return both(platformManifest.config?.digest);
   }
 
   // Step 3: Single-platform manifest — config.digest is what we need
   const manifest = body as ImageManifest;
-  return manifest.config?.digest ?? null;
+  return both(manifest.config?.digest);
 }
 
-async function getDockerHubDigest(repository: string, tag: string, targetArch: string): Promise<string | null> {
+async function getDockerHubDigests(repository: string, tag: string, targetArch: string): Promise<RemoteDigests | null> {
   const repo = repository.includes("/") ? repository : `library/${repository}`;
 
   const tokenRes = await fetch(
@@ -173,6 +196,8 @@ async function getDockerHubDigest(repository: string, tag: string, targetArch: s
 
   const body = await res.json();
   const mediaType: string = body.mediaType || "";
+  const tagDigest = res.headers?.get?.("docker-content-digest") ?? "";
+  const both = (config: string | undefined) => (config ? { config, manifest: tagDigest } : null);
 
   // Step 2: Handle manifest list
   if (
@@ -200,12 +225,12 @@ async function getDockerHubDigest(repository: string, tag: string, targetArch: s
     if (!platformRes.ok) return null;
 
     const platformManifest: ImageManifest = await platformRes.json();
-    return platformManifest.config?.digest ?? null;
+    return both(platformManifest.config?.digest);
   }
 
   // Step 3: Single manifest
   const manifest = body as ImageManifest;
-  return manifest.config?.digest ?? null;
+  return both(manifest.config?.digest);
 }
 
 export async function getAvailableTags(registry: string, repository: string): Promise<string[]> {

@@ -1,201 +1,85 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-// Mock auth
-vi.mock("@/lib/auth", () => ({
-  auth: vi.fn(),
-}));
-
-// Mock prisma
-const mockPrisma = {
-  settings: {
-    findUnique: vi.fn(),
-    upsert: vi.fn(),
-  },
-};
-vi.mock("@/lib/prisma", () => ({
-  prisma: mockPrisma,
-}));
-
-// Mock crypto
+const mockPrisma = vi.hoisted(() => ({ settings: { findUnique: vi.fn(), upsert: vi.fn() } }));
+vi.mock("@/lib/prisma", () => ({ prisma: mockPrisma }));
+vi.mock("@/lib/apiAuth", () => import("../helpers/apiAuthMock"));
+vi.mock("@/lib/audit", () => ({ audit: vi.fn(), clientIp: () => "1.2.3.4" }));
 vi.mock("@/lib/secretsCrypto", () => ({
   encryptSecret: vi.fn((v: string) => `encrypted:${v}`),
   decryptSecret: vi.fn((v: string) => v.replace("encrypted:", "")),
 }));
 
-// Mock session helpers
-vi.mock("@/lib/sessionHelpers", () => ({
-  isAdmin: vi.fn((session: any) => session?.user?.role === "admin"),
-}));
+import { signInAs, signOut } from "../helpers/apiAuthMock";
+import { audit } from "@/lib/audit";
+import { GET, PUT } from "@/app/api/settings/route";
 
-import { auth } from "@/lib/auth";
+const put = (body: unknown) => PUT(new Request("http://x/api/settings", { method: "PUT", body: JSON.stringify(body) }));
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  signOut();
+});
 
 describe("GET /api/settings", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
+  it("returns 401 when signed out", async () => {
+    expect((await GET()).status).toBe(401);
   });
 
-  it("returns 401 when not authenticated", async () => {
-    vi.mocked(auth).mockResolvedValue(null as any);
-    const { GET } = await import("@/app/api/settings/route");
-    const res = await GET();
-    expect(res.status).toBe(401);
+  it("masks the GitHub token", async () => {
+    signInAs("viewer");
+    mockPrisma.settings.findUnique.mockResolvedValue({ githubUser: "me", githubToken: "encrypted:ghp", pollingInterval: 120, autoUpdateLatest: true, require2faForAdmins: true });
+    const data = await (await GET()).json();
+    expect(data).toMatchObject({ githubUser: "me", githubToken: "••••••••", pollingInterval: 120, autoUpdateLatest: true, require2faForAdmins: true });
+    expect(data.vault).toMatchObject({ addr: "", auth: "token", token: "" });
   });
 
-  it("returns settings with masked secrets", async () => {
-    vi.mocked(auth).mockResolvedValue({ user: { role: "member" } } as any);
-    mockPrisma.settings.findUnique.mockResolvedValue({
-      portainerUrl: "https://portainer.test:9443",
-      portainerApiKey: "encrypted:secret-key",
-      githubUser: "testuser",
-      githubToken: "encrypted:ghp_token",
-      pollingInterval: 120,
-      autoUpdateLatest: false,
-      portainerEndpointId: 3,
-    });
-
-    const { GET } = await import("@/app/api/settings/route");
-    const res = await GET();
-    const data = await res.json();
-
-    expect(res.status).toBe(200);
-    expect(data.portainerUrl).toBe("https://portainer.test:9443");
-    expect(data.portainerApiKey).toBe("••••••••");
-    expect(data.githubToken).toBe("••••••••");
-    expect(data.githubUser).toBe("testuser");
-    expect(data.pollingInterval).toBe(120);
-    expect(data.portainerEndpointId).toBe(3);
-  });
-
-  it("returns defaults when no settings exist", async () => {
-    vi.mocked(auth).mockResolvedValue({ user: { role: "member" } } as any);
+  it("returns defaults when nothing is saved", async () => {
+    signInAs("viewer");
     mockPrisma.settings.findUnique.mockResolvedValue(null);
-
-    const { GET } = await import("@/app/api/settings/route");
-    const res = await GET();
-    const data = await res.json();
-
-    expect(data.portainerUrl).toBe("");
+    const data = await (await GET()).json();
     expect(data.pollingInterval).toBe(60);
-    expect(data.autoUpdateLatest).toBe(false);
+    expect(data.githubToken).toBe("");
+    expect(data.require2faForAdmins).toBe(true);
   });
 });
 
 describe("PUT /api/settings", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
+  it("is admin only", async () => {
+    signInAs("operator");
+    expect((await put({ pollingInterval: 60 })).status).toBe(403);
   });
 
-  it("returns 401 when not authenticated", async () => {
-    vi.mocked(auth).mockResolvedValue(null as any);
-    const { PUT } = await import("@/app/api/settings/route");
-    const req = new Request("http://localhost/api/settings", {
-      method: "PUT",
-      body: JSON.stringify({}),
-    });
-    const res = await PUT(req);
-    expect(res.status).toBe(401);
-  });
-
-  it("returns 403 for non-admin", async () => {
-    vi.mocked(auth).mockResolvedValue({ user: { role: "member" } } as any);
-    const { PUT } = await import("@/app/api/settings/route");
-    const req = new Request("http://localhost/api/settings", {
-      method: "PUT",
-      body: JSON.stringify({ portainerUrl: "https://test.com" }),
-    });
-    const res = await PUT(req);
-    expect(res.status).toBe(403);
-  });
-
-  it("validates portainer URL rejects non-http schemes", async () => {
-    vi.mocked(auth).mockResolvedValue({ user: { role: "admin" } } as any);
-    const { PUT } = await import("@/app/api/settings/route");
-    const req = new Request("http://localhost/api/settings", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ portainerUrl: "ftp://evil.com" }),
-    });
-    const res = await PUT(req);
-    expect(res.status).toBe(400);
-    const data = await res.json();
-    expect(data.error).toContain("URL must use http or https");
-  });
-
-  it("blocks AWS metadata endpoint", async () => {
-    vi.mocked(auth).mockResolvedValue({ user: { role: "admin" } } as any);
-    const { PUT } = await import("@/app/api/settings/route");
-    const req = new Request("http://localhost/api/settings", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ portainerUrl: "http://169.254.169.254/latest/" }),
-    });
-    const res = await PUT(req);
-    expect(res.status).toBe(400);
-  });
-
-  it("validates polling interval range", async () => {
-    vi.mocked(auth).mockResolvedValue({ user: { role: "admin" } } as any);
-    const { PUT } = await import("@/app/api/settings/route");
-
-    // Too low
-    let req = new Request("http://localhost/api/settings", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ pollingInterval: 5 }),
-    });
-    let res = await PUT(req);
-    expect(res.status).toBe(400);
-
-    // Too high
-    req = new Request("http://localhost/api/settings", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ pollingInterval: 9999 }),
-    });
-    res = await PUT(req);
-    expect(res.status).toBe(400);
-  });
-
-  it("skips masked secrets (no overwrite)", async () => {
-    vi.mocked(auth).mockResolvedValue({ user: { role: "admin" } } as any);
-    mockPrisma.settings.upsert.mockResolvedValue({});
-
-    const { PUT } = await import("@/app/api/settings/route");
-    const req = new Request("http://localhost/api/settings", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        portainerApiKey: "••••••••",
-        githubToken: "••••••••",
-        pollingInterval: 60,
-      }),
-    });
-    const res = await PUT(req);
+  it("saves, encrypts the token and audits", async () => {
+    signInAs("admin");
+    const res = await put({ githubUser: " me ", githubToken: "ghp_x", pollingInterval: 90, autoUpdateLatest: 1 });
     expect(res.status).toBe(200);
-
-    // Verify upsert was called without portainerApiKey or githubToken in data
-    const upsertCall = mockPrisma.settings.upsert.mock.calls[0][0];
-    expect(upsertCall.update).not.toHaveProperty("portainerApiKey");
-    expect(upsertCall.update).not.toHaveProperty("githubToken");
+    const call = mockPrisma.settings.upsert.mock.calls[0][0];
+    expect(call.update).toEqual({ githubUser: "me", githubToken: "encrypted:ghp_x", pollingInterval: 90, autoUpdateLatest: true });
+    expect(audit).toHaveBeenCalledWith(expect.objectContaining({ action: "settings.update" }));
   });
 
-  it("accepts valid settings and saves", async () => {
-    vi.mocked(auth).mockResolvedValue({ user: { role: "admin" } } as any);
-    mockPrisma.settings.upsert.mockResolvedValue({});
+  it("keeps the stored token when the mask is sent back", async () => {
+    signInAs("admin");
+    await put({ githubToken: "••••••••" });
+    expect(mockPrisma.settings.upsert.mock.calls[0][0].update).not.toHaveProperty("githubToken");
+  });
 
-    const { PUT } = await import("@/app/api/settings/route");
-    const req = new Request("http://localhost/api/settings", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        portainerUrl: "https://portainer.test:9443",
-        pollingInterval: 120,
-        autoUpdateLatest: false,
-        portainerEndpointId: 5,
-      }),
-    });
-    const res = await PUT(req);
-    expect(res.status).toBe(200);
-    expect(mockPrisma.settings.upsert).toHaveBeenCalled();
+  it("rejects an out-of-range polling interval", async () => {
+    signInAs("admin");
+    expect((await put({ pollingInterval: 5 })).status).toBe(400);
+    expect((await put({ pollingInterval: 1.5 })).status).toBe(400);
+  });
+
+  it("rejects an over-long token", async () => {
+    signInAs("admin");
+    expect((await put({ githubToken: "x".repeat(600) })).status).toBe(400);
+  });
+
+  it("lets only an owner turn off required 2FA", async () => {
+    signInAs("admin");
+    expect((await put({ require2faForAdmins: false })).status).toBe(403);
+    expect((await put({ require2faForAdmins: true })).status).toBe(200);
+    signInAs("owner");
+    expect((await put({ require2faForAdmins: false })).status).toBe(200);
   });
 });

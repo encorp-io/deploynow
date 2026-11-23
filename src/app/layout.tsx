@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Encorp Deployer",
-  description: "Docker deployment dashboard for Portainer CE",
+  title: "DeployNow",
+  description: "Self-hosted Docker deployment and management",
 };
 
 export default function RootLayout({

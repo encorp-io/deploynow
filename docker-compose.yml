@@ -6,9 +6,17 @@ services:
     container_name: encorp-deployer
     restart: unless-stopped
     ports:
-      - "9444:9444"     # HTTPS — Encorp Deployer dashboard
+      - "9444:9444"     # HTTPS — DeployNow dashboard
+      - "8444:8444"     # Agent hub — remote agents connect out to this (mutual TLS)
+    # The image runs as a non-root user. To manage this machine through the socket,
+    # give it the socket's group: DOCKER_GID=$(stat -c %g /var/run/docker.sock)
+    group_add:
+      - "${DOCKER_GID:-999}"
     volumes:
       - deployer_data:/data          # SQLite DB + auto-generated TLS cert (persisted)
+      # Manage the machine the deployer runs on. Remove to manage only remote machines.
+      # Anyone with admin in the deployer effectively has root on this host.
+      - /var/run/docker.sock:/var/run/docker.sock
       # ── Real certificate (optional) ─────────────────────────────────────────
       # Mount your certificate files here to replace the self-signed cert.
       # The entrypoint prefers /certs/ over the auto-generated cert in /data/certs/.
@@ -32,10 +40,9 @@ services:
       # If unset, auth and redirects derive the URL from the incoming request headers.
       NEXTAUTH_URL: ${NEXTAUTH_URL:-}
 
-      # ── Portainer connection (optional — can also configure in web UI) ──────
-      # If set, the onboarding wizard is skipped automatically.
-      PORTAINER_URL: ${PORTAINER_URL:-}
-      PORTAINER_API_KEY: ${PORTAINER_API_KEY:-}
+      # Address agents dial (defaults to NEXTAUTH_URL's host on AGENT_PORT). Can also be set in Settings.
+      # AGENT_PUBLIC_URL: https://deploynow.example.com:8444
+      # AGENT_PORT: "8444"   # "off" disables the agent hub
 
       # ── GitHub Container Registry (optional — can also configure in web UI) ─
       # Your GitHub username + PAT with read:packages scope

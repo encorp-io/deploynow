@@ -1,266 +1,167 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-// Mock portainer
-vi.mock("@/lib/portainer", () => ({
-  getContainers: vi.fn(),
-  getConfiguredEndpointId: vi.fn().mockResolvedValue(3),
-  getImageInspect: vi.fn(),
-  parseImageRef: vi.fn((image: string) => {
-    const parts = image.split("/");
-    const last = parts[parts.length - 1];
-    const [repo, tag = "latest"] = last.includes(":") ? last.split(":") : [last, "latest"];
-    const registry = parts.length >= 2 && parts[0].includes(".") ? parts[0] : "docker.io";
-    const repository = registry !== "docker.io" ? parts.slice(1).join("/").split(":")[0] : image.split(":")[0];
-    return { registry, repository, tag, full: image };
-  }),
-  isFloatingTag: vi.fn((tag: string) => ["latest", "main", "dev"].includes(tag)),
-  recreateContainer: vi.fn(),
-}));
-
-// Mock ghcr
-vi.mock("@/lib/ghcr", () => ({
-  getRemoteDigest: vi.fn(),
-}));
-
-// Mock prisma
-const mockPrisma = {
+const mockPrisma = vi.hoisted(() => ({
   settings: { findUnique: vi.fn() },
-  service: {
-    findMany: vi.fn(),
-    findUnique: vi.fn(),
-    upsert: vi.fn(),
-    update: vi.fn(),
-    deleteMany: vi.fn(),
-  },
-  activityLog: { create: vi.fn() },
-};
+  endpoint: { findMany: vi.fn() },
+  service: { findMany: vi.fn(), findUnique: vi.fn(), upsert: vi.fn(), update: vi.fn(), deleteMany: vi.fn() },
+}));
+const docker = vi.hoisted(() => ({
+  listContainers: vi.fn(),
+  getImage: vi.fn(() => ({ inspect: vi.fn(async () => ({ Architecture: "arm64", RepoDigests: ["ghcr.io/acme/web@sha256:idx"] })) })),
+  getContainer: vi.fn(),
+}));
 vi.mock("@/lib/prisma", () => ({ prisma: mockPrisma }));
+vi.mock("@/lib/ghcr", () => ({ getRemoteDigests: vi.fn() }));
+vi.mock("@/lib/audit", () => ({ audit: vi.fn() }));
+vi.mock("@/lib/registryAuth", () => ({ registryAuthFor: vi.fn(async () => undefined) }));
+vi.mock("@/lib/docker/recreate", () => ({ recreateContainer: vi.fn() }));
+vi.mock("@/lib/endpoints", () => ({
+  dockerFor: vi.fn(() => docker),
+  refreshEndpoint: vi.fn(async (ep: { status?: string }) => ({ ...ep, status: ep.status ?? "online" })),
+}));
 
-import { getContainers, getImageInspect, recreateContainer } from "@/lib/portainer";
-import { getRemoteDigest } from "@/lib/ghcr";
+import { getRemoteDigests } from "@/lib/ghcr";
+import { audit } from "@/lib/audit";
+import { recreateContainer } from "@/lib/docker/recreate";
+import { syncServices, checkForUpdates, performUpdate, isProtectedContainer, isCurrent } from "@/lib/polling";
 
-describe("syncServicesFromPortainer", () => {
-  beforeEach(() => vi.clearAllMocks());
+const EP = { id: "ep1", name: "local" };
 
-  it("does nothing when settings are missing", async () => {
-    mockPrisma.settings.findUnique.mockResolvedValue(null);
-    const { syncServicesFromPortainer } = await import("@/lib/polling");
-    await syncServicesFromPortainer();
-    expect(getContainers).not.toHaveBeenCalled();
+beforeEach(() => {
+  vi.clearAllMocks();
+});
+
+describe("isProtectedContainer", () => {
+  it("protects Portainer, the deployer and labelled containers", () => {
+    expect(isProtectedContainer("portainer/portainer-ce:latest", "abc")).toBe(true);
+    expect(isProtectedContainer("ghcr.io/encorp-io/deployer-for-portainer:latest", "abc")).toBe(true);
+    expect(isProtectedContainer("nginx:latest", "abc", { "io.deploynow.self": "true" })).toBe(true);
+    expect(isProtectedContainer("nginx:latest", "abc")).toBe(false);
+  });
+});
+
+describe("isCurrent", () => {
+  const remote = { config: "sha256:cfg", manifest: "sha256:idx" };
+  it("matches the classic image store (ImageID = config digest)", () => {
+    expect(isCurrent({ currentDigest: "sha256:cfg" }, remote)).toBe(true);
+  });
+  it("matches the containerd image store (ImageID = index digest)", () => {
+    expect(isCurrent({ currentDigest: "sha256:idx" }, remote)).toBe(true);
+  });
+  it("matches through RepoDigests", () => {
+    expect(isCurrent({ currentDigest: "sha256:local", repoDigests: "ghcr.io/a/b@sha256:old,ghcr.io/a/b@sha256:idx" }, remote)).toBe(true);
+  });
+  it("reports a new image", () => {
+    expect(isCurrent({ currentDigest: "sha256:local", repoDigests: "ghcr.io/a/b@sha256:old" }, remote)).toBe(false);
+    expect(isCurrent({ currentDigest: "sha256:local" }, { config: "sha256:cfg", manifest: "" })).toBe(false);
+  });
+  it("treats an unknown local digest as current", () => {
+    expect(isCurrent({ currentDigest: "" }, remote)).toBe(true);
+  });
+});
+
+describe("syncServices", () => {
+  it("skips offline endpoints", async () => {
+    mockPrisma.endpoint.findMany.mockResolvedValue([{ ...EP, status: "offline" }]);
+    await syncServices();
+    expect(docker.listContainers).not.toHaveBeenCalled();
   });
 
-  it("does nothing when portainerUrl is empty", async () => {
-    mockPrisma.settings.findUnique.mockResolvedValue({ portainerUrl: "", portainerApiKey: "key" });
-    const { syncServicesFromPortainer } = await import("@/lib/polling");
-    await syncServicesFromPortainer();
-    expect(getContainers).not.toHaveBeenCalled();
-  });
-
-  it("upserts services from containers", async () => {
-    mockPrisma.settings.findUnique.mockResolvedValue({
-      portainerUrl: "https://test:9443",
-      portainerApiKey: "key",
-      portainerEndpointId: 3,
-    });
-    vi.mocked(getContainers).mockResolvedValue([
-      { Id: "abc123", Names: ["/my-app"], Image: "ghcr.io/org/app:latest", ImageID: "sha256:aaa", State: "running", Status: "", Labels: {} },
+  it("upserts tagged containers and drops ones that are gone", async () => {
+    mockPrisma.endpoint.findMany.mockResolvedValue([EP]);
+    docker.listContainers.mockResolvedValue([
+      { Id: "c1", Names: ["/web"], Image: "ghcr.io/acme/web:latest", ImageID: "sha256:aaa", State: "running" },
+      { Id: "c2", Names: ["/raw"], Image: "sha256:deadbeef", ImageID: "sha256:bbb", State: "running" },
+      { Id: "c3", Names: ["/pinned"], Image: "ghcr.io/acme/web@sha256:" + "a".repeat(64), ImageID: "sha256:ccc", State: "running" },
     ]);
-    vi.mocked(getImageInspect).mockResolvedValue({ Architecture: "amd64" });
-
-    const { syncServicesFromPortainer } = await import("@/lib/polling");
-    await syncServicesFromPortainer();
-
-    expect(mockPrisma.service.upsert).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: { containerId: "abc123" },
-        update: expect.objectContaining({
-          containerName: "my-app",
-          currentDigest: "sha256:aaa",
-          arch: "amd64",
-        }),
-      })
-    );
+    await syncServices();
+    expect(mockPrisma.service.upsert).toHaveBeenCalledTimes(1);
+    const { where, create } = mockPrisma.service.upsert.mock.calls[0][0];
+    expect(where).toEqual({ containerId: "c1" });
+    expect(create).toMatchObject({ containerName: "web", registry: "ghcr.io", tag: "latest", isFloatingTag: true, arch: "arm64", endpointId: "ep1", currentDigest: "sha256:aaa", repoDigests: "ghcr.io/acme/web@sha256:idx" });
+    expect(mockPrisma.service.deleteMany).toHaveBeenCalledWith({ where: { endpointId: "ep1", containerId: { notIn: ["c1", "c2", "c3"] } } });
   });
 
-  it("removes services for containers that no longer exist", async () => {
-    mockPrisma.settings.findUnique.mockResolvedValue({
-      portainerUrl: "https://test:9443",
-      portainerApiKey: "key",
-      portainerEndpointId: 3,
-    });
-    vi.mocked(getContainers).mockResolvedValue([]); // no containers
-
-    const { syncServicesFromPortainer } = await import("@/lib/polling");
-    await syncServicesFromPortainer();
-
-    expect(mockPrisma.service.deleteMany).toHaveBeenCalledWith({
-      where: { containerId: { notIn: [] }, portainerEndpointId: 3 },
-    });
-  });
-
-  it("falls back to amd64 when image inspect fails", async () => {
-    mockPrisma.settings.findUnique.mockResolvedValue({
-      portainerUrl: "https://test:9443",
-      portainerApiKey: "key",
-      portainerEndpointId: 3,
-    });
-    vi.mocked(getContainers).mockResolvedValue([
-      { Id: "xyz", Names: ["/app"], Image: "nginx:latest", ImageID: "sha256:bbb", State: "running", Status: "", Labels: {} },
-    ]);
-    vi.mocked(getImageInspect).mockRejectedValue(new Error("not found"));
-
-    const { syncServicesFromPortainer } = await import("@/lib/polling");
-    await syncServicesFromPortainer();
-
-    expect(mockPrisma.service.upsert).toHaveBeenCalledWith(
-      expect.objectContaining({
-        update: expect.objectContaining({ arch: "amd64" }),
-      })
-    );
+  it("keeps going when one endpoint fails", async () => {
+    mockPrisma.endpoint.findMany.mockResolvedValue([EP, { id: "ep2", name: "b" }]);
+    docker.listContainers.mockRejectedValueOnce(new Error("boom")).mockResolvedValueOnce([]);
+    const err = vi.spyOn(console, "error").mockImplementation(() => {});
+    await syncServices();
+    expect(docker.listContainers).toHaveBeenCalledTimes(2);
+    err.mockRestore();
   });
 });
 
 describe("checkForUpdates", () => {
-  beforeEach(() => vi.clearAllMocks());
+  const svc = { id: "s1", containerId: "c1", containerName: "web", image: "ghcr.io/acme/web:latest", arch: "amd64", currentDigest: "sha256:old", remoteDigest: "", updateAvailable: false, isFloatingTag: true, endpointId: "ep1" };
 
-  it("marks lastChecked even when remote digest is null", async () => {
-    mockPrisma.service.findMany.mockResolvedValue([
-      { id: "s1", image: "ghcr.io/org/app:latest", currentDigest: "sha256:old", arch: "amd64" },
-    ]);
-    mockPrisma.settings.findUnique.mockResolvedValue({ autoUpdateLatest: false });
-    vi.mocked(getRemoteDigest).mockResolvedValue(null);
-
-    const { checkForUpdates } = await import("@/lib/polling");
+  it("only touches lastChecked when the registry has no digest", async () => {
+    mockPrisma.service.findMany.mockResolvedValue([svc]);
+    vi.mocked(getRemoteDigests).mockResolvedValue(null);
     await checkForUpdates();
-
-    expect(mockPrisma.service.update).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: expect.objectContaining({ lastChecked: expect.any(Date) }),
-      })
-    );
+    expect(mockPrisma.service.update.mock.calls[0][0].data).toEqual({ lastChecked: expect.any(Date) });
   });
 
-  it("detects update when digests differ", async () => {
-    mockPrisma.service.findMany.mockResolvedValue([
-      { id: "s1", image: "ghcr.io/org/app:latest", currentDigest: "sha256:old", arch: "amd64", isFloatingTag: false, containerName: "app" },
-    ]);
+  it("records a new update once", async () => {
     mockPrisma.settings.findUnique.mockResolvedValue({ autoUpdateLatest: false });
-    vi.mocked(getRemoteDigest).mockResolvedValue("sha256:new");
-
-    const { checkForUpdates } = await import("@/lib/polling");
+    vi.mocked(getRemoteDigests).mockResolvedValue({ config: "sha256:new", manifest: "sha256:newindex" });
+    mockPrisma.service.findMany.mockResolvedValue([svc]);
     await checkForUpdates();
+    expect(mockPrisma.service.update.mock.calls[0][0].data).toMatchObject({ remoteDigest: "sha256:new", updateAvailable: true });
+    expect(audit).toHaveBeenCalledWith(expect.objectContaining({ action: "service.update_available" }));
 
-    expect(mockPrisma.service.update).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: expect.objectContaining({
-          remoteDigest: "sha256:new",
-          updateAvailable: true,
-        }),
-      })
-    );
+    vi.mocked(audit).mockClear();
+    mockPrisma.service.findMany.mockResolvedValue([{ ...svc, updateAvailable: true, remoteDigest: "sha256:new" }]);
+    await checkForUpdates();
+    expect(audit).not.toHaveBeenCalled();
   });
 
-  it("does not flag update when digests match", async () => {
-    mockPrisma.service.findMany.mockResolvedValue([
-      { id: "s1", image: "ghcr.io/org/app:latest", currentDigest: "sha256:same", arch: "amd64" },
-    ]);
-    mockPrisma.settings.findUnique.mockResolvedValue({ autoUpdateLatest: false });
-    vi.mocked(getRemoteDigest).mockResolvedValue("sha256:same");
-
-    const { checkForUpdates } = await import("@/lib/polling");
+  it("auto-updates floating tags when enabled", async () => {
+    mockPrisma.settings.findUnique.mockResolvedValue({ autoUpdateLatest: true });
+    vi.mocked(getRemoteDigests).mockResolvedValue({ config: "sha256:new", manifest: "sha256:newindex" });
+    mockPrisma.service.findMany.mockResolvedValue([svc]);
+    mockPrisma.service.findUnique.mockResolvedValue({ ...svc, endpoint: EP });
+    vi.mocked(recreateContainer).mockResolvedValue("c9");
+    docker.getContainer.mockReturnValue({ inspect: async () => ({ Image: "sha256:new", State: { Running: true, Status: "running" } }) });
     await checkForUpdates();
-
-    expect(mockPrisma.service.update).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: expect.objectContaining({ updateAvailable: false }),
-      })
-    );
+    expect(recreateContainer).toHaveBeenCalledWith(docker, "c1", { pull: true, authconfig: undefined });
   });
 
-  it("logs error and still sets lastChecked on failure", async () => {
-    mockPrisma.service.findMany.mockResolvedValue([
-      { id: "s1", image: "ghcr.io/org/app:latest", currentDigest: "sha256:old", arch: "amd64", containerName: "app" },
-    ]);
-    mockPrisma.settings.findUnique.mockResolvedValue({ autoUpdateLatest: false });
-    vi.mocked(getRemoteDigest).mockRejectedValue(new Error("Network error"));
+  it("audits a failed check", async () => {
+    mockPrisma.settings.findUnique.mockResolvedValue(null);
+    mockPrisma.service.findMany.mockResolvedValue([svc]);
     mockPrisma.service.update.mockResolvedValue({});
-
-    const { checkForUpdates } = await import("@/lib/polling");
+    vi.mocked(getRemoteDigests).mockRejectedValue(new Error("registry down"));
     await checkForUpdates();
-
-    // Should still update lastChecked
-    expect(mockPrisma.service.update).toHaveBeenCalled();
-    // Should log error
-    expect(mockPrisma.activityLog.create).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: expect.objectContaining({ action: "error" }),
-      })
-    );
+    expect(audit).toHaveBeenCalledWith(expect.objectContaining({ action: "service.check", outcome: "failure" }));
   });
 });
 
 describe("performUpdate", () => {
-  beforeEach(() => vi.clearAllMocks());
+  const svc = { id: "s1", containerId: "c1", containerName: "web", image: "nginx:latest", remoteDigest: "sha256:new", endpointId: "ep1", endpoint: EP };
 
-  it("throws when service not found", async () => {
+  it("throws for a missing service or endpoint", async () => {
     mockPrisma.service.findUnique.mockResolvedValue(null);
-    const { performUpdate } = await import("@/lib/polling");
-    await expect(performUpdate("nonexistent")).rejects.toThrow("Service not found");
+    await expect(performUpdate("s1")).rejects.toThrow("Service not found");
+    mockPrisma.service.findUnique.mockResolvedValue({ ...svc, endpoint: null });
+    await expect(performUpdate("s1")).rejects.toThrow("no endpoint");
   });
 
-  it("recreates container and updates digest", async () => {
-    mockPrisma.service.findUnique.mockResolvedValue({
-      id: "s1",
-      containerId: "c1",
-      image: "ghcr.io/org/app:latest",
-      containerName: "app",
-      portainerEndpointId: 3,
-      arch: "amd64",
-    });
-    mockPrisma.service.update.mockResolvedValue({});
-    vi.mocked(recreateContainer).mockResolvedValue("new-c1");
-    vi.mocked(getRemoteDigest).mockResolvedValue("sha256:newdigest");
-
-    const { performUpdate } = await import("@/lib/polling");
-    await performUpdate("s1");
-
-    expect(recreateContainer).toHaveBeenCalledWith(3, "c1", true);
-    expect(mockPrisma.service.update).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: expect.objectContaining({
-          containerId: "new-c1",
-          currentDigest: "sha256:newdigest",
-          status: "running",
-          updateAvailable: false,
-        }),
-      })
-    );
-    expect(mockPrisma.activityLog.create).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: expect.objectContaining({ action: "update" }),
-      })
-    );
+  it("recreates the container and stores the new id", async () => {
+    mockPrisma.service.findUnique.mockResolvedValue(svc);
+    vi.mocked(recreateContainer).mockResolvedValue("c2");
+    docker.getContainer.mockReturnValue({ inspect: async () => ({ Image: "sha256:new", State: { Running: true, Status: "running" } }) });
+    await performUpdate("s1", { id: "u", email: "u@x" }, "1.1.1.1");
+    const last = mockPrisma.service.update.mock.calls.at(-1)![0].data;
+    expect(last).toMatchObject({ containerId: "c2", currentDigest: "sha256:new", updateAvailable: false, status: "running" });
+    expect(audit).toHaveBeenCalledWith(expect.objectContaining({ action: "service.update", ip: "1.1.1.1" }));
   });
 
-  it("sets status to error when recreate fails", async () => {
-    mockPrisma.service.findUnique.mockResolvedValue({
-      id: "s1",
-      containerId: "c1",
-      image: "ghcr.io/org/app:latest",
-      containerName: "app",
-      portainerEndpointId: 3,
-      arch: "amd64",
-    });
-    mockPrisma.service.update.mockResolvedValue({});
-    vi.mocked(recreateContainer).mockRejectedValue(new Error("Recreate failed"));
-
-    const { performUpdate } = await import("@/lib/polling");
-    await expect(performUpdate("s1")).rejects.toThrow("Recreate failed");
-
-    // Should set status to "error"
-    const errorUpdate = mockPrisma.service.update.mock.calls.find(
-      (c: any) => c[0]?.data?.status === "error"
-    );
-    expect(errorUpdate).toBeDefined();
+  it("marks the service as errored and audits a failure", async () => {
+    mockPrisma.service.findUnique.mockResolvedValue(svc);
+    vi.mocked(recreateContainer).mockRejectedValue(new Error("pull denied"));
+    await expect(performUpdate("s1")).rejects.toThrow("pull denied");
+    expect(mockPrisma.service.update).toHaveBeenLastCalledWith({ where: { id: "s1" }, data: { status: "error" } });
+    expect(audit).toHaveBeenCalledWith(expect.objectContaining({ outcome: "failure" }));
   });
 });

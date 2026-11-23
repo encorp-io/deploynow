@@ -7,23 +7,81 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model User {
-  id        String   @id @default(cuid())
-  email     String   @unique
-  name      String
-  password  String
-  role      String   @default("member") // admin, member
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+// ─── Identity & access ────────────────────────────────────────────────────────
 
-  invites TeamInvite[]
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  name          String
+  password      String // scrypt$… (v2) or bcrypt (v1, rehashed on next login)
+  // Instance-wide role: owner, admin, operator, viewer.
+  // v1 values (admin, member) are remapped by the v2 upgrade step.
+  role          String    @default("operator")
+  totpSecret    String    @default("") // AES-256-GCM encrypted base32 secret
+  totpPending   String    @default("") // encrypted secret during enrolment, before first code is confirmed
+  totpEnabledAt DateTime?
+  totpLastStep  Int       @default(0) // last accepted TOTP time step (replay protection)
+  disabledAt    DateTime?
+  lastLoginAt   DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  invites       TeamInvite[]
+  sessions      Session[]
+  recoveryCodes RecoveryCode[]
+  roleBindings  RoleBinding[]
+  apiTokens     ApiToken[]
+  passkeys      Passkey[]
+  identities    UserIdentity[]
+}
+
+model RecoveryCode {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  codeHash  String // sha256 of the normalised code
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+}
+
+// Server-side session record. The NextAuth JWT carries only its id (sid), so a
+// session can be listed and revoked, and role changes apply on the next request.
+model Session {
+  id         String    @id @default(cuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  ip         String    @default("")
+  userAgent  String    @default("")
+  createdAt  DateTime  @default(now())
+  lastSeenAt DateTime  @default(now())
+  expiresAt  DateTime
+  revokedAt  DateTime?
+  stepUpAt   DateTime? // last time the user re-confirmed a 2FA code for a sensitive action
+
+  @@index([userId])
+}
+
+// Extra grant on top of the user's instance role, scoped to one endpoint
+// (and, from phase 2, one project). The effective role is the higher of the two.
+model RoleBinding {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role      String // admin, operator, viewer
+  scopeType String // endpoint, project
+  scopeId   String
+  createdAt DateTime @default(now())
+
+  @@unique([userId, scopeType, scopeId])
 }
 
 model TeamInvite {
   id        String   @id @default(cuid())
   email     String
   token     String   @unique
-  role      String   @default("member")
+  role      String   @default("operator")
   expiresAt DateTime
   used      Boolean  @default(false)
   createdBy String
@@ -31,52 +89,571 @@ model TeamInvite {
   createdAt DateTime @default(now())
 }
 
+// Persistent login throttle (survives restarts, unlike the v1 in-memory map)
+model LoginThrottle {
+  key          String    @id
+  count        Int       @default(0)
+  firstAttempt DateTime  @default(now())
+  lockedUntil  DateTime?
+}
+
+// ─── Machines ─────────────────────────────────────────────────────────────────
+
+model Endpoint {
+  id                 String    @id @default(cuid())
+  name               String    @unique
+  type               String // socket, ssh, tls, agent
+  // socket: path to the Docker socket; ssh/tls: hostname or IP
+  host               String
+  port               Int?
+  username           String    @default("") // ssh user
+  credentials        String    @default("") // AES-256-GCM encrypted JSON: privateKey, passphrase, ca, cert, key
+  // ssh: SHA256 fingerprint of the host key, pinned on first successful connect
+  hostKeyFingerprint String    @default("")
+  labels             String    @default("") // comma-separated, e.g. "prod,client-a"
+  status             String    @default("unknown") // online, offline, unknown
+  dockerVersion      String    @default("")
+  os                 String    @default("")
+  cpus               Int       @default(0)
+  memoryBytes        Float     @default(0)
+  containers         Int       @default(0)
+  lastSeenAt         DateTime?
+  lastError          String    @default("")
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  // Edge proxy (Traefik) that routes app domains and gets Let's Encrypt certificates.
+  // managed = DeployNow runs its own Traefik; external = an existing Traefik
+  // (e.g. Dokploy's) on proxyNetwork with entrypoints web/websecure and a
+  // "letsencrypt" resolver; none = no domains on this endpoint.
+  proxyMode      String @default("none")
+  proxyNetwork   String @default("deploynow")
+  proxyEmail     String @default("")
+  proxyError     String @default("")
+  // Certificates: http (HTTP-01) or cloudflare (DNS-01, needed for wildcards such as preview domains)
+  proxyChallenge String @default("http")
+  proxyDnsToken  String @default("") // encrypted Cloudflare API token (Zone:DNS:Edit)
+
+  // Agent endpoints (type "agent"): the host runs deploynow-agent, which keeps an
+  // outbound mTLS connection to the hub; Docker is reached through it.
+  agentCertSerial    String    @default("") // serial of the agent's current client certificate; empty = not enrolled or revoked
+  agentJoinTokenHash String    @default("") // sha256 of the one-time join token
+  agentJoinExpiresAt DateTime?
+  agentVersion       String    @default("")
+  agentHostname      String    @default("")
+  agentConnectedAt   DateTime?
+  // Latest host metrics (JSON: cpus, load1, memTotal, memAvailable, diskTotal, diskFree, diskPath)
+  hostMetrics        String    @default("")
+  hostMetricsAt      DateTime?
+
+  services       Service[]
+  applications   Application[]
+  environments   Environment[]
+  backupPolicies BackupPolicy[]
+  scheduledTasks ScheduledTask[]
+  metricSamples  MetricSample[]
+}
+
+// ─── Settings ─────────────────────────────────────────────────────────────────
+
 model Settings {
   id                  String  @id @default("singleton")
-  portainerUrl        String  @default("")
-  portainerApiKey     String  @default("") // AES-256-GCM encrypted at rest
+  schemaVersion       Int     @default(1)
   githubUser          String  @default("") // GitHub username for GHCR auth
   githubToken         String  @default("") // AES-256-GCM encrypted at rest
   pollingInterval     Int     @default(60) // seconds, range 30–3600
   autoUpdateLatest    Boolean @default(false)
-  portainerEndpointId Int     @default(1)  // which Portainer environment to manage
+  require2faForAdmins Boolean @default(true)
+  // Optional HashiCorp Vault: env vars of kind "vault" hold <mount>/<path>#<field>
+  vaultAddr           String  @default("") // https://vault.example.com:8200
+  vaultNamespace      String  @default("") // Vault Enterprise / HCP namespace
+  vaultAuth           String  @default("token") // token, approle
+  vaultToken          String  @default("") // encrypted
+  vaultRoleId         String  @default("")
+  vaultSecretId       String  @default("") // encrypted
+  vaultCaCert         String  @default("") // PEM, for a private CA
+  // Agent hub PKI: a private CA signs each agent's client certificate and the hub's server certificate
+  agentCaCert         String  @default("")
+  agentCaKey          String  @default("") // encrypted
+  agentServerCert     String  @default("")
+  agentServerKey      String  @default("") // encrypted
+  agentPublicUrl      String  @default("") // what agents dial, e.g. https://deploynow.example.com:8444
+  // Alerts
+  alertDiskPercent    Int     @default(90) // alert when a host disk is this full
+  alertMemPercent     Int     @default(95)
+  alertCrashRestarts  Int     @default(3) // restarts within 10 minutes that count as a crash loop
+  // ── v1 legacy (read once by the v2 upgrade step, no longer used) ──
+  portainerUrl        String  @default("")
+  portainerApiKey     String  @default("")
+  portainerEndpointId Int     @default(1)
 }
 
+// A container tracked for image updates (v1 concept, kept until phase 2
+// introduces Applications).
 model Service {
-  id              String   @id @default(cuid())
-  containerId     String   @unique
-  containerName   String
-  image           String   // full image ref e.g. ghcr.io/org/repo:tag
-  registry        String   @default("ghcr.io")
-  currentDigest   String   @default("")
-  remoteDigest    String   @default("")
-  tag             String   @default("latest")
-  isFloatingTag   Boolean  @default(true) // true = auto-update, false = notify only
-  arch            String   @default("amd64")   // image architecture: amd64, arm64, etc.
-  status          String   @default("unknown") // running, stopped, updating, error
-  updateAvailable Boolean  @default(false)
-  portainerEndpointId Int      @default(1)
-  lastChecked       DateTime?
-  lastUpdated       DateTime?
-  lastHealthRestart DateTime?
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  id                  String    @id @default(cuid())
+  containerId         String    @unique
+  containerName       String
+  image               String // full image ref e.g. ghcr.io/org/repo:tag
+  registry            String    @default("ghcr.io")
+  currentDigest       String    @default("")
+  repoDigests         String    @default("") // comma-separated RepoDigests of the local image
+  remoteDigest        String    @default("")
+  tag                 String    @default("latest")
+  isFloatingTag       Boolean   @default(true) // true = auto-update, false = notify only
+  arch                String    @default("amd64")
+  status              String    @default("unknown") // running, stopped, updating, error
+  updateAvailable     Boolean   @default(false)
+  endpointId          String?
+  endpoint            Endpoint? @relation(fields: [endpointId], references: [id], onDelete: Cascade)
+  portainerEndpointId Int       @default(1) // v1 legacy
+  lastChecked         DateTime?
+  lastUpdated         DateTime?
+  lastHealthRestart   DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  @@index([endpointId])
 }
 
 model HealthMonitor {
   id          String  @id @default("singleton")
   enabled     Boolean @default(false)
-  prefixes    String  @default("")              // newline-separated; empty = match all containers
-  logWindow   Int     @default(300)             // seconds of recent logs to scan per cycle
-  cooldown    Int     @default(10)              // minutes between restarts per container
+  prefixes    String  @default("") // newline-separated; empty = match all containers
+  logWindow   Int     @default(300) // seconds of recent logs to scan per cycle
+  cooldown    Int     @default(10) // minutes between restarts per container
   logPatterns String  @default("connection timeout\nconnection refused\nconnection reset\nconnection timed out\nunable to connect\npool exhausted\ntoo many connections\nout of memory\nheap out of memory\noom killer\nkilled process\nmemory limit exceeded\nfatal error\npanic:\nsegfault\nsegmentation fault\ncore dumped\nunhandled exception\ndeadlock detected\nhealth check failed\nno space left\ni/o error\nread-only file system")
 }
 
+// ─── Audit ────────────────────────────────────────────────────────────────────
+
+// Who did what, where. Replaces ActivityLog (kept below for the one-time copy).
+model AuditEvent {
+  id         String   @id @default(cuid())
+  createdAt  DateTime @default(now())
+  actorType  String   @default("system") // user, system
+  actorId    String?
+  actorEmail String   @default("")
+  action     String // e.g. auth.login, container.restart, service.update
+  targetType String   @default("")
+  targetId   String   @default("")
+  endpointId String?
+  serviceId  String?
+  ip         String   @default("")
+  outcome    String   @default("success") // success, failure
+  message    String
+  details    String   @default("")
+
+  @@index([createdAt])
+  @@index([action])
+  @@index([endpointId])
+}
+
+// v1 legacy — copied into AuditEvent by the v2 upgrade step, no longer written
 model ActivityLog {
   id        String   @id @default(cuid())
   serviceId String?
-  action    String   // check, update, error, manual_update
+  action    String
   message   String
   details   String   @default("")
   createdAt DateTime @default(now())
+}
+
+// ─── Apps (phase 2) ───────────────────────────────────────────────────────────
+
+model Project {
+  id           String        @id @default(cuid())
+  name         String        @unique
+  slug         String        @unique
+  description  String        @default("")
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  environments Environment[]
+}
+
+model Environment {
+  id                String        @id @default(cuid())
+  projectId         String
+  project           Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  name              String // production, staging, …
+  slug              String
+  defaultEndpointId String?
+  defaultEndpoint   Endpoint?     @relation(fields: [defaultEndpointId], references: [id], onDelete: SetNull)
+  createdAt         DateTime      @default(now())
+  applications      Application[]
+
+  @@unique([projectId, slug])
+}
+
+model Application {
+  id                  String      @id @default(cuid())
+  environmentId       String
+  environment         Environment @relation(fields: [environmentId], references: [id], onDelete: Cascade)
+  endpointId          String
+  endpoint            Endpoint    @relation(fields: [endpointId], references: [id])
+  name                String
+  // Docker-safe name, unique per endpoint: used for containers, compose project, volumes
+  slug                String
+  sourceType          String // image, git-dockerfile, git-compose, compose
+  image               String      @default("") // image apps: ghcr.io/org/app:tag
+  gitRepo             String      @default("") // https URL
+  gitBranch           String      @default("main")
+  buildContext        String      @default(".")
+  dockerfilePath      String      @default("Dockerfile")
+  composePath         String      @default("docker-compose.yml")
+  composeInline       String      @default("") // compose apps without Git
+  // JSON settings for image / Dockerfile apps
+  // [{key, value, kind}] kind: plain; secret (value AES-256-GCM encrypted, never sent back to the browser);
+  // vault (value = <mount>/<path>#<field>, read from Vault at deploy time).
+  // Image/Dockerfile apps get them as container env; compose apps for ${VAR} interpolation.
+  env                 String      @default("[]")
+  ports               String      @default("[]") // [{host, container, protocol}]
+  volumes             String      @default("[]") // [{name, path}] named volumes
+  command             String      @default("")
+  restartPolicy       String      @default("unless-stopped")
+  updatePolicy        String      @default("manual") // manual, auto-digest, on-push
+  webhookSecret       String      @default("") // encrypted; GitHub push webhook HMAC secret
+  // Pull request previews: each open PR gets its own copy of the app at pr-<n>.<previewDomain>
+  previewsEnabled     Boolean     @default(false)
+  previewDomain       String      @default("") // e.g. preview.example.com (needs *.preview.example.com in DNS)
+  previewOfId         String? // set on a preview: the app it was copied from
+  prNumber            Int?
+  // Build somewhere else and ship through a registry
+  buildEndpointId     String? // build on this endpoint instead of the target
+  registryId          String? // push the built image here; the target pulls it
+  status              String      @default("new") // new, deploying, running, failed, stopped
+  currentDeploymentId String?
+  createdAt           DateTime    @default(now())
+  updatedAt           DateTime    @updatedAt
+
+  deployments Deployment[]
+  domains     Domain[]
+
+  @@unique([endpointId, slug])
+  @@index([environmentId])
+}
+
+model Deployment {
+  id              String      @id @default(cuid())
+  applicationId   String
+  application     Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  trigger         String // manual, push, digest, rollback, redeploy
+  status          String      @default("queued") // queued, running, success, failed, cancelled
+  commitSha       String      @default("")
+  commitMessage   String      @default("")
+  imageRef        String      @default("") // image the app runs, digest-pinned when known
+  imageDigest     String      @default("")
+  renderedCompose String      @default("") // compose apps: rendered file, secret values NOT included
+  envSnapshot     String      @default("[]") // app env at deploy time, secret values still encrypted; used by rollbacks
+  containerIds    String      @default("") // comma-separated containers started by this deployment
+  error           String      @default("")
+  startedById     String?
+  startedByEmail  String      @default("")
+  rollbackOfId    String?
+  createdAt       DateTime    @default(now())
+  startedAt       DateTime?
+  finishedAt      DateTime?
+
+  @@index([applicationId, createdAt])
+}
+
+model Domain {
+  id            String      @id @default(cuid())
+  applicationId String
+  application   Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  host          String
+  path          String      @default("/")
+  containerPort Int
+  service       String      @default("") // compose apps: which service receives the traffic
+  https         Boolean     @default(true) // Let's Encrypt via HTTP challenge
+  // Send this host elsewhere instead of to the app, e.g. www → apex
+  redirectTo    String      @default("") // https://example.com
+  redirectCode  Int         @default(308) // 301, 302, 307 or 308
+  // Basic auth in front of the app: htpasswd lines user:$2a$… (bcrypt)
+  basicAuth     String      @default("")
+  createdAt     DateTime    @default(now())
+
+  @@unique([host, path])
+}
+
+// ─── Ops ──────────────────────────────────────────────────────────────────────
+
+model Job {
+  id         String    @id @default(cuid())
+  type       String // deploy, secrets-refill
+  payload    String    @default("{}")
+  status     String    @default("queued") // queued, running, done, failed, cancelled
+  runAt      DateTime  @default(now())
+  attempts   Int       @default(0)
+  lockedBy   String    @default("")
+  lockedAt   DateTime?
+  error      String    @default("")
+  createdAt  DateTime  @default(now())
+  finishedAt DateTime?
+
+  @@index([status, runAt])
+}
+
+model NotificationChannel {
+  id        String   @id @default(cuid())
+  name      String
+  type      String // slack, discord, telegram, webhook
+  config    String // encrypted JSON: url / botToken + chatId / secret
+  events    String   @default("deploy.failure,deploy.success") // comma-separated
+  enabled   Boolean  @default(true)
+  lastError String   @default("")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ─── Backups (phase 3) ─────────────────────────────────────────────────────────
+
+// Where backups go: an S3-compatible bucket (Cloudflare R2 by default).
+model BackupDestination {
+  id             String   @id @default(cuid())
+  name           String   @unique
+  provider       String   @default("r2") // r2, s3, b2, other
+  endpointUrl    String // https://<account>.r2.cloudflarestorage.com
+  bucket         String
+  prefix         String   @default("deploynow")
+  region         String   @default("auto")
+  accessKeyId    String // backup key: write, no delete
+  secretKey      String // encrypted
+  pruneKeyId     String   @default("") // optional key with delete rights, used only by prune
+  pruneSecretKey String   @default("") // encrypted
+  objectLock     Boolean  @default(false) // bucket has Object Lock; prune keeps locked objects
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  repos    BackupRepo[]
+  policies BackupPolicy[]
+}
+
+// One restic repository per endpoint and destination ("instance" for DeployNow itself).
+model BackupRepo {
+  id            String            @id @default(cuid())
+  destinationId String
+  destination   BackupDestination @relation(fields: [destinationId], references: [id], onDelete: Cascade)
+  scope         String // endpoint id, or "instance"
+  password      String // encrypted restic password
+  initializedAt DateTime?
+  kitShownAt    DateTime? // the recovery kit is shown once
+  lastCheckAt   DateTime?
+  lastCheckOk   Boolean?
+  lastDrillAt   DateTime?
+  lastDrillOk   Boolean?
+  createdAt     DateTime          @default(now())
+
+  @@unique([destinationId, scope])
+}
+
+model BackupPolicy {
+  id            String            @id @default(cuid())
+  name          String
+  endpointId    String? // null = DeployNow itself
+  endpoint      Endpoint?         @relation(fields: [endpointId], references: [id], onDelete: Cascade)
+  destinationId String
+  destination   BackupDestination @relation(fields: [destinationId], references: [id], onDelete: Cascade)
+  // JSON list of sources: {type:"volume",name} | {type:"bind",path} | {type:"db",engine,container,database?}
+  //   | {type:"app",applicationId} | {type:"instance"}
+  sources       String            @default("[]")
+  mode          String            @default("live") // stop, dump, live
+  preHook       String            @default("") // JSON {container, command} run before
+  postHook      String            @default("") // JSON {container, command} run after
+  schedule      String            @default("0 3 * * *") // cron, in the server's time zone
+  keepDaily     Int               @default(7)
+  keepWeekly    Int               @default(4)
+  keepMonthly   Int               @default(6)
+  enabled       Boolean           @default(true)
+  nextRunAt     DateTime?
+  lastRunAt     DateTime?
+  lastStatus    String            @default("") // success, failed
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  runs BackupRun[]
+
+  @@index([nextRunAt])
+}
+
+model BackupRun {
+  id         String        @id @default(cuid())
+  policyId   String?
+  policy     BackupPolicy? @relation(fields: [policyId], references: [id], onDelete: Cascade)
+  repoId     String
+  kind       String // backup, prune, check, drill, restore
+  status     String        @default("queued") // queued, running, success, failed
+  trigger    String        @default("schedule") // schedule, manual
+  params     String        @default("") // JSON, e.g. restore target
+  snapshots  String        @default("") // JSON list of {source, id}
+  bytes      Int           @default(0)
+  log        String        @default("")
+  error      String        @default("")
+  actorEmail String        @default("")
+  startedAt  DateTime?
+  finishedAt DateTime?
+  createdAt  DateTime      @default(now())
+
+  @@index([repoId, createdAt])
+  @@index([policyId, createdAt])
+}
+
+// ─── Monitoring (phase 3) ──────────────────────────────────────────────────────
+
+model MetricSample {
+  id         String   @id @default(cuid())
+  endpointId String
+  endpoint   Endpoint @relation(fields: [endpointId], references: [id], onDelete: Cascade)
+  at         DateTime @default(now())
+  cpus       Int      @default(0)
+  load1      Float    @default(0)
+  memTotal   Float    @default(0)
+  memUsed    Float    @default(0)
+  diskTotal  Float    @default(0)
+  diskUsed   Float    @default(0)
+
+  @@index([endpointId, at])
+}
+
+// An alert that is currently firing, so it is sent once and cleared when it recovers.
+model Alert {
+  id         String    @id @default(cuid())
+  key        String    @unique // e.g. disk:<endpointId>, crash:<endpointId>:<container>
+  kind       String // disk, memory, crash_loop, agent_offline, backup_failed, task_failed
+  endpointId String    @default("")
+  message    String
+  firedAt    DateTime  @default(now())
+  resolvedAt DateTime?
+}
+
+// ─── Scheduled tasks (phase 3) ─────────────────────────────────────────────────
+
+model ScheduledTask {
+  id         String    @id @default(cuid())
+  name       String
+  endpointId String
+  endpoint   Endpoint  @relation(fields: [endpointId], references: [id], onDelete: Cascade)
+  schedule   String // cron
+  mode       String    @default("exec") // exec (in a running container) or run (one-off container)
+  container  String    @default("") // exec: container name
+  image      String    @default("") // run: image
+  command    String // shell command, run with sh -c
+  env        String    @default("") // run: KEY=value lines
+  timeoutSec Int       @default(3600)
+  enabled    Boolean   @default(true)
+  nextRunAt  DateTime?
+  lastRunAt  DateTime?
+  lastStatus String    @default("")
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  runs TaskRun[]
+
+  @@index([nextRunAt])
+}
+
+model TaskRun {
+  id         String        @id @default(cuid())
+  taskId     String
+  task       ScheduledTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  status     String        @default("running") // running, success, failed
+  trigger    String        @default("schedule")
+  exitCode   Int?
+  log        String        @default("")
+  startedAt  DateTime      @default(now())
+  finishedAt DateTime?
+
+  @@index([taskId, startedAt])
+}
+
+// ─── Phase 4: access ───────────────────────────────────────────────────────────
+
+// Personal API tokens for the REST API and the CLI. Only a hash is stored.
+model ApiToken {
+  id         String    @id @default(cuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name       String
+  prefix     String // first characters, to recognise it in lists
+  hash       String    @unique // sha256 of the token
+  scope      String    @default("viewer") // highest role the token acts with: viewer, operator, admin, owner
+  expiresAt  DateTime?
+  lastUsedAt DateTime?
+  lastUsedIp String    @default("")
+  revokedAt  DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([userId])
+}
+
+// WebAuthn credentials (passkeys).
+model Passkey {
+  id           String    @id @default(cuid())
+  userId       String
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  credentialId String    @unique // base64url
+  publicKey    String // base64url COSE key
+  counter      Int       @default(0)
+  transports   String    @default("") // comma-separated
+  name         String    @default("Passkey")
+  createdAt    DateTime  @default(now())
+  lastUsedAt   DateTime?
+}
+
+// Google, Microsoft or any OpenID Connect provider for single sign-on.
+model SsoProvider {
+  id             String   @id @default(cuid())
+  type           String // google, microsoft, oidc
+  name           String // shown on the login button
+  clientId       String
+  clientSecret   String // encrypted
+  tenant         String   @default("") // microsoft: tenant id or domain (organizations / common allowed)
+  issuer         String   @default("") // oidc: issuer URL
+  allowedDomains String   @default("") // comma-separated email domains; empty = any verified email of an existing user
+  autoCreate     Boolean  @default(false) // create users on first sign-in (needs allowedDomains)
+  defaultRole    String   @default("viewer")
+  enabled        Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  identities UserIdentity[]
+}
+
+model UserIdentity {
+  id         String      @id @default(cuid())
+  providerId String
+  provider   SsoProvider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  subject    String // the provider's "sub"
+  userId     String
+  user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  email      String      @default("")
+  createdAt  DateTime    @default(now())
+  lastUsedAt DateTime?
+
+  @@unique([providerId, subject])
+}
+
+// Short-lived state for sign-in flows: OIDC state/nonce/PKCE, WebAuthn challenges, login tickets.
+model AuthChallenge {
+  id        String   @id // random, or sha256 of a ticket
+  kind      String // oidc, webauthn-register, webauthn-login, ticket
+  userId    String   @default("")
+  data      String   @default("") // JSON
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([expiresAt])
+}
+
+// ─── Phase 4: registries ───────────────────────────────────────────────────────
+
+model Registry {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  host      String // ghcr.io, registry.example.com:5000, docker.io
+  username  String
+  password  String // encrypted
+  namespace String   @default("") // where built images are pushed, e.g. ghcr.io/acme
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }

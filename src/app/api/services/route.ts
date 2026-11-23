@@ -1,35 +1,32 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { syncServicesFromPortainer, initializeDigests } from "@/lib/polling";
-import { isAdmin } from "@/lib/sessionHelpers";
+import { syncServices } from "@/lib/polling";
+import { requireUser, readJson } from "@/lib/apiAuth";
+import { can } from "@/lib/rbac";
 
-export async function GET() {
-  const session = await auth();
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
+async function listServices(user: Parameters<typeof can>[0]) {
   const services = await prisma.service.findMany({
+    where: { endpointId: { not: null } },
+    include: { endpoint: { select: { id: true, name: true, status: true } } },
     orderBy: { containerName: "asc" },
   });
+  return services.filter((s) => can(user, "endpoint.view", { endpointId: s.endpointId ?? undefined }));
+}
 
-  return NextResponse.json(services);
+export async function GET() {
+  const gate = await requireUser();
+  if (!gate.ok) return gate.response;
+  return NextResponse.json(await listServices(gate.user));
 }
 
 export async function POST(request: Request) {
-  const session = await auth();
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (!isAdmin(session)) return NextResponse.json({ error: "Admin only" }, { status: 403 });
+  const gate = await requireUser("polling.run");
+  if (!gate.ok) return gate.response;
 
-  const body = await request.json();
-
+  const body = await readJson(request);
   if (body.action === "sync") {
-    await syncServicesFromPortainer();
-    await initializeDigests();
-    const services = await prisma.service.findMany({
-      orderBy: { containerName: "asc" },
-    });
-    return NextResponse.json(services);
+    await syncServices();
+    return NextResponse.json(await listServices(gate.user));
   }
-
   return NextResponse.json({ error: "Invalid action" }, { status: 400 });
 }

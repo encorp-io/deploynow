@@ -155,7 +155,7 @@ export default function SetupPage() {
             Create Account
           </h1>
           <p className="text-sm text-text-muted mt-1">
-            Complete your Encorp Deployer registration
+            Complete your DeployNow registration
           </p>
         </div>
 

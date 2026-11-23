@@ -38,95 +38,62 @@ async function seed() {
 
     const hash = await bcrypt.hash(adminPass, 12);
     await prisma.user.create({
-      data: { email: adminEmail, name: 'Admin', password: hash, role: 'admin' }
+      data: { email: adminEmail, name: 'Admin', password: hash, role: 'owner' }
     });
-    console.log('[deployer] Admin user created: ' + adminEmail);
+    console.log('[deployer] Owner account created: ' + adminEmail + ' (set up 2FA at first sign-in)');
   } else {
     console.log('[deployer] Users exist — skipping user seed');
   }
 
-  // Seed settings — env vars can pre-configure Portainer + GitHub credentials
-  // so users can skip the onboarding wizard entirely.
-  const portainerUrl    = process.env.PORTAINER_URL    || '';
-  const portainerApiKey = process.env.PORTAINER_API_KEY || process.env.PORTAINER_KEY || '';
-  const githubUser      = process.env.GITHUB_USER       || '';
-  const githubToken     = process.env.GITHUB_TOKEN      || '';
+  // Seed settings. GitHub credentials can come from env so onboarding can skip that step.
+  // v2 connects to Docker directly; PORTAINER_* variables are no longer used.
+  const githubUser  = process.env.GITHUB_USER  || '';
+  const githubToken = process.env.GITHUB_TOKEN || '';
+  if (process.env.PORTAINER_URL || process.env.PORTAINER_API_KEY) {
+    console.log('[deployer] Note: PORTAINER_URL / PORTAINER_API_KEY are ignored in v2. Mount /var/run/docker.sock or add an SSH endpoint instead.');
+  }
+
+  function encrypt(plaintext) {
+    if (!plaintext) return '';
+    const crypto = require('crypto');
+    const key = crypto.pbkdf2Sync(process.env.AUTH_SECRET, 'encorp-deployer-secrets-v1', 100000, 32, 'sha256');
+    const iv = crypto.randomBytes(16);
+    const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
+    const encrypted = Buffer.concat([cipher.update(plaintext, 'utf8'), cipher.final()]);
+    return Buffer.concat([iv, cipher.getAuthTag(), encrypted]).toString('base64');
+  }
 
   const settings = await prisma.settings.findUnique({ where: { id: 'singleton' } });
   if (!settings) {
-    // First boot — create settings, encrypting secrets if AUTH_SECRET is available
-    let encApiKey = '';
-    let encGhToken = '';
-
-    // We encrypt using the same AES-256-GCM as the web app
-    if (portainerApiKey || githubToken) {
-      const crypto = require('crypto');
-      const key = crypto.pbkdf2Sync(process.env.AUTH_SECRET, 'encorp-deployer-secrets-v1', 100000, 32, 'sha256');
-
-      function encrypt(plaintext) {
-        if (!plaintext) return '';
-        const iv = crypto.randomBytes(16);
-        const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
-        const encrypted = Buffer.concat([cipher.update(plaintext, 'utf8'), cipher.final()]);
-        const authTag = cipher.getAuthTag();
-        return Buffer.concat([iv, authTag, encrypted]).toString('base64');
-      }
-
-      encApiKey  = encrypt(portainerApiKey);
-      encGhToken = encrypt(githubToken);
-    }
-
     await prisma.settings.create({
-      data: {
-        id: 'singleton',
-        portainerUrl: portainerUrl,
-        portainerApiKey: encApiKey,
-        githubUser: githubUser,
-        githubToken: encGhToken,
-        pollingInterval: 60,
-        autoUpdateLatest: false,
-        portainerEndpointId: 1
-      }
+      data: { id: 'singleton', githubUser, githubToken: encrypt(githubToken), pollingInterval: 60, autoUpdateLatest: false, schemaVersion: 2 }
     });
-    if (portainerUrl) {
-      console.log('[deployer] Settings created with Portainer URL: ' + portainerUrl);
-    } else {
-      console.log('[deployer] Settings created — onboarding wizard will appear on first login');
-    }
-    if (portainerApiKey) console.log('[deployer] Portainer API key configured from env');
-    if (githubToken) console.log('[deployer] GitHub token configured from env');
+    console.log('[deployer] Settings created' + (githubToken ? ' with GitHub token from env' : ''));
   } else {
-    // Settings exist — update only if env vars are set AND the field is currently empty
     const updates = {};
-    if (portainerUrl && !settings.portainerUrl) updates.portainerUrl = portainerUrl;
     if (githubUser && !settings.githubUser) updates.githubUser = githubUser;
-
-    if ((portainerApiKey && !settings.portainerApiKey) || (githubToken && !settings.githubToken)) {
-      const crypto = require('crypto');
-      const key = crypto.pbkdf2Sync(process.env.AUTH_SECRET, 'encorp-deployer-secrets-v1', 100000, 32, 'sha256');
-      function encrypt(plaintext) {
-        if (!plaintext) return '';
-        const iv = crypto.randomBytes(16);
-        const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
-        const encrypted = Buffer.concat([cipher.update(plaintext, 'utf8'), cipher.final()]);
-        const authTag = cipher.getAuthTag();
-        return Buffer.concat([iv, authTag, encrypted]).toString('base64');
-      }
-      if (portainerApiKey && !settings.portainerApiKey) updates.portainerApiKey = encrypt(portainerApiKey);
-      if (githubToken && !settings.githubToken) updates.githubToken = encrypt(githubToken);
-    }
-
+    if (githubToken && !settings.githubToken) updates.githubToken = encrypt(githubToken);
     if (Object.keys(updates).length > 0) {
       await prisma.settings.update({ where: { id: 'singleton' }, data: updates });
       console.log('[deployer] Settings updated from env vars: ' + Object.keys(updates).join(', '));
-    } else {
-      console.log('[deployer] Settings exist — no env overrides applied');
     }
   }
   await prisma.\$disconnect();
 }
 seed().catch(e => { console.error(e.message); process.exit(1); });
 "
+
+# ── Docker socket check ───────────────────────────────────────────────────────
+if [ -S /var/run/docker.sock ]; then
+  if [ -r /var/run/docker.sock ] && [ -w /var/run/docker.sock ]; then
+    echo "[deployer] Docker socket is mounted and accessible"
+  else
+    echo "[deployer] WARNING: /var/run/docker.sock is mounted but not accessible to uid $(id -u)."
+    echo "[deployer]          Add the socket's group with group_add (see docker-compose.yml): stat -c %g /var/run/docker.sock"
+  fi
+else
+  echo "[deployer] Docker socket not mounted. Add remote machines over SSH or TLS in the UI."
+fi
 
 # ── TLS certificate setup ─────────────────────────────────────────────────────
 #
