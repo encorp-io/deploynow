@@ -1,13 +1,11 @@
 <div align="center">
 
-<img src="https://raw.githubusercontent.com/encorp-io/deployer-for-portainer/main/.github/assets/logo.png" alt="DeployNow" width="80" />
-
 # DeployNow
 
 **Self-hosted control plane for your Docker machines: deploy apps, manage containers, back up data and watch it all from one place.**
 
-[![CI](https://github.com/encorp-io/deployer-for-portainer/actions/workflows/ci.yml/badge.svg)](https://github.com/encorp-io/deployer-for-portainer/actions/workflows/ci.yml)
-[![Docker](https://github.com/encorp-io/deployer-for-portainer/actions/workflows/docker-publish.yml/badge.svg)](https://github.com/encorp-io/deployer-for-portainer/actions/workflows/docker-publish.yml)
+[![CI](https://github.com/encorp-io/deploynow/actions/workflows/ci.yml/badge.svg)](https://github.com/encorp-io/deploynow/actions/workflows/ci.yml)
+[![Docker](https://github.com/encorp-io/deploynow/actions/workflows/docker-publish.yml/badge.svg)](https://github.com/encorp-io/deploynow/actions/workflows/docker-publish.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 </div>
@@ -56,7 +54,7 @@ DeployNow replaces Portainer and Dokploy with one app. It talks to Docker direct
 You need a Linux machine with Docker.
 
 ```bash
-git clone https://github.com/encorp-io/deployer-for-portainer.git deploynow
+git clone https://github.com/encorp-io/deploynow.git
 cd deploynow
 
 cat > .env <<EOF
@@ -69,6 +67,8 @@ EOF
 
 docker compose up -d
 ```
+
+While the repository is private, the image on GHCR is private too: run `docker login ghcr.io` with a GitHub token that has `read:packages` before `docker compose up`.
 
 Open `https://your-server:9444` and sign in. The certificate is self-signed until you mount your own (see `docker-compose.yml`).
 

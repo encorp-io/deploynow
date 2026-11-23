@@ -5,7 +5,7 @@ COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
 ARG VERSION=dev
-RUN CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X github.com/encorp-io/deployer-for-portainer/agent/internal/agent.Version=${VERSION}" -o /out/deploynow-agent ./cmd/deploynow-agent
+RUN CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X github.com/encorp-io/deploynow/agent/internal/agent.Version=${VERSION}" -o /out/deploynow-agent ./cmd/deploynow-agent
 
 FROM alpine:3.20
 RUN apk add --no-cache ca-certificates

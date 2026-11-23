@@ -17,7 +17,7 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/encorp-io/deployer-for-portainer/agent/internal/agent"
+	"github.com/encorp-io/deploynow/agent/internal/agent"
 )
 
 func env(k, def string) string {
