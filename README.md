@@ -1,16 +1,23 @@
 <div align="center">
 
-# DeployNow
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="site/assets/deploynow-logo-dark.svg">
+  <img src="site/assets/deploynow-logo-light.svg" alt="DeployNow by encorp.ai" height="64">
+</picture>
 
-**Self-hosted control plane for your Docker machines: deploy apps, manage containers, back up data and watch it all from one place.**
+**Ship to every Docker machine you own.**<br>
+Self-hosted control plane for your Docker machines: deploy apps, manage containers, back up data and watch it all from one place.
+
+[Quick start](#quick-start) · [Docs](docs/v2.md) · [encorp.ai](https://encorp.ai)
 
 [![CI](https://github.com/encorp-io/deploynow/actions/workflows/ci.yml/badge.svg)](https://github.com/encorp-io/deploynow/actions/workflows/ci.yml)
 [![Docker](https://github.com/encorp-io/deploynow/actions/workflows/docker-publish.yml/badge.svg)](https://github.com/encorp-io/deploynow/actions/workflows/docker-publish.yml)
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
+<img src="site/assets/og.png" alt="DeployNow landing page" width="820">
 
 </div>
 
-DeployNow replaces Portainer and Dokploy with one app. It talks to Docker directly on the machine it runs on and on remote machines, deploys your apps from images or Git, puts them behind Traefik with SSL, and backs up their data with encrypted restic snapshots. It runs as a single container with an embedded SQLite database.
+**DeployNow by [encorp.ai](https://encorp.ai)** replaces Portainer and Dokploy with one app. It talks to Docker directly on the machine it runs on and on remote machines, deploys your apps from images or Git, puts them behind Traefik with SSL, and backs up their data with encrypted restic snapshots. It runs as a single container with an embedded SQLite database.
 
 > DeployNow is v2 of Encorp Deployer, the Portainer update helper. Coming from v1? See [Upgrading from v1](docs/v2.md#upgrading-from-v1).
 
@@ -129,6 +136,10 @@ docker compose up -d
 
 Schema changes are applied on start and only add tables and columns. Back up the `/data` volume first, or set up a DeployNow backup policy for the instance.
 
+## Landing page
+
+The product website lives in [`site/`](site/): static HTML and CSS with no build step, hosted on Cloudflare Pages (build command empty, output directory `site`). Setup steps and brand notes are in [`site/README.md`](site/README.md).
+
 ## How it's built
 
 | Part | Technology |
@@ -148,6 +159,7 @@ src/lib/        Docker, deploys, backups, agent hub, auth, notifications
 agent/          deploynow-agent (Go)
 cli/            deploynow CLI
 tests/          unit, API and real-Docker integration tests
+site/           landing page (Cloudflare Pages)
 docs/           user documentation
 ```
 
