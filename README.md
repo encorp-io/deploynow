@@ -1,7 +1,5 @@
 <div align="center">
 
-<img src="https://raw.githubusercontent.com/encorp-io/deploynow/main/.github/assets/logo.png" alt="DeployNow" width="80" />
-
 # DeployNow
 
 **Self-hosted control plane for your Docker machines: deploy apps, manage containers, back up data and watch it all from one place.**

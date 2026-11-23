@@ -7,6 +7,7 @@ on:
       - master
     tags:
       - "v*.*.*"
+  pull_request:   # build only, to catch a broken image before merge
 
 concurrency:
   group: docker-${{ github.ref }}
@@ -54,7 +55,7 @@ jobs:
         with:
           context: .
           platforms: linux/amd64
-          push: true
+          push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta-ghcr.outputs.tags }}
           labels: ${{ steps.meta-ghcr.outputs.labels }}
           cache-from: type=gha
@@ -98,7 +99,7 @@ jobs:
         with:
           context: ./agent
           platforms: linux/amd64,linux/arm64
-          push: true
+          push: ${{ github.event_name != 'pull_request' }}
           build-args: VERSION=${{ github.ref_name }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
