@@ -23,40 +23,40 @@ jobs:
         with:
           fetch-depth: 0   # full history for changelog
 
-      - name: Generate changelog
-        id: changelog
+      - name: Check the tag matches package.json
         run: |
-          # Collect commits since the previous tag
-          PREV_TAG=$(git tag --sort=-version:refname | sed -n '2p')
-          if [ -z "$PREV_TAG" ]; then
-            COMMITS=$(git log --pretty=format:"- %s (%h)" HEAD)
-          else
-            COMMITS=$(git log --pretty=format:"- %s (%h)" "${PREV_TAG}..HEAD")
+          TAG="${GITHUB_REF_NAME#v}"
+          PKG="$(node -p "require('./package.json').version")"
+          [ "$TAG" = "$PKG" ] || { echo "Tag v$TAG but package.json says $PKG: bump package.json first"; exit 1; }
+
+      - name: Release notes
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          # The section for this version in CHANGELOG.md, else the commits since the previous tag
+          awk -v v="$VERSION" '
+            $0 ~ "^## \\[" v "\\]" { on = 1; next }
+            on && /^## \[/ { exit }
+            on && /^\[[^]]+\]: / { exit }
+            on { print }
+          ' CHANGELOG.md > notes.md
+          if [ ! -s notes.md ]; then
+            PREV_TAG=$(git tag --sort=-version:refname | grep -v "^${GITHUB_REF_NAME}$" | head -n1)
+            git log --pretty=format:"- %s (%h)" ${PREV_TAG:+$PREV_TAG..}HEAD > notes.md
           fi
-          {
-            echo "CHANGELOG<<DELIM"
-            echo "$COMMITS"
-            echo "DELIM"
-          } >> "$GITHUB_OUTPUT"
+          cat >> notes.md <<EOF
+
+          ## Install or upgrade
+
+          \`\`\`bash
+          curl -fsSL https://raw.githubusercontent.com/${{ github.repository }}/${GITHUB_REF_NAME}/install.sh | sudo DEPLOYNOW_TAG=${VERSION} bash
+          \`\`\`
+
+          Or set \`DEPLOYNOW_TAG=${VERSION}\` in the \`.env\` next to your \`docker-compose.yml\` and run \`docker compose pull && docker compose up -d\`.
+          The database is upgraded on start, and a copy is kept in \`/data/db-backups\`. Images: \`ghcr.io/${{ github.repository }}:${VERSION}\` and \`ghcr.io/${{ github.repository_owner }}/deploynow-agent:${VERSION}\` (amd64 and arm64).
+          EOF
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          body: |
-            ## What's changed
-
-            ${{ steps.changelog.outputs.CHANGELOG }}
-
-            ## Docker
-
-            Pull the image:
-            ```bash
-            docker pull ghcr.io/${{ github.repository }}:${{ github.ref_name }}
-            # or
-            docker pull ghcr.io/${{ github.repository }}:latest
-            ```
-
-            Update your `docker-compose.yml`:
-            ```yaml
-            image: ghcr.io/${{ github.repository }}:${{ github.ref_name }}
-            ```
+          body_path: notes.md
+          prerelease: ${{ contains(github.ref_name, '-') }}

@@ -200,7 +200,7 @@ async function stageInstance(log: (l: string) => void): Promise<string> {
   if (fs.existsSync(certs)) fs.cpSync(certs, path.join(dir, "certs"), { recursive: true });
   fs.writeFileSync(
     path.join(dir, "RESTORE.txt"),
-    "Stop DeployNow, replace /data/deployer.db (and /data/certs) with these files, keep the same AUTH_SECRET, then start it again.\n",
+    "Stop DeployNow, replace /data/deployer.db (and /data/certs) with these files, delete /data/deployer.db-wal and /data/deployer.db-shm if they exist, keep the same AUTH_SECRET, then start it again.\n",
   );
   return dir;
 }

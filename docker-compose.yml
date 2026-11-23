@@ -1,9 +1,10 @@
 services:
   deployer:
-    image: ghcr.io/encorp-io/deploynow:latest
+    # Pin a release (2.0.0) for predictable upgrades; latest = newest stable release.
+    image: ghcr.io/encorp-io/deploynow:${DEPLOYNOW_TAG:-latest}
     # Or build locally:
     # build: .
-    container_name: encorp-deployer
+    container_name: deploynow
     restart: unless-stopped
     ports:
       - "9444:9444"     # HTTPS — DeployNow dashboard
@@ -29,7 +30,7 @@ services:
       AUTH_SECRET: ${AUTH_SECRET}
 
       # First-boot admin credentials (only used when no users exist in DB)
-      ADMIN_EMAIL:    ${ADMIN_EMAIL:-admin@encorp.io}
+      ADMIN_EMAIL:    ${ADMIN_EMAIL:-admin@example.com}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD}   # required on first boot, min 12 chars
 
       # SQLite database (inside /data volume)

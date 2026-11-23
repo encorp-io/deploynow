@@ -25,7 +25,7 @@ const prisma = new PrismaClient();
 async function seed() {
   const count = await prisma.user.count();
   if (count === 0) {
-    const adminEmail = process.env.ADMIN_EMAIL || 'admin@encorp.io';
+    const adminEmail = process.env.ADMIN_EMAIL || 'admin@example.com';
     const adminPass  = process.env.ADMIN_PASSWORD;
 
     if (!adminPass) {

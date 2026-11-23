@@ -26,7 +26,7 @@ try {
 const prisma = new PrismaClient();
 
 async function main() {
-  const adminEmail = (process.env.ADMIN_EMAIL || "admin@encorp.io").toLowerCase().trim();
+  const adminEmail = (process.env.ADMIN_EMAIL || "admin@example.com").toLowerCase().trim();
   const adminPassword = process.env.ADMIN_PASSWORD;
 
   if (!adminPassword || adminPassword.length < 12) {
