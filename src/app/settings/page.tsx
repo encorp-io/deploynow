@@ -253,14 +253,14 @@ function SettingsContent() {
                 onSave={() => saveKeys("alerts", ["alertDiskPercent", "alertMemPercent", "alertCrashRestarts"], "Alert thresholds")}
               >
                 <div className="grid sm:grid-cols-3 gap-3">
-                  <Field label="Disk full at (%)">
-                    <Input type="number" min={1} max={100} value={settings.alertDiskPercent ?? ""} onChange={(e) => set("alertDiskPercent", Number(e.target.value))} />
+                  <Field label="Disk full at (%)" hint="50 to 100">
+                    <Input type="number" min={50} max={100} value={settings.alertDiskPercent ?? ""} onChange={(e) => set("alertDiskPercent", Number(e.target.value))} />
                   </Field>
-                  <Field label="Memory used at (%)">
-                    <Input type="number" min={1} max={100} value={settings.alertMemPercent ?? ""} onChange={(e) => set("alertMemPercent", Number(e.target.value))} />
+                  <Field label="Memory used at (%)" hint="50 to 100">
+                    <Input type="number" min={50} max={100} value={settings.alertMemPercent ?? ""} onChange={(e) => set("alertMemPercent", Number(e.target.value))} />
                   </Field>
                   <Field label="Crash loop after" hint="Restarts within 10 minutes">
-                    <Input type="number" min={1} value={settings.alertCrashRestarts ?? ""} onChange={(e) => set("alertCrashRestarts", Number(e.target.value))} />
+                    <Input type="number" min={1} max={100} value={settings.alertCrashRestarts ?? ""} onChange={(e) => set("alertCrashRestarts", Number(e.target.value))} />
                   </Field>
                 </div>
               </FormCard>
