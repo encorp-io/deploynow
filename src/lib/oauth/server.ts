@@ -99,16 +99,32 @@ export async function approve(user: { id: string; role: string; bindings?: { rol
   return { grant, redirect: u.toString(), created: !existing };
 }
 
-async function issueTokens(grant: OAuthGrant, resource: string) {
+class ReplayError extends Error {}
+type Tx = Omit<typeof prisma, "$connect" | "$disconnect" | "$on" | "$transaction" | "$use" | "$extends">;
+
+/**
+ * Claim a one-time credential (code or refresh token) and issue the new pair in
+ * one transaction. SQLite serialises writers, so of two concurrent requests one
+ * commits its claim and tokens first; the other then fails its claim and
+ * revokes the whole family, including what the winner just got.
+ */
+async function claimAndIssue(grant: OAuthGrant, resource: string, claim: (tx: Tx) => Promise<{ count: number }>) {
   const access = random("dno_");
   const refresh = random("dnr_");
   const now = Date.now();
-  await prisma.$transaction([
-    prisma.oAuthToken.create({ data: { hash: sha256(access), kind: "access", grantId: grant.id, resource, expiresAt: new Date(now + ACCESS_TTL_S * 1000) } }),
-    prisma.oAuthToken.create({ data: { hash: sha256(refresh), kind: "refresh", grantId: grant.id, resource, expiresAt: new Date(now + REFRESH_TTL_S * 1000) } }),
-    // Housekeeping: drop this grant's tokens that ran out more than a day ago
-    prisma.oAuthToken.deleteMany({ where: { grantId: grant.id, expiresAt: { lt: new Date(now - 86_400_000) } } }),
-  ]);
+  try {
+    await prisma.$transaction(async (tx) => {
+      if ((await claim(tx)).count !== 1) throw new ReplayError();
+      await tx.oAuthToken.create({ data: { hash: sha256(access), kind: "access", grantId: grant.id, resource, expiresAt: new Date(now + ACCESS_TTL_S * 1000) } });
+      await tx.oAuthToken.create({ data: { hash: sha256(refresh), kind: "refresh", grantId: grant.id, resource, expiresAt: new Date(now + REFRESH_TTL_S * 1000) } });
+      // Housekeeping: drop this grant's tokens that ran out more than a day ago
+      await tx.oAuthToken.deleteMany({ where: { grantId: grant.id, expiresAt: { lt: new Date(now - 86_400_000) } } });
+    });
+  } catch (err) {
+    if (!(err instanceof ReplayError)) throw err;
+    await revokeGrantTokens(grant.id);
+    throw new OAuthError("invalid_grant", "Credential already used; the connection's tokens were revoked. Sign in again.");
+  }
   return { access_token: access, token_type: "Bearer", expires_in: ACCESS_TTL_S, refresh_token: refresh, scope: scopeForRole(grant.role) };
 }
 
@@ -127,17 +143,19 @@ export async function exchangeCode(client: OAuthClient, body: URLSearchParams, m
     await revokeGrantTokens(row.grantId);
     throw new OAuthError("invalid_grant", "Authorization code already used");
   }
-  // Claim the code before anything else, so two concurrent requests can't both win
-  const claimed = await prisma.oAuthCode.updateMany({ where: { id: row.id, usedAt: null }, data: { usedAt: new Date() } });
-  if (claimed.count !== 1) throw new OAuthError("invalid_grant", "Authorization code already used");
-  if (row.expiresAt.getTime() < Date.now()) throw new OAuthError("invalid_grant", "Authorization code expired");
-  if (row.grant.revokedAt) throw new OAuthError("invalid_grant", "This connection was revoked");
-  if ((body.get("redirect_uri") ?? row.redirectUri) !== row.redirectUri) throw new OAuthError("invalid_grant", "redirect_uri does not match the authorization request");
+  // Any failed attempt burns the code, so a wrong verifier can't be retried
+  const burn = async (err: OAuthError) => {
+    await prisma.oAuthCode.updateMany({ where: { id: row.id, usedAt: null }, data: { usedAt: new Date() } });
+    return err;
+  };
+  if (row.expiresAt.getTime() < Date.now()) throw await burn(new OAuthError("invalid_grant", "Authorization code expired"));
+  if (row.grant.revokedAt) throw await burn(new OAuthError("invalid_grant", "This connection was revoked"));
+  if ((body.get("redirect_uri") ?? row.redirectUri) !== row.redirectUri) throw await burn(new OAuthError("invalid_grant", "redirect_uri does not match the authorization request"));
   const verifier = body.get("code_verifier") ?? "";
-  if (!VERIFIER_RE.test(verifier) || pkceChallenge(verifier) !== row.codeChallenge) throw new OAuthError("invalid_grant", "PKCE verification failed");
-  if (!resourceMatches(body.get("resource"), mcpResource) || row.resource !== mcpResource) throw new OAuthError("invalid_target", `Tokens are only issued for ${mcpResource}`);
+  if (!VERIFIER_RE.test(verifier) || pkceChallenge(verifier) !== row.codeChallenge) throw await burn(new OAuthError("invalid_grant", "PKCE verification failed"));
+  if (!resourceMatches(body.get("resource"), mcpResource) || row.resource !== mcpResource) throw await burn(new OAuthError("invalid_target", `Tokens are only issued for ${mcpResource}`));
   await prisma.oAuthCode.deleteMany({ where: { grantId: row.grantId, expiresAt: { lt: new Date(Date.now() - 3_600_000) } } }).catch(() => {});
-  return issueTokens(row.grant, mcpResource);
+  return claimAndIssue(row.grant, mcpResource, (tx) => tx.oAuthCode.updateMany({ where: { id: row.id, usedAt: null }, data: { usedAt: new Date() } }));
 }
 
 export async function refreshTokens(client: OAuthClient, body: URLSearchParams, mcpResource: string) {
@@ -158,9 +176,7 @@ export async function refreshTokens(client: OAuthClient, body: URLSearchParams, 
     const r = roleForScope(asked);
     if (!r || !roleAtLeast(normalizeRole(row.grant.role), r)) throw new OAuthError("invalid_scope", "A refresh can't widen the connection's access");
   }
-  const claimed = await prisma.oAuthToken.updateMany({ where: { id: row.id, revokedAt: null }, data: { revokedAt: new Date() } });
-  if (claimed.count !== 1) throw new OAuthError("invalid_grant", "Refresh token already used; sign in again");
-  return issueTokens(row.grant, mcpResource);
+  return claimAndIssue(row.grant, mcpResource, (tx) => tx.oAuthToken.updateMany({ where: { id: row.id, revokedAt: null }, data: { revokedAt: new Date() } }));
 }
 
 /** RFC 7009: revoke a token the client holds. Unknown tokens are not an error. */

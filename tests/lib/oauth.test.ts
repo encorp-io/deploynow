@@ -291,6 +291,18 @@ describe("tokens", () => {
     await expect(refreshTokens(client, new URLSearchParams({ refresh_token: next.refresh_token }), RES)).rejects.toThrow(/already used/);
   });
 
+  it("revoke the whole family when the same refresh token is redeemed concurrently", async () => {
+    const { client, tokens } = await connect(admin);
+    const body = () => new URLSearchParams({ refresh_token: tokens.refresh_token });
+    const results = await Promise.allSettled([refreshTokens(client, body(), RES), refreshTokens(client, body(), RES), refreshTokens(client, body(), RES)]);
+    const won = results.filter((r) => r.status === "fulfilled") as PromiseFulfilledResult<{ access_token: string; refresh_token: string }>[];
+    expect(results.some((r) => r.status === "rejected")).toBe(true);
+    for (const w of won) {
+      expect(await resolveAccessToken(w.value.access_token)).toBeNull();
+      await expect(refreshTokens(client, new URLSearchParams({ refresh_token: w.value.refresh_token }), RES)).rejects.toThrow(/already used/);
+    }
+  });
+
   it("are refused for another resource, and revocable by the client and the person", async () => {
     const { client, tokens, grant } = await connect(admin);
     await expect(refreshTokens(client, new URLSearchParams({ refresh_token: tokens.refresh_token }), "https://new.example/mcp")).rejects.toThrow(/only issued/);
