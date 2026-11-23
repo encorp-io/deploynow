@@ -1,13 +1,13 @@
 /**
- * Notification channels: Slack, Discord, Telegram, email (SMTP), or a generic
- * webhook (JSON body signed with HMAC-SHA256 in X-DeployNow-Signature).
+ * Notification channels: Slack, Discord, Telegram, email (SMTP or the Mailgun
+ * API), or a generic webhook (JSON body signed with HMAC-SHA256 in X-DeployNow-Signature).
  */
 import crypto from "crypto";
 import nodemailer from "nodemailer";
 import { prisma } from "./prisma";
 import { decryptSecret, encryptSecret } from "./secretsCrypto";
 
-export const CHANNEL_TYPES = ["slack", "discord", "telegram", "email", "webhook"] as const;
+export const CHANNEL_TYPES = ["slack", "discord", "telegram", "email", "mailgun", "webhook"] as const;
 export type ChannelType = (typeof CHANNEL_TYPES)[number];
 export const EVENTS = [
   "deploy.success",
@@ -35,6 +35,15 @@ export interface ChannelConfig {
   pass?: string;
   from?: string;
   to?: string;
+  // mailgun
+  apiKey?: string;
+  domain?: string;
+  region?: string; // us or eu
+}
+
+/** Mailgun's API host for a region. */
+export function mailgunBase(region: string | undefined): string {
+  return region === "eu" ? "https://api.eu.mailgun.net" : "https://api.mailgun.net";
 }
 
 const EMAIL_RE = /^[^@\s<>,]+@[^@\s<>,]+\.[^@\s<>,]+$/;
@@ -91,8 +100,22 @@ export function validateChannel(type: unknown, raw: Record<string, unknown>, exi
       const pass = typeof raw.pass === "string" && raw.pass && raw.pass !== "••••••••" ? raw.pass : existing?.pass ?? "";
       return { host, port, security, user, pass, from, to: to.join(",") };
     }
+    case "mailgun": {
+      const domain = str("domain").toLowerCase();
+      if (!/^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/.test(domain) || domain.length > 253) {
+        throw new Error("Enter your Mailgun sending domain, e.g. mg.example.com");
+      }
+      const region = str("region") === "eu" ? "eu" : "us";
+      const apiKey = typeof raw.apiKey === "string" && raw.apiKey.trim() && raw.apiKey !== "••••••••" ? raw.apiKey.trim() : existing?.apiKey ?? "";
+      if (!/^[\w-]{20,}$/.test(apiKey)) throw new Error("Enter a Mailgun API key (Sending API key)");
+      const from = str("from") || `DeployNow <deploynow@${domain}>`;
+      if (!EMAIL_RE.test(from.replace(/^.*<(.+)>$/, "$1"))) throw new Error("Enter the sender address");
+      const to = str("to").split(/[,;\s]+/).filter(Boolean);
+      if (!to.length || to.length > 20 || !to.every((a) => EMAIL_RE.test(a))) throw new Error("Enter one or more recipient addresses");
+      return { apiKey, domain, region, from, to: to.join(",") };
+    }
     default:
-      throw new Error("Choose Slack, Discord, Telegram, email or webhook");
+      throw new Error("Choose Slack, Discord, Telegram, email, Mailgun or webhook");
   }
 }
 
@@ -114,6 +137,24 @@ function plain(n: Notification): string {
 }
 
 export function buildRequest(type: Exclude<ChannelType, "email">, cfg: ChannelConfig, n: Notification): { url: string; init: RequestInit } {
+  if (type === "mailgun") {
+    const mail = buildEmail(cfg, n);
+    const form = new URLSearchParams();
+    form.set("from", mail.from);
+    for (const to of mail.to.split(",")) form.append("to", to);
+    form.set("subject", mail.subject);
+    form.set("text", mail.text);
+    form.set("html", mail.html);
+    form.set("h:X-DeployNow-Event", n.event);
+    return {
+      url: `${mailgunBase(cfg.region)}/v3/${encodeURIComponent(cfg.domain ?? "")}/messages`,
+      init: {
+        method: "POST",
+        headers: { Authorization: `Basic ${Buffer.from(`api:${cfg.apiKey ?? ""}`).toString("base64")}`, "Content-Type": "application/x-www-form-urlencoded" },
+        body: form.toString(),
+      },
+    };
+  }
   const json = (body: unknown, headers: Record<string, string> = {}) => ({
     method: "POST",
     headers: { "Content-Type": "application/json", ...headers },
@@ -187,7 +228,14 @@ export async function sendTo(channel: { id: string; type: string; config: string
   }
   const { url, init } = buildRequest(channel.type as Exclude<ChannelType, "email">, decryptConfig(channel.config), n);
   const res = await fetch(url, { ...init, redirect: "error", signal: AbortSignal.timeout(10_000) });
-  if (!res.ok) throw new Error(`The channel answered ${res.status}`);
+  if (!res.ok) {
+    if (channel.type === "mailgun") {
+      const detail = await res.text().catch(() => "");
+      const hint = res.status === 401 ? " (check the API key and the region)" : res.status === 404 ? " (check the domain and the region)" : "";
+      throw new Error(`Mailgun answered ${res.status}${hint}${detail ? `: ${detail.slice(0, 150)}` : ""}`);
+    }
+    throw new Error(`The channel answered ${res.status}`);
+  }
 }
 
 /** Send to every enabled channel subscribed to the event. Never throws. */

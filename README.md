@@ -67,7 +67,7 @@ DeployNow ships with a dark theme by default and a matching light theme. Switch 
 **Operations**
 - Scheduled tasks (cron) in a container or a one-off container.
 - Monitoring and alerts for disk, memory, crash loops, offline agents and failed deploys, backups or tasks.
-- Notifications to Slack, Discord, Telegram, email (SMTP) or a signed webhook.
+- Notifications to Slack, Discord, Telegram, email (SMTP or Mailgun) or a signed webhook.
 
 **Security and access**
 - Two-factor authentication (TOTP), passkeys, and single sign-on with Google, Microsoft or any OpenID Connect provider.

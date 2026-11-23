@@ -26,7 +26,7 @@ export async function PATCH(request: Request, { params }: Params) {
     if (!list.length) return NextResponse.json({ error: "Pick at least one event" }, { status: 400 });
     data.events = [...new Set(list)].join(",");
   }
-  if (body.url !== undefined || body.botToken !== undefined || body.chatId !== undefined) {
+  if (["url", "botToken", "chatId", "host", "to", "from", "apiKey", "domain", "region"].some((k) => body[k] !== undefined)) {
     try {
       data.config = encryptConfig(validateChannel(ch.type, body, decryptConfig(ch.config)));
     } catch (err) {

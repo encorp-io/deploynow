@@ -100,7 +100,7 @@ const EVENT_LABELS: Record<string, string> = {
 export function NotificationSettings() {
   const api = useApi();
   const [data, setData] = useState<{ channels: Channel[]; events: string[] } | null>(null);
-  const [form, setForm] = useState<{ name: string; type: string; url: string; botToken: string; chatId: string; host?: string; port?: string; security?: string; user?: string; pass?: string; from?: string; to?: string; events: string[] } | null>(null);
+  const [form, setForm] = useState<{ name: string; type: string; url: string; botToken: string; chatId: string; host?: string; port?: string; security?: string; user?: string; pass?: string; from?: string; to?: string; apiKey?: string; domain?: string; region?: string; events: string[] } | null>(null);
   const [error, setError] = useState("");
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState("");
@@ -150,7 +150,7 @@ export function NotificationSettings() {
   return (
     <section className={section}>
       <h2 className="text-sm font-semibold text-text-primary mb-1 flex items-center gap-2"><Bell className="w-4 h-4" /> Notifications</h2>
-      <p className="text-xs text-text-muted mb-4">Where DeployNow reports deployments, backups and alerts: Slack, Discord, Telegram, email or a signed webhook.</p>
+      <p className="text-xs text-text-muted mb-4">Where DeployNow reports deployments, backups and alerts: Slack, Discord, Telegram, email (SMTP or Mailgun) or a signed webhook.</p>
       <div className="space-y-2">
         {data.channels.length === 0 && <p className="text-sm text-text-muted">No channels yet.</p>}
         {data.channels.map((c) => (
@@ -177,6 +177,7 @@ export function NotificationSettings() {
                 <option value="discord">Discord</option>
                 <option value="telegram">Telegram</option>
                 <option value="email">Email (SMTP)</option>
+                <option value="mailgun">Email (Mailgun)</option>
                 <option value="webhook">Webhook</option>
               </select>
             </Field>
@@ -196,6 +197,19 @@ export function NotificationSettings() {
               <Field label="Password"><Input type="password" value={form.pass ?? ""} onChange={(e) => setForm({ ...form, pass: e.target.value })} autoComplete="new-password" /></Field>
               <Field label="From"><Input value={form.from ?? ""} onChange={(e) => setForm({ ...form, from: e.target.value })} placeholder="DeployNow <ops@example.com>" /></Field>
               <div className="sm:col-span-3"><Field label="To (comma-separated)"><Input value={form.to ?? ""} onChange={(e) => setForm({ ...form, to: e.target.value })} placeholder="oncall@example.com, ops@example.com" /></Field></div>
+            </div>
+          ) : form.type === "mailgun" ? (
+            <div className="grid sm:grid-cols-3 gap-3">
+              <Field label="Sending domain"><Input value={form.domain ?? ""} onChange={(e) => setForm({ ...form, domain: e.target.value })} placeholder="mg.example.com" /></Field>
+              <Field label="Region">
+                <select value={form.region ?? "us"} onChange={(e) => setForm({ ...form, region: e.target.value })} className={selectClass}>
+                  <option value="us">US (api.mailgun.net)</option>
+                  <option value="eu">EU (api.eu.mailgun.net)</option>
+                </select>
+              </Field>
+              <Field label="API key" hint="A Sending API key for the domain"><Input type="password" value={form.apiKey ?? ""} onChange={(e) => setForm({ ...form, apiKey: e.target.value })} autoComplete="new-password" /></Field>
+              <Field label="From (optional)"><Input value={form.from ?? ""} onChange={(e) => setForm({ ...form, from: e.target.value })} placeholder="DeployNow <alerts@mg.example.com>" /></Field>
+              <div className="sm:col-span-2"><Field label="To (comma-separated)"><Input value={form.to ?? ""} onChange={(e) => setForm({ ...form, to: e.target.value })} placeholder="oncall@example.com, ops@example.com" /></Field></div>
             </div>
           ) : form.type === "telegram" ? (
             <div className="grid sm:grid-cols-2 gap-3">

@@ -154,3 +154,25 @@ describe("email delivery", () => {
     expect(raw).toContain("disk full");
   });
 });
+
+describe("Mailgun", () => {
+  const key = "0123456789abcdef0123456789abcdef-12345678-abcdef01";
+  it("validates the channel and defaults the sender", () => {
+    const c = validateChannel("mailgun", { domain: "mg.example.com", apiKey: key, to: "a@example.com, b@example.com" });
+    expect(c).toEqual({ apiKey: key, domain: "mg.example.com", region: "us", from: "DeployNow <deploynow@mg.example.com>", to: "a@example.com,b@example.com" });
+    expect(validateChannel("mailgun", { domain: "mg.example.com", region: "eu" }, c).apiKey).toBe(key);
+    expect(() => validateChannel("mailgun", { domain: "nope", apiKey: key, to: "a@example.com" })).toThrow(/domain/);
+    expect(() => validateChannel("mailgun", { domain: "mg.example.com", apiKey: "x", to: "a@example.com" })).toThrow(/API key/);
+    expect(() => validateChannel("mailgun", { domain: "mg.example.com", apiKey: key, to: "" })).toThrow(/recipient/);
+  });
+  it("posts a form to the region's API with basic auth", () => {
+    const r = buildRequest("mailgun", { apiKey: key, domain: "mg.example.com", region: "eu", from: "DN <dn@mg.example.com>", to: "a@example.com,b@example.com" }, n);
+    expect(r.url).toBe("https://api.eu.mailgun.net/v3/mg.example.com/messages");
+    expect((r.init.headers as Record<string, string>).Authorization).toBe(`Basic ${Buffer.from(`api:${key}`).toString("base64")}`);
+    const form = new URLSearchParams(r.init.body as string);
+    expect(form.getAll("to")).toEqual(["a@example.com", "b@example.com"]);
+    expect(form.get("subject")).toBe("[DeployNow] shop failed");
+    expect(form.get("html")).toContain("Health check timed out");
+    expect(buildRequest("mailgun", { apiKey: key, domain: "mg.example.com", region: "us", from: "a@b.co", to: "a@example.com" }, n).url).toBe("https://api.mailgun.net/v3/mg.example.com/messages");
+  });
+});
