@@ -3,9 +3,10 @@
 import { Suspense, useEffect, useState, type ReactNode } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { clsx } from "clsx";
-import { Bell, Boxes, CheckCircle, AlertCircle, KeyRound, Loader2, RefreshCw, Server, ShieldCheck, Wifi } from "lucide-react";
+import { Bell, Boxes, CheckCircle, AlertCircle, Globe, KeyRound, Loader2, RefreshCw, Server, ShieldCheck, Wifi } from "lucide-react";
 import { NotificationSettings, VaultSettings } from "@/components/IntegrationSettings";
 import { RegistrySettings, SsoSettings } from "@/components/AccessSettings";
+import { PlatformDomainSettings } from "@/components/PlatformDomainSettings";
 import { useToast } from "@/components/feedback";
 import { Button, Field, Input, PageHeader, Skeleton, TextArea } from "@/components/ui";
 
@@ -32,6 +33,7 @@ interface HealthMonitorData {
 
 const SECTIONS = [
   { id: "security", label: "Security and sign-in", icon: ShieldCheck },
+  { id: "domain", label: "Domain", icon: Globe },
   { id: "alerts", label: "Alerts and notifications", icon: Bell },
   { id: "updates", label: "Updates and health", icon: RefreshCw },
   { id: "registries", label: "Registries", icon: Boxes },
@@ -363,6 +365,8 @@ function SettingsContent() {
               </Field>
             </FormCard>
           )}
+
+          {section === "domain" && <PlatformDomainSettings />}
 
           {section === "vault" && <VaultSettings />}
         </div>

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { publicOrigin } from "@/lib/publicOrigin";
 import crypto from "crypto";
 import { prisma } from "@/lib/prisma";
 import { requireUser, requireStepUp, readJson } from "@/lib/apiAuth";
@@ -69,7 +70,7 @@ export async function POST(request: Request) {
       data: { email, token, role: body.role, expiresAt: new Date(Date.now() + 7 * 24 * 3600 * 1000), createdBy: user.id },
     });
     await audit({ actor, ip, action: "user.invite", message: `${user.email} invited ${email} as ${body.role}` });
-    return NextResponse.json({ token });
+    return NextResponse.json({ token, link: `${publicOrigin(request)}/setup?token=${token}` });
   }
 
   // Everything below acts on an existing user

@@ -82,8 +82,9 @@ Open `https://your-server:9444` and sign in. The certificate is self-signed unti
 1. Set up 2FA or a passkey when asked. Admins must have one.
 2. The local machine is already added as the `local` endpoint. Add others under **Endpoints**: SSH, TLS, or **Agent** for a machine behind NAT, where you copy the `docker run` command shown.
 3. On an endpoint, set up the edge proxy (managed Traefik or an existing one) if you want domains.
-4. Create a project and an app, add its domain and environment variables, and deploy.
-5. Under **Backups**, add an R2 or S3 destination and a policy. Save the recovery kit it shows you.
+4. Optional: under **Settings → Domain**, serve DeployNow itself on a domain such as `deploy.example.com`. It goes through the local endpoint's edge proxy with a Let's Encrypt certificate, and port 9444 keeps working as a fallback.
+5. Create a project and an app, add its domain and environment variables, and deploy.
+6. Under **Backups**, add an R2 or S3 destination and a policy. Save the recovery kit it shows you.
 
 Ports: `9444` for the dashboard and `8444` for agents. You can leave 8444 closed if you don't use agents.
 
@@ -115,12 +116,14 @@ deploynow api GET /endpoints
 | `AUTH_SECRET` | **Yes** | | Signs sessions and encrypts stored secrets. Keep it safe: if it changes, stored secrets can't be read. `openssl rand -base64 32` |
 | `ADMIN_EMAIL` | No | `admin@encorp.io` | Owner account created on first boot |
 | `ADMIN_PASSWORD` | First boot | | Password for that account, at least 12 characters |
-| `NEXTAUTH_URL` | Recommended | from the request | Public URL. Used for links, SSO, passkeys and the agent address |
+| `NEXTAUTH_URL` | Recommended | from the request | Public URL. Used for links, SSO and the agent address. A domain set under Settings → Domain takes precedence |
+| `IGNORE_PLATFORM_DOMAIN` | No | | `true` ignores the domain stored under Settings → Domain, if it ever needs bypassing without the UI |
+| `UI_HTTP_PORT` | No | `9080` | Internal plain-HTTP port Traefik forwards the platform domain to. Not published on the host |
 | `DATABASE_URL` | No | `file:/data/deployer.db` | SQLite path |
 | `DOCKER_GID` | With the socket | `999` | Group of `/var/run/docker.sock` |
 | `DEPLOYNOW_DATA_DIR` | No | the database's folder | Deploy logs, build checkouts and backup staging |
 | `AGENT_PORT` | No | `8444` | Port agents connect to; `off` disables it |
-| `AGENT_PUBLIC_URL` | No | `NEXTAUTH_URL`'s host on `AGENT_PORT` | Address agents dial. Can also be set under Settings |
+| `AGENT_PUBLIC_URL` | No | the platform domain's or `NEXTAUTH_URL`'s host on `AGENT_PORT` | Address agents dial. Can also be set under Settings |
 | `AGENT_IMAGE` | No | `ghcr.io/encorp-io/deploynow-agent:latest` | Agent image in the join command |
 | `RESTIC_IMAGE` | No | `restic/restic:0.18.1` | restic image used for backups on endpoints |
 | `BACKUP_PARALLEL` | No | `2` | Backups that run at the same time |
