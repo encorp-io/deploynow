@@ -11,7 +11,7 @@ import {
 } from "@simplewebauthn/server";
 import type { Passkey } from "@prisma/client";
 import { prisma } from "./prisma";
-import { publicOrigin } from "./publicOrigin";
+import { requestOrigin } from "./publicOrigin";
 
 const CHALLENGE_TTL_MS = 5 * 60_000;
 const MAX_PASSKEYS = 20;
@@ -22,15 +22,19 @@ type RegistrationResponse = Parameters<typeof verifyRegistrationResponse>[0]["re
 type AuthenticationResponse = Parameters<typeof verifyAuthenticationResponse>[0]["response"];
 type Transport = NonNullable<Parameters<typeof verifyAuthenticationResponse>[0]["authenticator"]["transports"]>[number];
 
-/** The relying party: the public origin and its host name. Passkeys need a stable domain. */
+/**
+ * The relying party: the address the browser is on and its host name. A passkey
+ * only works on the host it was added on, so passkeys added at the platform
+ * domain work there, and ones added at the server's own address work there.
+ */
 export function relyingParty(request: Request) {
-  const origin = publicOrigin(request);
+  const origin = requestOrigin(request);
   const rpID = new URL(origin).hostname;
   return { origin, rpID };
 }
 
 export function serializePasskey(p: Passkey) {
-  return { id: p.id, name: p.name, createdAt: p.createdAt, lastUsedAt: p.lastUsedAt, transports: p.transports ? p.transports.split(",") : [] };
+  return { id: p.id, name: p.name, rpId: p.rpId, createdAt: p.createdAt, lastUsedAt: p.lastUsedAt, transports: p.transports ? p.transports.split(",") : [] };
 }
 
 const b64 = (u: Uint8Array) => Buffer.from(u).toString("base64url");
@@ -89,6 +93,7 @@ export async function finishRegistration(userId: string, response: RegistrationR
       publicKey: b64(info.credentialPublicKey),
       counter: info.counter,
       transports,
+      rpId: rpID,
       name: (name || "Passkey").trim().slice(0, 60) || "Passkey",
     },
   });

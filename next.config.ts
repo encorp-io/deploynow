@@ -28,6 +28,14 @@ const securityHeaders = [
 const nextConfig: NextConfig = {
   output: "standalone",
   serverExternalPackages: ["@prisma/client", "bcryptjs", "dockerode", "docker-modem", "ssh2", "cpu-features", "ws", "qrcode"],
+  // OAuth discovery (RFC 8414, RFC 9728) and the MCP endpoint for AI connectors
+  async rewrites() {
+    return [
+      { source: "/.well-known/oauth-authorization-server/:path*", destination: "/api/oauth/metadata" },
+      { source: "/.well-known/oauth-protected-resource/:path*", destination: "/api/oauth/resource-metadata" },
+      { source: "/mcp", destination: "/api/mcp" },
+    ];
+  },
   async headers() {
     return [
       {

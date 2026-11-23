@@ -1,16 +1,23 @@
 <div align="center">
 
-# DeployNow
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="site/assets/deploynow-logo-dark.svg">
+  <img src="site/assets/deploynow-logo-light.svg" alt="DeployNow by encorp.ai" height="64">
+</picture>
 
-**Self-hosted control plane for your Docker machines: deploy apps, manage containers, back up data and watch it all from one place.**
+**Ship to every Docker machine you own.**<br>
+Self-hosted control plane for your Docker machines: deploy apps, manage containers, back up data and watch it all from one place.
+
+[Quick start](#quick-start) · [Docs](docs/v2.md) · [encorp.ai](https://encorp.ai)
 
 [![CI](https://github.com/encorp-io/deploynow/actions/workflows/ci.yml/badge.svg)](https://github.com/encorp-io/deploynow/actions/workflows/ci.yml)
 [![Docker](https://github.com/encorp-io/deploynow/actions/workflows/docker-publish.yml/badge.svg)](https://github.com/encorp-io/deploynow/actions/workflows/docker-publish.yml)
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
+<img src="site/assets/og.png" alt="DeployNow landing page" width="820">
 
 </div>
 
-DeployNow replaces Portainer and Dokploy with one app. It talks to Docker directly on the machine it runs on and on remote machines, deploys your apps from images or Git, puts them behind Traefik with SSL, and backs up their data with encrypted restic snapshots. It runs as a single container with an embedded SQLite database.
+**DeployNow by [encorp.ai](https://encorp.ai)** replaces Portainer and Dokploy with one app. It talks to Docker directly on the machine it runs on and on remote machines, deploys your apps from images or Git, puts them behind Traefik with SSL, and backs up their data with encrypted restic snapshots. It runs as a single container with an embedded SQLite database.
 
 > DeployNow is v2 of Encorp Deployer, the Portainer update helper. Coming from v1? See [Upgrading from v1](docs/v2.md#upgrading-from-v1).
 
@@ -48,6 +55,7 @@ DeployNow replaces Portainer and Dokploy with one app. It talks to Docker direct
 - Roles (viewer, operator, admin, owner) with per-endpoint and per-project grants.
 - A fresh 2FA code for destructive actions, server-side sessions you can revoke, and an audit log.
 - API tokens, an OpenAPI description at `/api/openapi.json`, and the `deploynow` CLI.
+- AI connectors: a built-in MCP server at `/mcp` with OAuth sign-in, so you can run DeployNow from Claude, ChatGPT and other AI apps. See [docs/ai-connectors.md](docs/ai-connectors.md).
 
 ## Quick start
 
@@ -75,8 +83,9 @@ Open `https://your-server:9444` and sign in. The certificate is self-signed unti
 1. Set up 2FA or a passkey when asked. Admins must have one.
 2. The local machine is already added as the `local` endpoint. Add others under **Endpoints**: SSH, TLS, or **Agent** for a machine behind NAT, where you copy the `docker run` command shown.
 3. On an endpoint, set up the edge proxy (managed Traefik or an existing one) if you want domains.
-4. Create a project and an app, add its domain and environment variables, and deploy.
-5. Under **Backups**, add an R2 or S3 destination and a policy. Save the recovery kit it shows you.
+4. Optional: under **Settings → Domain**, serve DeployNow itself on a domain such as `deploy.example.com`. It goes through the local endpoint's edge proxy with a Let's Encrypt certificate, and port 9444 keeps working as a fallback.
+5. Create a project and an app, add its domain and environment variables, and deploy.
+6. Under **Backups**, add an R2 or S3 destination and a policy. Save the recovery kit it shows you.
 
 Ports: `9444` for the dashboard and `8444` for agents. You can leave 8444 closed if you don't use agents.
 
@@ -108,14 +117,17 @@ deploynow api GET /endpoints
 | `AUTH_SECRET` | **Yes** | | Signs sessions and encrypts stored secrets. Keep it safe: if it changes, stored secrets can't be read. `openssl rand -base64 32` |
 | `ADMIN_EMAIL` | No | `admin@encorp.io` | Owner account created on first boot |
 | `ADMIN_PASSWORD` | First boot | | Password for that account, at least 12 characters |
-| `NEXTAUTH_URL` | Recommended | from the request | Public URL. Used for links, SSO, passkeys and the agent address |
+| `NEXTAUTH_URL` | Recommended | from the request | Public URL. Used for links, SSO and the agent address. A domain set under Settings → Domain takes precedence |
+| `IGNORE_PLATFORM_DOMAIN` | No | | `true` ignores the domain stored under Settings → Domain, if it ever needs bypassing without the UI |
+| `UI_HTTP_PORT` | No | `9080` | Internal plain-HTTP port Traefik forwards the platform domain to. Not published on the host |
 | `DATABASE_URL` | No | `file:/data/deployer.db` | SQLite path |
 | `DOCKER_GID` | With the socket | `999` | Group of `/var/run/docker.sock` |
 | `DEPLOYNOW_DATA_DIR` | No | the database's folder | Deploy logs, build checkouts and backup staging |
 | `AGENT_PORT` | No | `8444` | Port agents connect to; `off` disables it |
-| `AGENT_PUBLIC_URL` | No | `NEXTAUTH_URL`'s host on `AGENT_PORT` | Address agents dial. Can also be set under Settings |
+| `AGENT_PUBLIC_URL` | No | the platform domain's or `NEXTAUTH_URL`'s host on `AGENT_PORT` | Address agents dial. Can also be set under Settings |
 | `AGENT_IMAGE` | No | `ghcr.io/encorp-io/deploynow-agent:latest` | Agent image in the join command |
 | `RESTIC_IMAGE` | No | `restic/restic:0.18.1` | restic image used for backups on endpoints |
+| `DEPLOYNOW_MCP` | No | `on` | `off` turns off the MCP server and OAuth for AI apps |
 | `BACKUP_PARALLEL` | No | `2` | Backups that run at the same time |
 | `GITHUB_USER`, `GITHUB_TOKEN` | No | | GHCR and private GitHub access. Can also be set under Settings |
 | `CERT_FILE`, `KEY_FILE`, `TLS_HOSTNAME` | No | | Your own certificate, or a hostname for the self-signed one |
@@ -128,6 +140,10 @@ docker compose up -d
 ```
 
 Schema changes are applied on start and only add tables and columns. Back up the `/data` volume first, or set up a DeployNow backup policy for the instance.
+
+## Landing page
+
+The product website lives in [`site/`](site/): static HTML and CSS with no build step, hosted on Cloudflare Pages (build command empty, output directory `site`). Setup steps and brand notes are in [`site/README.md`](site/README.md).
 
 ## How it's built
 
@@ -148,6 +164,7 @@ src/lib/        Docker, deploys, backups, agent hub, auth, notifications
 agent/          deploynow-agent (Go)
 cli/            deploynow CLI
 tests/          unit, API and real-Docker integration tests
+site/           landing page (Cloudflare Pages)
 docs/           user documentation
 ```
 

@@ -23,6 +23,7 @@ import { withDockerCli, runCommand, type RegistryLogin } from "../docker/cliBrid
 import { decryptSecret } from "../secretsCrypto";
 import { audit } from "../audit";
 import { notify } from "../notify";
+import { publicBaseUrl } from "../publicOrigin";
 import { makeMasker, readStoredEnv, resolveEnv } from "../apps/env";
 import { parsePorts, parseVolumes, splitCommand, traefikLabels } from "../apps/config";
 import { checkout } from "./git";
@@ -335,6 +336,7 @@ export async function runDeployment(deploymentId: string, ctx: RunContext = {}):
     ok,
     title: `${verb} of ${app.environment.project.name} / ${app.name} (${app.environment.name}) ${ok ? "succeeded" : "failed"}`,
     text: ok ? "" : finished.error,
+    ...(publicBaseUrl() ? { link: `${publicBaseUrl()}/apps/${app.id}` } : {}),
     fields: {
       Endpoint: app.endpoint.name,
       Trigger: dep.trigger,

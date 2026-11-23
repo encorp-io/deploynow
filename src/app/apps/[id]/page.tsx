@@ -12,6 +12,7 @@ import { useConfirm, useToast } from "@/components/feedback";
 import { AppBuildSettings } from "@/components/AppBuildSettings";
 import { AppRegistryLogin } from "@/components/RegistryLogins";
 import ContainerLogs from "@/components/ContainerLogs";
+import ResourceHistory from "@/components/ResourceHistory";
 import { AppForm, appStatusTone, emptyApp, EnvEditor, SOURCE_LABELS, type AppFormValue, type EnvRow } from "@/components/apps";
 
 const ContainerConsole = dynamic(() => import("@/components/ContainerConsole"), { ssr: false });
@@ -411,6 +412,7 @@ export default function AppPage({ params }: { params: Promise<{ id: string }> })
           </Card>
         </div>
       )}
+      {tab === "overview" && <div className="mt-4"><ResourceHistory appId={id} /></div>}
 
       {tab === "logs" && (
         <Card className="p-4">

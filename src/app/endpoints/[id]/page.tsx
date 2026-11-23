@@ -9,6 +9,7 @@ import { useApi } from "@/components/AppShell";
 import ProxyCard from "@/components/ProxyCard";
 import AgentCard from "@/components/AgentCard";
 import MetricsChart from "@/components/MetricsChart";
+import { ContainerUsageTable } from "@/components/ResourceHistory";
 import EndpointForm, { type EndpointView } from "@/components/EndpointForm";
 import { Badge, Button, Card, ErrorText, IconButton, Modal, PageHeader, PageSkeleton, Skeleton, TableWrap, Tabs, formatBytes, stateTone, timeAgo } from "@/components/ui";
 import { useConfirm, useToast } from "@/components/feedback";
@@ -154,6 +155,7 @@ export default function EndpointPage({ params }: { params: Promise<{ id: string 
 
       {endpoint.type === "agent" && <AgentCard api={api} endpoint={endpoint} onChange={loadEndpoint} />}
       <MetricsChart api={api} endpointId={id} />
+      <ContainerUsageTable endpointId={id} />
       <ProxyCard endpointId={id} />
 
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 mt-6 mb-3">

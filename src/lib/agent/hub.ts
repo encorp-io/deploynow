@@ -19,6 +19,7 @@ import path from "path";
 import type { TLSSocket } from "tls";
 import { WebSocketServer, createWebSocketStream, type WebSocket } from "ws";
 import { prisma } from "../prisma";
+import { publicBaseUrl } from "../publicOrigin";
 import { dataDir } from "../paths";
 import { ensureHubPki, signAgentCsr, certFingerprint, CsrError } from "./pki";
 
@@ -69,13 +70,12 @@ export async function createJoinToken(endpointId: string): Promise<{ token: stri
   return { token, expiresAt };
 }
 
-/** What agents dial: AGENT_PUBLIC_URL, Settings, or NEXTAUTH_URL's host on the agent port. */
-/** The address agents dial when none is set in Settings. */
+/** The address agents dial when none is set in Settings: AGENT_PUBLIC_URL, else the public host (platform domain or AUTH_URL) on the agent port. */
 export function defaultAgentUrl(): string {
   if (process.env.AGENT_PUBLIC_URL) return process.env.AGENT_PUBLIC_URL.replace(/\/+$/, "");
   const port = Number(process.env.AGENT_PORT ?? 8444) || 8444;
   try {
-    const u = new URL(process.env.AUTH_URL || process.env.NEXTAUTH_URL || "");
+    const u = new URL(publicBaseUrl() ?? "");
     return `https://${u.hostname}:${port}`;
   } catch {
     return `https://<this-server>:${port}`;
