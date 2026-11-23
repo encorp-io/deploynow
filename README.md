@@ -49,6 +49,7 @@ DeployNow ships with a dark theme by default and a matching light theme. Switch 
 
 **Apps and deploys**
 - Projects with environments (`production`, `staging`, ...) holding apps.
+- One-click templates for 22 apps (PostgreSQL, MySQL, Redis, n8n, WordPress, Ghost, Plausible, Umami, Gitea, Nextcloud, Vaultwarden, Grafana and more), with generated secrets, a domain and a nightly backup.
 - Deploy from a GHCR or Docker Hub image, a Dockerfile in Git, a compose file in Git, or a pasted compose file.
 - Zero-downtime replace for stateless apps, a full log for every deployment, and one-click rollback.
 - Push-to-deploy from GitHub webhooks, and pull request previews at `pr-<n>.<your preview domain>`.
@@ -67,7 +68,9 @@ DeployNow ships with a dark theme by default and a matching light theme. Switch 
 **Operations**
 - Scheduled tasks (cron) in a container or a one-off container.
 - Monitoring and alerts for disk, memory, crash loops, offline agents and failed deploys, backups or tasks.
+- Uptime checks (HTTP(S) and TCP) with response-time history, down and up alerts, certificate expiry warnings and a public status page.
 - Notifications to Slack, Discord, Telegram, email (SMTP or Mailgun) or a signed webhook.
+- A notice when a new DeployNow release is out, with its notes and the upgrade command.
 
 **Security and access**
 - Two-factor authentication (TOTP), passkeys, and single sign-on with Google, Microsoft or any OpenID Connect provider.

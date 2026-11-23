@@ -11,6 +11,8 @@
 - [Agent, backups, tasks and monitoring](v2.md#phase-3-agent-backups-tasks-and-monitoring)
 - [Sign-in (SSO, passkeys), API tokens, CLI, previews and build server](v2.md#phase-4-sign-in-automation-and-more-deploy-options)
 - [DeployNow on its own domain](v2.md#deploynow-on-its-own-domain)
+- [One-click templates](templates.md)
+- [Uptime checks and the status page](uptime.md)
 - [Backups and restores](backups.md)
 - [Metrics, Prometheus and Grafana](metrics.md)
 - [AI connectors (MCP for Claude, ChatGPT and others)](ai-connectors.md)

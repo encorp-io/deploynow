@@ -66,6 +66,7 @@ export const PERMISSIONS = {
   "task.run": { min: "operator", scoped: false },
   "task.manage": { min: "admin", scoped: false },
   "monitoring.view": { min: "viewer", scoped: false },
+  "uptime.manage": { min: "admin", scoped: false },
 } as const satisfies Record<string, { min: Role; scoped: boolean }>;
 
 export type Permission = keyof typeof PERMISSIONS;

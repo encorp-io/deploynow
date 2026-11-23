@@ -8,6 +8,21 @@ versions fix bugs. Every version upgrades the database by itself.
 
 ## [Unreleased]
 
+### Added
+- **Templates:** 22 one-click apps (databases, n8n, WordPress, Ghost, Directus,
+  Plausible, Umami, Metabase, Grafana, Uptime Kuma, Gitea, Adminer, pgAdmin, Mailpit,
+  RabbitMQ, Meilisearch, NocoDB, Vaultwarden, Nextcloud). Passwords and keys are
+  generated and stored as secrets; the app can get its domain and a nightly backup
+  policy (database dump plus data volumes) as it is created. See docs/templates.md.
+- **Uptime checks:** HTTP(S) and TCP checks from DeployNow every 30 seconds to an hour,
+  with expected status codes, a keyword, response-time history (14 days), daily uptime
+  (90 days), incidents, `uptime.down` / `uptime.up` / `uptime.cert` notifications and
+  a public status page at `/status`. See docs/uptime.md.
+- **Mailgun** as a notification channel, next to SMTP email.
+- **New version notice:** DeployNow reads its GitHub releases twice a day and tells
+  admins (a banner and Settings → Updates) and the channels subscribed to
+  `update.available`. Turn it off in Settings or with `DEPLOYNOW_UPDATE_CHECK=off`.
+
 ## [2.0.0] - 2026-11-23
 
 The first public release. DeployNow is v2 of Encorp Deployer, rebuilt as a

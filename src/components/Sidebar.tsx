@@ -15,8 +15,7 @@ import {
   Settings,
   ShieldAlert,
   Users,
-  type LucideIcon,
-} from "lucide-react";
+  type LucideIcon, HeartPulse } from "lucide-react";
 import { BrandLockup } from "./Brand";
 import ThemeToggle from "./ThemeToggle";
 import { VERSION } from "@/lib/version";
@@ -38,6 +37,7 @@ const groups: { label: string; items: NavItem[] }[] = [
     label: "Operate",
     items: [
       { href: "/monitoring", label: "Monitoring", icon: Activity },
+      { href: "/uptime", label: "Uptime", icon: HeartPulse },
       { href: "/dashboard", label: "Image updates", icon: PackageCheck },
       { href: "/backups", label: "Backups", icon: Archive },
       { href: "/tasks", label: "Scheduled tasks", icon: CalendarClock },

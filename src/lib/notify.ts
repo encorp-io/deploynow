@@ -20,6 +20,9 @@ export const EVENTS = [
   "alert.firing",
   "alert.resolved",
   "update.available",
+  "uptime.down",
+  "uptime.up",
+  "uptime.cert",
 ] as const;
 export type NotifyEvent = (typeof EVENTS)[number];
 

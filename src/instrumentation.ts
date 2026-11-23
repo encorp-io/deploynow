@@ -31,6 +31,8 @@ export async function register() {
 
     const { startUpdateChecker } = await import("./lib/updates");
     startUpdateChecker();
+    const { startUptimeChecker } = await import("./lib/uptime");
+    startUptimeChecker();
 
     const { startBackgroundPolling, startHealthMonitorSchedule } = await import("./lib/backgroundPoller");
     startBackgroundPolling();
