@@ -15,10 +15,10 @@ import {
   Settings,
   ShieldAlert,
   Users,
-  type LucideIcon,
-} from "lucide-react";
+  type LucideIcon, HeartPulse } from "lucide-react";
 import { BrandLockup } from "./Brand";
 import ThemeToggle from "./ThemeToggle";
+import { VERSION } from "@/lib/version";
 
 type Role = "viewer" | "operator" | "admin" | "owner";
 const RANK: Record<Role, number> = { viewer: 0, operator: 1, admin: 2, owner: 3 };
@@ -37,6 +37,7 @@ const groups: { label: string; items: NavItem[] }[] = [
     label: "Operate",
     items: [
       { href: "/monitoring", label: "Monitoring", icon: Activity },
+      { href: "/uptime", label: "Uptime", icon: HeartPulse },
       { href: "/dashboard", label: "Image updates", icon: PackageCheck },
       { href: "/backups", label: "Backups", icon: Archive },
       { href: "/tasks", label: "Scheduled tasks", icon: CalendarClock },
@@ -146,6 +147,14 @@ export default function Sidebar({ me, onSignOut, onNavigate }: { me: Me | null; 
           </button>
         </div>
         <ThemeToggle />
+        <a
+          href="https://github.com/encorp-io/deploynow/releases"
+          target="_blank"
+          rel="noreferrer"
+          className="block px-2 pt-1 text-[11px] text-text-muted hover:text-text-secondary transition-colors"
+        >
+          DeployNow {/^\d/.test(VERSION) ? `v${VERSION}` : VERSION}
+        </a>
       </div>
     </div>
   );

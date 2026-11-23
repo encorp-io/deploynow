@@ -8,7 +8,7 @@
 **Ship to every Docker machine you own.**<br>
 Self-hosted control plane for your Docker machines: deploy apps, manage containers, back up data and watch it all from one place.
 
-[Quick start](#quick-start) · [Docs](docs/v2.md) · [encorp.ai](https://encorp.ai)
+[Quick start](#quick-start) · [Docs](docs/README.md) · [Changelog](CHANGELOG.md) · [encorp.ai](https://encorp.ai)
 
 [![CI](https://github.com/encorp-io/deploynow/actions/workflows/ci.yml/badge.svg)](https://github.com/encorp-io/deploynow/actions/workflows/ci.yml)
 [![Docker](https://github.com/encorp-io/deploynow/actions/workflows/docker-publish.yml/badge.svg)](https://github.com/encorp-io/deploynow/actions/workflows/docker-publish.yml)
@@ -49,6 +49,7 @@ DeployNow ships with a dark theme by default and a matching light theme. Switch 
 
 **Apps and deploys**
 - Projects with environments (`production`, `staging`, ...) holding apps.
+- One-click templates for 22 apps (PostgreSQL, MySQL, Redis, n8n, WordPress, Ghost, Plausible, Umami, Gitea, Nextcloud, Vaultwarden, Grafana and more), with generated secrets, a domain and a nightly backup.
 - Deploy from a GHCR or Docker Hub image, a Dockerfile in Git, a compose file in Git, or a pasted compose file.
 - Zero-downtime replace for stateless apps, a full log for every deployment, and one-click rollback.
 - Push-to-deploy from GitHub webhooks, and pull request previews at `pr-<n>.<your preview domain>`.
@@ -67,7 +68,9 @@ DeployNow ships with a dark theme by default and a matching light theme. Switch 
 **Operations**
 - Scheduled tasks (cron) in a container or a one-off container.
 - Monitoring and alerts for disk, memory, crash loops, offline agents and failed deploys, backups or tasks.
-- Notifications to Slack, Discord, Telegram, email (SMTP) or a signed webhook.
+- Uptime checks (HTTP(S) and TCP) with response-time history, down and up alerts, certificate expiry warnings and a public status page.
+- Notifications to Slack, Discord, Telegram, email (SMTP or Mailgun) or a signed webhook.
+- A notice when a new DeployNow release is out, with its notes and the upgrade command.
 
 **Security and access**
 - Two-factor authentication (TOTP), passkeys, and single sign-on with Google, Microsoft or any OpenID Connect provider.
@@ -78,42 +81,42 @@ DeployNow ships with a dark theme by default and a matching light theme. Switch 
 
 ## Quick start
 
-You need a Linux machine with Docker.
+You need a Linux machine (amd64 or arm64) with ports 9444 and 8444 open.
 
 ```bash
-git clone https://github.com/encorp-io/deploynow.git
-cd deploynow
-
-cat > .env <<EOF
-AUTH_SECRET=$(openssl rand -base64 32)
-ADMIN_EMAIL=you@example.com
-ADMIN_PASSWORD=choose-a-long-password
-NEXTAUTH_URL=https://your-server:9444
-DOCKER_GID=$(stat -c %g /var/run/docker.sock)
-EOF
-
-docker compose up -d
+curl -fsSL https://raw.githubusercontent.com/encorp-io/deploynow/main/install.sh | sudo bash
 ```
 
-While the repository is private, the image on GHCR is private too: run `docker login ghcr.io` with a GitHub token that has `read:packages` before `docker compose up`.
+It installs Docker if needed, writes `/opt/deploynow/.env` with a random `AUTH_SECRET`
+and owner password, starts DeployNow and prints where to sign in. Prefer to do it by
+hand, or want options? See [docs/install.md](docs/install.md).
 
-Open `https://your-server:9444` and sign in. The certificate is self-signed until you mount your own (see `docker-compose.yml`).
+While the repository is private, the image on GHCR is private too: run `docker login ghcr.io` with a GitHub token that has `read:packages` first.
 
-1. Set up 2FA or a passkey when asked. Admins must have one.
+Then:
+
+1. Sign in, and set up 2FA or a passkey when asked. Admins must have one.
 2. The local machine is already added as the `local` endpoint. Add others under **Endpoints**: SSH, TLS, or **Agent** for a machine behind NAT, where you copy the `docker run` command shown.
 3. On an endpoint, set up the edge proxy (managed Traefik or an existing one) if you want domains.
 4. Optional: under **Settings → Domain**, serve DeployNow itself on a domain such as `deploy.example.com`. It goes through the local endpoint's edge proxy with a Let's Encrypt certificate, and port 9444 keeps working as a fallback.
 5. Create a project and an app, add its domain and environment variables, and deploy.
 6. Under **Backups**, add an R2 or S3 destination and a policy. Save the recovery kit it shows you.
 
+> **Back up `/opt/deploynow/.env`.** `AUTH_SECRET` encrypts every stored secret; a restored database can't be read without it.
+
 Ports: `9444` for the dashboard and `8444` for agents. You can leave 8444 closed if you don't use agents.
 
-> Mounting the Docker socket gives root on that machine. Anyone who is an admin in DeployNow, or an operator with console access, can act as root on every endpoint they can reach. Keep 2FA on.
+> Mounting the Docker socket gives root on that machine. Anyone who is an admin in DeployNow, or an operator with console access, can act as root on every endpoint they can reach. Keep 2FA on. See [docs/security.md](docs/security.md).
 
 ## Documentation
 
-- [docs/v2.md](docs/v2.md): everything in v2, phase by phase. It covers endpoints, apps, secrets, domains, roles, the agent, SSO, API tokens, previews, moving apps off Dokploy, and upgrading from v1.
+All of it is indexed in [docs/README.md](docs/README.md). The main pages:
+
+- [Install](docs/install.md) and [Upgrading](docs/upgrading.md): versions, image tags, migrations and rolling back.
+- [docs/v2.md](docs/v2.md): endpoints, apps, secrets, domains, roles, the agent, SSO, API tokens, previews, moving apps off Dokploy, and upgrading from v1.
 - [docs/backups.md](docs/backups.md): backup setup, the recovery kit, restores, drills, and restoring DeployNow itself.
+- [Security and hardening](docs/security.md), and how to [report a vulnerability](SECURITY.md).
+- [Five-minute tour](docs/demo.md).
 
 ## CLI
 
@@ -134,7 +137,7 @@ deploynow api GET /endpoints
 | Variable | Required | Default | Description |
 |---|---|---|---|
 | `AUTH_SECRET` | **Yes** | | Signs sessions and encrypts stored secrets. Keep it safe: if it changes, stored secrets can't be read. `openssl rand -base64 32` |
-| `ADMIN_EMAIL` | No | `admin@encorp.io` | Owner account created on first boot |
+| `ADMIN_EMAIL` | No | `admin@example.com` | Owner account created on first boot |
 | `ADMIN_PASSWORD` | First boot | | Password for that account, at least 12 characters |
 | `NEXTAUTH_URL` | Recommended | from the request | Public URL. Used for links, SSO and the agent address. A domain set under Settings → Domain takes precedence |
 | `IGNORE_PLATFORM_DOMAIN` | No | | `true` ignores the domain stored under Settings → Domain, if it ever needs bypassing without the UI |
@@ -144,7 +147,7 @@ deploynow api GET /endpoints
 | `DEPLOYNOW_DATA_DIR` | No | the database's folder | Deploy logs, build checkouts and backup staging |
 | `AGENT_PORT` | No | `8444` | Port agents connect to; `off` disables it |
 | `AGENT_PUBLIC_URL` | No | the platform domain's or `NEXTAUTH_URL`'s host on `AGENT_PORT` | Address agents dial. Can also be set under Settings |
-| `AGENT_IMAGE` | No | `ghcr.io/encorp-io/deploynow-agent:latest` | Agent image in the join command |
+| `AGENT_IMAGE` | No | `ghcr.io/encorp-io/deploynow-agent:<this version>` | Agent image in the join command |
 | `RESTIC_IMAGE` | No | `restic/restic:0.18.1` | restic image used for backups on endpoints |
 | `DEPLOYNOW_MCP` | No | `on` | `off` turns off the MCP server and OAuth for AI apps |
 | `BACKUP_PARALLEL` | No | `2` | Backups that run at the same time |
@@ -158,7 +161,7 @@ docker compose pull
 docker compose up -d
 ```
 
-Schema changes are applied on start and only add tables and columns. Back up the `/data` volume first, or set up a DeployNow backup policy for the instance.
+Pin a release with `DEPLOYNOW_TAG=2.0.0` in `.env` for predictable upgrades. Database migrations run on start, after a copy of the database is saved to `/data/db-backups/`. Details, image tags and rolling back: [docs/upgrading.md](docs/upgrading.md).
 
 ## Landing page
 
@@ -193,8 +196,8 @@ brand/          logo, icons, colours and type (see brand/README.md)
 ```bash
 npm install
 cp .env.example .env        # set AUTH_SECRET
-npx prisma db push
-ADMIN_PASSWORD=dev-password-123 npx prisma db seed   # creates admin@encorp.io
+npm run db:migrate         # creates or upgrades the SQLite database
+ADMIN_PASSWORD=dev-password-123 npm run db:seed      # creates admin@example.com
 npm run dev                 # http://localhost:3000
 npm test                    # unit and API tests; integration tests run when Docker is available
 ```
@@ -204,6 +207,10 @@ CI runs the type check, tests with coverage (including real-Docker integration t
 ## Brand
 
 The DeployNow logo, the encorp.ai logo, icons, colours and type are in [`brand/`](brand/README.md). The app's colour tokens live in `src/app/globals.css`, so the whole UI follows one palette in both themes.
+
+## Contributing
+
+Issues and pull requests are welcome: see [CONTRIBUTING.md](CONTRIBUTING.md). Report security problems privately as described in [SECURITY.md](SECURITY.md).
 
 ## License
 

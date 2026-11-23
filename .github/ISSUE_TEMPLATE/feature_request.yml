@@ -1,0 +1,21 @@
+name: Feature request
+description: Suggest something DeployNow should do
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What are you trying to do?
+      description: The problem or workflow, not only the solution. "I move apps off Dokploy and …"
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would help?
+      description: How you picture it working.
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: How do you do it today?
+      description: A workaround, or how Portainer, Dokploy, Coolify or CapRover handle it.

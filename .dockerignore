@@ -1,0 +1,17 @@
+# Keep the build context small and free of secrets
+.git
+.github
+node_modules
+.next
+coverage
+.env
+.env.*
+!.env.example
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+tests
+site
+docs/screenshots
+agent/deploynow-agent

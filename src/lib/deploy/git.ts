@@ -36,6 +36,22 @@ export function validateRepoPath(raw: unknown, fallback: string): string {
   return clean;
 }
 
+/**
+ * Hosts the Settings GitHub token may be sent to. Anything else (a GitLab URL, a
+ * typo, a hostile host) is fetched anonymously, so the token can't leak to it.
+ * GITHUB_HOSTS adds GitHub Enterprise hosts, comma separated.
+ */
+export function tokenAllowedFor(repoUrl: string): boolean {
+  let host = "";
+  try {
+    host = new URL(repoUrl).hostname.toLowerCase();
+  } catch {
+    return false;
+  }
+  const extra = (process.env.GITHUB_HOSTS ?? "").split(",").map((h) => h.trim().toLowerCase()).filter(Boolean);
+  return host === "github.com" || extra.includes(host);
+}
+
 export function gitEnv(repoUrl: string, token?: string): Record<string, string | undefined> {
   const env: Record<string, string | undefined> = {
     PATH: process.env.PATH,
@@ -45,7 +61,7 @@ export function gitEnv(repoUrl: string, token?: string): Record<string, string |
     GIT_CONFIG_NOSYSTEM: "1",
     GIT_CONFIG_COUNT: "0",
   };
-  if (token) {
+  if (token && tokenAllowedFor(repoUrl)) {
     const host = new URL(repoUrl).origin;
     env.GIT_CONFIG_COUNT = "1";
     env.GIT_CONFIG_KEY_0 = `http.${host}/.extraHeader`;

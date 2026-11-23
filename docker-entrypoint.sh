@@ -9,9 +9,10 @@ if [ -z "$AUTH_SECRET" ] || [ "$AUTH_SECRET" = "build-placeholder-replaced-at-ru
 fi
 
 # ── Database migrations ───────────────────────────────────────────────────────
+# Versioned migrations (prisma/migrations). The database is copied to
+# /data/db-backups/ before any pending migration runs. See docs/upgrading.md.
 echo "[deployer] Running database migrations..."
-DATABASE_URL="${DATABASE_URL:-file:/data/deployer.db}" \
-  node node_modules/prisma/build/index.js db push --schema=./prisma/schema.prisma --skip-generate
+DATABASE_URL="${DATABASE_URL:-file:/data/deployer.db}" node prisma/migrate.cjs
 
 # ── Seed initial admin user (first boot only) ─────────────────────────────────
 echo "[deployer] Checking for initial admin user..."
@@ -24,7 +25,7 @@ const prisma = new PrismaClient();
 async function seed() {
   const count = await prisma.user.count();
   if (count === 0) {
-    const adminEmail = process.env.ADMIN_EMAIL || 'admin@encorp.io';
+    const adminEmail = process.env.ADMIN_EMAIL || 'admin@example.com';
     const adminPass  = process.env.ADMIN_PASSWORD;
 
     if (!adminPass) {

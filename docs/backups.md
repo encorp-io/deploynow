@@ -58,7 +58,7 @@ restic restore <snapshot id> --target ./restore
 The snapshot holds `deployer.db`, `certs/` and a `RESTORE.txt`. Then:
 
 1. Stop DeployNow: `docker compose stop deployer`.
-2. Copy `deployer.db` and `certs/` into the `/data` volume, replacing what is there.
+2. Copy `deployer.db` and `certs/` into the `/data` volume, replacing what is there, and **delete `deployer.db-wal` and `deployer.db-shm`** if they exist (they belong to the old database).
 3. Start it with the **same `AUTH_SECRET`** as before. Stored secrets, SSH keys and the backup passwords are encrypted with it, so a different one leaves them unreadable.
 
 The same commands restore any other snapshot without DeployNow. Snapshots are tagged `dn-source=volume:<name>`, `bind:<path>`, `db:<container>` or `instance`. Database snapshots hold a single dump file (`dump.sql`, `dump.archive` or `dump.rdb`) to load with the database's own tool.

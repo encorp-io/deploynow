@@ -37,6 +37,16 @@ describe("git helpers", () => {
     expect(env.GIT_CONFIG_KEY_0).toBe("http.https://github.com/.extraHeader");
     expect(Buffer.from(env.GIT_CONFIG_VALUE_0!.split(" ").pop()!, "base64").toString()).toBe("x-access-token:ghp_x");
   });
+  it("sends the GitHub token only to GitHub", () => {
+    expect(gitEnv("https://evil.example.com/o/r", "ghp_x").GIT_CONFIG_COUNT).toBe("0");
+    expect(gitEnv("https://github.com.evil.example/o/r", "ghp_x").GIT_CONFIG_COUNT).toBe("0");
+    process.env.GITHUB_HOSTS = "git.corp.example";
+    try {
+      expect(gitEnv("https://git.corp.example/o/r", "ghp_x").GIT_CONFIG_COUNT).toBe("1");
+    } finally {
+      delete process.env.GITHUB_HOSTS;
+    }
+  });
   it("checks branch names", () => {
     expect(BRANCH_RE.test("feature/x-1")).toBe(true);
     expect(BRANCH_RE.test("-x")).toBe(false);

@@ -42,7 +42,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         break;
       }
       case "volumes": {
-        const r = await docker.pruneVolumes();
+        // Docker before 23 (API < 1.42) prunes every unused volume, named ones too,
+        // so a stopped compose app would lose its database. Never prune volumes
+        // that belong to a compose project; on newer Docker only anonymous volumes go.
+        const r = await docker.pruneVolumes({ filters: { "label!": ["com.docker.compose.volume"] } });
         result = { removed: r.VolumesDeleted?.length ?? 0, reclaimed: r.SpaceReclaimed ?? 0 };
         break;
       }
