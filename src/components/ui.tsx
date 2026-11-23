@@ -607,9 +607,10 @@ export function Select({
         close();
         return;
       case "Tab":
-        e.preventDefault();
-        e.stopPropagation();
-        close();
+        // Put focus back on the trigger and let the browser carry on from there, so one
+        // Tab (or Shift+Tab) leaves the dropdown the way it would a native select
+        triggerRef.current?.focus({ preventScroll: true });
+        close(false);
         return;
     }
     // Type to jump, like a native select
