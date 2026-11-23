@@ -22,6 +22,8 @@ export async function register() {
     startScheduler();
     const { startMonitor } = await import("./lib/monitor");
     startMonitor();
+    const { startContainerMetrics } = await import("./lib/containerMetrics");
+    startContainerMetrics();
 
     const { startBackgroundPolling, startHealthMonitorSchedule } = await import("./lib/backgroundPoller");
     startBackgroundPolling();

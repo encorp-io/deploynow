@@ -31,6 +31,8 @@ export const OPERATIONS: Op[] = [
   { method: "post", path: `/endpoints/${ID}/refresh`, summary: "Refresh Docker info", tag: "Endpoints", access: "viewer" },
   { method: "post", path: `/endpoints/${ID}/agent`, summary: "Agent: new join command (action=join) or revoke (action=revoke)", tag: "Endpoints", access: "admin", body: { action: "join | revoke" } },
   { method: "get", path: `/endpoints/${ID}/metrics`, summary: "Host metric samples", tag: "Monitoring", access: "viewer", query: { hours: "1-168" } },
+  { method: "get", path: `/endpoints/${ID}/container-usage`, summary: "Resource usage summary of each container on the endpoint", tag: "Monitoring", access: "viewer", query: { range: "1h | 6h | 24h | 7d | 30d" } },
+  { method: "get", path: `/endpoints/${ID}/containers/{cid}/metrics`, summary: "CPU, memory, network and disk I/O history of a container", tag: "Monitoring", access: "viewer", query: { range: "1h | 6h | 24h | 7d | 30d" } },
   { method: "get", path: `/endpoints/${ID}/proxy`, summary: "Edge proxy status", tag: "Endpoints", access: "viewer" },
   { method: "post", path: `/endpoints/${ID}/proxy`, summary: "Install, adopt or remove the edge proxy", tag: "Endpoints", access: "admin" },
   { method: "post", path: `/endpoints/${ID}/prune`, summary: "Prune containers, images, volumes or networks", tag: "Docker", access: "admin", body: { kind: "containers | images | volumes | networks" } },
@@ -63,6 +65,7 @@ export const OPERATIONS: Op[] = [
   { method: "delete", path: `/apps/${ID}`, summary: "Delete an app and stop what it runs", tag: "Apps", access: "admin" },
   { method: "post", path: `/apps/${ID}/deploy`, summary: "Deploy (or redeploy) an app", tag: "Apps", access: "operator", body: { ref: "branch or commit (optional)" } },
   { method: "get", path: `/apps/${ID}/deployments`, summary: "List deployments", tag: "Apps", access: "viewer" },
+  { method: "get", path: `/apps/${ID}/metrics`, summary: "CPU, memory, network and disk I/O history of the app's containers", tag: "Apps", access: "viewer", query: { range: "1h | 6h | 24h | 7d | 30d" } },
   { method: "get", path: `/apps/${ID}/deployments/{depId}`, summary: "Get a deployment and its log", tag: "Apps", access: "operator", query: { offset: "log byte offset" } },
   { method: "post", path: `/apps/${ID}/deployments/{depId}`, summary: "Cancel, or roll back to this deployment", tag: "Apps", access: "operator", body: { action: "cancel | rollback" } },
   { method: "post", path: `/apps/${ID}/domains`, summary: "Add a domain (with optional redirect or basic auth)", tag: "Apps", access: "admin" },
@@ -99,6 +102,7 @@ export const OPERATIONS: Op[] = [
   { method: "post", path: `/tasks/${ID}`, summary: "Run a task now", tag: "Tasks", access: "operator" },
   { method: "delete", path: `/tasks/${ID}`, summary: "Remove a task", tag: "Tasks", access: "admin" },
   { method: "get", path: "/monitoring", summary: "Active and recent alerts, and host usage", tag: "Monitoring", access: "viewer" },
+  { method: "get", path: "/metrics", summary: "Prometheus metrics (text format) for hosts, containers, apps and alerts", tag: "Monitoring", access: "viewer" },
 
   // Registries
   { method: "get", path: "/registries", summary: "List your registry logins and the shared ones (masked); ?projectId= lists those an app in that project may use", tag: "Registries", access: "viewer" },
