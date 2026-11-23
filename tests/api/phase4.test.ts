@@ -105,9 +105,10 @@ describe("API token routes", () => {
 });
 
 describe("registries", () => {
-  it("is admin only, masks the password, and can't be removed while apps use it", async () => {
+  it("lets only admins add shared logins, masks the password, and can't be removed while apps use it", async () => {
     signInAs("operator");
-    expect((await registries.GET()).status).toBe(403);
+    expect((await registries.GET()).status).toBe(200);
+    expect((await registries.POST(req("POST", { name: "x", host: "ghcr.io", username: "u", password: "p" }))).status).toBe(403);
     signInAs("admin");
     expect((await registries.POST(req("POST", { name: "x", host: "bad host", username: "u", password: "p" }))).status).toBe(400);
     const r = await json(await registries.POST(req("POST", { name: "GHCR", host: "https://ghcr.io/", username: "bot", password: "tok", namespace: "ghcr.io/acme" })));

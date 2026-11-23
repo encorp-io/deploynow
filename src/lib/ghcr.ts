@@ -106,14 +106,16 @@ export async function getRemoteDigests(
   repository: string,
   tag: string,
   arch?: string,
+  creds?: { username: string; password: string },
 ): Promise<RemoteDigests | null> {
   const targetArch = normalizeArch(arch);
 
   if (registry !== "ghcr.io") {
-    return getDockerHubDigests(repository, tag, targetArch);
+    return getDockerHubDigests(repository, tag, targetArch, creds);
   }
 
-  const { user: ghUser, token: ghToken } = await getGithubCredentials();
+  // A registry login (shared, project or the app's own) wins over the legacy Settings token
+  const { user: ghUser, token: ghToken } = creds ? { user: creds.username, token: creds.password } : await getGithubCredentials();
   const registryToken = await getRegistryToken(repository, ghUser, ghToken);
 
   // Step 1: Fetch the manifest (could be a single manifest or a manifest list)
@@ -174,12 +176,14 @@ export async function getRemoteDigests(
   return both(manifest.config?.digest);
 }
 
-async function getDockerHubDigests(repository: string, tag: string, targetArch: string): Promise<RemoteDigests | null> {
+async function getDockerHubDigests(repository: string, tag: string, targetArch: string, creds?: { username: string; password: string }): Promise<RemoteDigests | null> {
   const repo = repository.includes("/") ? repository : `library/${repository}`;
 
-  const tokenRes = await fetch(
-    `https://auth.docker.io/token?service=registry.docker.io&scope=repository:${repo}:pull`
-  );
+  // Signed in: private repositories work, and the pull rate limit is the account's
+  const tokenUrl = `https://auth.docker.io/token?service=registry.docker.io&scope=repository:${repo}:pull`;
+  const tokenRes = creds
+    ? await fetch(tokenUrl, { headers: { Authorization: `Basic ${Buffer.from(`${creds.username}:${creds.password}`).toString("base64")}` } })
+    : await fetch(tokenUrl);
   if (!tokenRes.ok) return null;
   const { token } = await tokenRes.json();
 

@@ -6,6 +6,7 @@ import { ShieldCheck, ShieldAlert, Monitor, KeyRound, Copy } from "lucide-react"
 import { useApi } from "@/components/AppShell";
 import { Badge, Button, Card, ErrorText, Field, Input, PageHeader, timeAgo } from "@/components/ui";
 import { ApiTokensCard, PasskeysCard } from "@/components/AccountSecurity";
+import { PersonalRegistryLogins } from "@/components/RegistryLogins";
 
 interface Account {
   email: string;
@@ -217,6 +218,7 @@ function AccountPage() {
       <PasskeysCard onChange={load} />
 
       {!account.mfaSetupRequired && <ApiTokensCard role={account.role} />}
+      {!account.mfaSetupRequired && <PersonalRegistryLogins />}
 
       <Card className="p-6">
         <h2 className="font-semibold text-text-primary mb-4">Password</h2>

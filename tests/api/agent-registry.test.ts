@@ -55,12 +55,16 @@ describe("agent route", () => {
 });
 
 describe("registry credentials", () => {
-  it("normalises hosts and validates input", () => {
+  it("normalises hosts and validates input", async () => {
+    const actor = { id: "cuser0000000000000000000001", role: "admin" as const };
     expect(normalizeRegistryHost("https://Index.Docker.io/v1/")).toBe("docker.io");
     expect(normalizeRegistryHost("registry.example.com:5000/x")).toBe("registry.example.com:5000");
-    expect(() => validateRegistry({ name: "x", host: "ghcr.io", username: "" })).toThrow(/user name/);
-    expect(() => validateRegistry({ name: "x", host: "ghcr.io", username: "u" })).toThrow(/password/);
-    expect(() => validateRegistry({ name: "x", host: "ghcr.io", username: "u", password: "p", namespace: "Bad Space" })).toThrow(/namespace/);
+    await expect(validateRegistry({ name: "x", host: "ghcr.io", username: "" }, actor)).rejects.toThrow(/user name/);
+    await expect(validateRegistry({ name: "x", host: "reg.example.com", username: "u" }, actor)).rejects.toThrow(/password/);
+    await expect(validateRegistry({ name: "x", host: "ghcr.io", username: "u" }, actor)).rejects.toThrow(/access token/);
+    await expect(validateRegistry({ name: "x", host: "ghcr.io", username: "u", password: "p", namespace: "Bad Space" }, actor)).rejects.toThrow(/namespace/);
+    await expect(validateRegistry({ name: "x", host: "ghcr.io", username: "u", password: "p", namespace: "docker.io/acme" }, actor)).rejects.toThrow(/must be on ghcr.io/);
+    await expect(validateRegistry({ name: "x", host: "docker.io", username: "u", password: "p", namespace: "acme" }, actor)).resolves.toMatchObject({ namespace: "acme", ownerType: "shared" });
   });
 
   it("matches images to saved credentials, falling back to the GitHub token for ghcr.io", async () => {

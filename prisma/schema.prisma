@@ -33,6 +33,7 @@ model User {
   apiTokens     ApiToken[]
   passkeys      Passkey[]
   identities    UserIdentity[]
+  registries    Registry[]
 }
 
 model RecoveryCode {
@@ -269,6 +270,7 @@ model Project {
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
   environments Environment[]
+  registries   Registry[]
 }
 
 model Environment {
@@ -321,6 +323,7 @@ model Application {
   // Build somewhere else and ship through a registry
   buildEndpointId     String? // build on this endpoint instead of the target
   registryId          String? // push the built image here; the target pulls it
+  pullRegistryId      String? // registry login to pull with; unset = the project's or the shared login for the image's host
   status              String      @default("new") // new, deploying, running, failed, stopped
   currentDeploymentId String?
   createdAt           DateTime    @default(now())
@@ -647,13 +650,36 @@ model AuthChallenge {
 
 // ─── Phase 4: registries ───────────────────────────────────────────────────────
 
+// Registry logins (Docker Hub, GitHub Container Registry, any v2 registry).
+//
+//   shared    a service account that belongs to DeployNow, not a person.
+//             Managed by admins. Used by every app whose image is on that host,
+//             or only by one project's apps when projectId is set (managed by
+//             that project's admins too).
+//   personal  one user's own login. Only that user sees it, and it is used
+//             only by apps they explicitly pick it for. Removed with the user.
+//
+// Several logins may share a host; an app picks one with pullRegistryId, else
+// the project's shared login wins over the instance-wide one.
 model Registry {
-  id        String   @id @default(cuid())
-  name      String   @unique
-  host      String // ghcr.io, registry.example.com:5000, docker.io
-  username  String
-  password  String // encrypted
-  namespace String   @default("") // where built images are pushed, e.g. ghcr.io/acme
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id          String   @id @default(cuid())
+  name        String // unique per owner (checked in code)
+  host        String // ghcr.io, registry.example.com:5000, docker.io
+  username    String
+  password    String // encrypted
+  namespace   String   @default("") // where built images are pushed, e.g. ghcr.io/acme
+  ownerType   String   @default("shared") // shared, personal
+  userId      String? // personal: the owner
+  user        User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  projectId   String? // shared: only this project's apps may use it
+  project     Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  createdBy   String   @default("") // email of whoever added it
+  lastTestAt  DateTime?
+  lastTestOk  Boolean?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([host])
+  @@index([userId])
+  @@index([projectId])
 }

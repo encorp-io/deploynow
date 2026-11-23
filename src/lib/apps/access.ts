@@ -90,6 +90,7 @@ export function serializeApp(app: AppWithRelations, request?: Request) {
     hasWebhookSecret: !!app.webhookSecret,
     buildEndpointId: app.buildEndpointId,
     registryId: app.registryId,
+    pullRegistryId: app.pullRegistryId,
     previewsEnabled: app.previewsEnabled,
     previewDomain: app.previewDomain,
     previewOfId: app.previewOfId,
