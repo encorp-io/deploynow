@@ -36,6 +36,15 @@ describe("public base URL", () => {
     expect(publicBaseUrl()).toBe(ENV);
   });
 
+  it("keeps the fallback for module copies loaded while a domain is active", async () => {
+    setPlatformDomain("deploy.example.com");
+    vi.resetModules();
+    const fresh = await import("@/lib/publicOrigin");
+    fresh.setPlatformDomain("");
+    expect(fresh.publicBaseUrl()).toBe(ENV);
+    expect(process.env.AUTH_URL).toBe(ENV);
+  });
+
   it("ignores the stored domain with IGNORE_PLATFORM_DOMAIN", () => {
     process.env.IGNORE_PLATFORM_DOMAIN = "true";
     setPlatformDomain("deploy.example.com");

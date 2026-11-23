@@ -11,15 +11,16 @@
  * domain ever needs to be bypassed without the UI.
  */
 
-// Captured once: setPlatformDomain hides these from NextAuth while a domain is active
-const ENV_URL = process.env.AUTH_URL || process.env.NEXTAUTH_URL || "";
-
 const KEY = Symbol.for("deploynow.platformDomain");
-type Store = { domain: string };
+// envUrl is captured by the first copy of this module in the process, before
+// setPlatformDomain hides AUTH_URL from NextAuth. Route bundles load their own
+// copies later, so it must live in the shared store, not a module constant.
+type Store = { domain: string; envUrl: string };
 function store(): Store {
   const g = globalThis as unknown as Record<symbol, Store | undefined>;
-  return (g[KEY] ??= { domain: "" });
+  return (g[KEY] ??= { domain: "", envUrl: process.env.AUTH_URL || process.env.NEXTAUTH_URL || "" });
 }
+store();
 
 export function platformDomainIgnored(): boolean {
   return /^(1|true|yes)$/i.test(process.env.IGNORE_PLATFORM_DOMAIN ?? "");
@@ -32,9 +33,10 @@ export function platformDomain(): string {
 
 /** The origin set in the environment (AUTH_URL / NEXTAUTH_URL), if any. */
 export function envOrigin(): string | null {
-  if (!ENV_URL) return null;
+  const envUrl = store().envUrl;
+  if (!envUrl) return null;
   try {
-    return new URL(ENV_URL).origin;
+    return new URL(envUrl).origin;
   } catch {
     return null;
   }
@@ -50,8 +52,8 @@ export function setPlatformDomain(domain: string): void {
   if (platformDomain()) {
     delete process.env.AUTH_URL;
     delete process.env.NEXTAUTH_URL;
-  } else if (ENV_URL) {
-    process.env.AUTH_URL = ENV_URL;
+  } else if (store().envUrl) {
+    process.env.AUTH_URL = store().envUrl;
   }
 }
 

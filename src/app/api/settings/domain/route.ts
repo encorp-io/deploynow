@@ -88,14 +88,21 @@ export async function POST(request: Request) {
     return NextResponse.json({ ...result, error: result.message }, { status: 422 });
   }
 
-  if (action === "check") return NextResponse.json(result);
+  // Every answer that doesn't switch takes the trial route down again
+  const restore = () => ensurePlatformRoute([active]).catch(() => {});
+  if (action === "check") {
+    await restore();
+    return NextResponse.json(result);
+  }
 
   const ok = result.reachable && result.certificateValid;
   if (!ok && body.force !== true) {
+    await restore();
     return NextResponse.json({ ...result, error: result.message, canForce: true }, { status: 422 });
   }
   const offDomain = await passkeysOffDomain(domain);
   if (offDomain > 0 && body.confirmPasskeys !== true) {
+    await restore();
     return NextResponse.json({ ...result, error: "Confirm the passkey change first", passkeysOffDomain: offDomain, needsConfirm: true }, { status: 409 });
   }
 

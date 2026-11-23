@@ -59,6 +59,8 @@ describe("/api/settings/domain", () => {
     expect(res.status).toBe(200);
     expect(await res.json()).toMatchObject({ domain: "deploy.example.com", addresses: ["203.0.113.7"], reachable: true });
     expect(lib.ensurePlatformRoute).toHaveBeenCalledWith(["", "deploy.example.com"], {});
+    // The trial route comes down again
+    expect(lib.ensurePlatformRoute).toHaveBeenLastCalledWith([""]);
     expect(lib.saveActiveDomain).not.toHaveBeenCalled();
   });
 
@@ -88,6 +90,7 @@ describe("/api/settings/domain", () => {
     const res = await post({ action: "activate", domain: "deploy.example.com" });
     expect(res.status).toBe(422);
     expect((await res.json()).canForce).toBe(true);
+    expect(lib.ensurePlatformRoute).toHaveBeenLastCalledWith([""]);
     expect(lib.saveActiveDomain).not.toHaveBeenCalled();
     expect((await post({ action: "activate", domain: "deploy.example.com", force: true })).status).toBe(200);
     expect(lib.saveActiveDomain).toHaveBeenCalledWith("deploy.example.com");
