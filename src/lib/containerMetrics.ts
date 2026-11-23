@@ -36,6 +36,7 @@ export interface RawSample {
   containerName: string;
   applicationId: string;
   service: string;
+  replica: number; // compose container number, 1 otherwise
   at: number; // ms
   cpuNs: number; // cumulative container CPU time
   memUsage: number;
@@ -66,8 +67,9 @@ const g = globalThis as unknown as { __deploynowContainerMetrics?: CollectorStat
 const state: CollectorState = (g.__deploynowContainerMetrics ??= { timer: null, ticking: false, prev: new Map(), rolledHour: 0 });
 
 /** Series key: stable across redeploys for app containers. */
-export function seriesKey(applicationId: string, service: string, containerName: string): string {
-  return applicationId ? `app:${applicationId}:${service || "app"}` : `name:${containerName}`;
+export function seriesKey(applicationId: string, service: string, containerName: string, replica = 1): string {
+  // Compose replicas of one service stay separate series (app views add them up)
+  return applicationId ? `app:${applicationId}:${service || "app"}${replica > 1 ? `#${replica}` : ""}` : `name:${containerName}`;
 }
 
 /** Counter delta that survives a reset (container restarted): the new value counts from zero. */
@@ -104,6 +106,7 @@ export function rawFromStats(c: Docker.ContainerInfo, s: Docker.ContainerStats, 
     containerName: name,
     applicationId,
     service,
+    replica: Number(labels["com.docker.compose.container-number"]) || 1,
     at,
     cpuNs: s.cpu_stats?.cpu_usage?.total_usage ?? 0,
     memUsage: sum.memoryUsage,
@@ -144,7 +147,7 @@ export async function storeSample(endpointId: string, raw: RawSample) {
   await prisma.containerSample.create({
     data: {
       endpointId,
-      key: seriesKey(raw.applicationId, raw.service, raw.containerName),
+      key: seriesKey(raw.applicationId, raw.service, raw.containerName, raw.replica),
       containerId: raw.containerId,
       containerName: raw.containerName,
       applicationId: raw.applicationId,
@@ -195,7 +198,7 @@ export async function collectEndpoint(e: Endpoint, docker: Docker = dockerFor(e)
 /** Aggregates raw rows (one series, one hour) into an hourly rollup. */
 export function aggregate(rows: { seconds: number; cpuPercent: number; memUsage: number; memLimit: number; netRx: number; netTx: number; blkRead: number; blkWrite: number }[]) {
   const withRate = rows.filter((r) => r.seconds > 0);
-  const out = { samples: rows.length, cpuAvg: 0, cpuMax: 0, memAvg: 0, memMax: 0, memLimit: 0, netRx: 0, netTx: 0, blkRead: 0, blkWrite: 0 };
+  const out = { samples: rows.length, seconds: 0, cpuAvg: 0, cpuMax: 0, memAvg: 0, memMax: 0, memLimit: 0, netRx: 0, netTx: 0, blkRead: 0, blkWrite: 0 };
   if (!rows.length) return out;
   let secs = 0;
   let cpuWeighted = 0;
@@ -208,6 +211,7 @@ export function aggregate(rows: { seconds: number; cpuPercent: number; memUsage:
     out.blkRead += r.blkRead;
     out.blkWrite += r.blkWrite;
   }
+  out.seconds = secs;
   out.cpuAvg = secs > 0 ? Math.round((cpuWeighted / secs) * 100) / 100 : 0;
   let mem = 0;
   for (const r of rows) {
@@ -436,8 +440,8 @@ export async function readHistory(where: { applicationId?: string; endpointId?: 
       containerName: x.containerName,
       service: x.service,
       at: x.hour.getTime(),
-      // Rates over the hour: use the covered seconds (samples are a minute apart)
-      seconds: x.samples * 60,
+      // Seconds the hour's rate samples actually cover
+      seconds: x.seconds,
       samples: x.samples,
       cpuAvg: x.cpuAvg,
       cpuMax: x.cpuMax,

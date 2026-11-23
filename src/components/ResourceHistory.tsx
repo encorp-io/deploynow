@@ -26,6 +26,11 @@ interface History { range: Range; from: string | null; to: string; bucketSeconds
 const C1 = "#3b82f6";
 const C2 = "#ec4899";
 
+/** "web", or "web #2" for a second compose replica */
+const seriesLabel = (key: string, service: string, container: string) => {
+  const replica = /#(\d+)$/.exec(key)?.[1];
+  return `${service || container}${replica ? ` #${replica}` : ""}`;
+};
 const pct = (v: number) => `${v < 10 ? v.toFixed(1) : Math.round(v)}%`;
 const rate = (v: number) => `${formatBytes(v)}/s`;
 
@@ -276,7 +281,7 @@ export default function ResourceHistory({ appId, endpointId, containerId, title 
         {series.length > 1 && (
           <select value={pick} onChange={(e) => setPick(e.target.value)} aria-label="Service" className="bg-bg-secondary border border-border rounded-lg text-xs px-2 py-1 text-text-primary">
             <option value="all">All services</option>
-            {series.map((x) => <option key={x.key} value={x.key}>{x.service || x.container}</option>)}
+            {series.map((x) => <option key={x.key} value={x.key}>{seriesLabel(x.key, x.service, x.container)}</option>)}
           </select>
         )}
         <RangePicker value={range} onChange={setRange} />
@@ -373,7 +378,7 @@ export function ContainerUsageTable({ endpointId }: { endpointId: string }) {
                 <tr key={r.key} className="border-t border-border text-text-secondary">
                   <td className="px-2 py-1.5 min-w-0">
                     {r.app ? (
-                      <Link href={`/apps/${r.app.id}`} className="text-text-primary hover:text-accent">{r.app.name}{r.service ? ` / ${r.service}` : ""}</Link>
+                      <Link href={`/apps/${r.app.id}`} className="text-text-primary hover:text-accent">{r.app.name}{r.service ? ` / ${seriesLabel(r.key, r.service, r.container)}` : ""}</Link>
                     ) : (
                       <span className="font-mono text-text-primary">{r.container}</span>
                     )}

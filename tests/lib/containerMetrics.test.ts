@@ -35,7 +35,7 @@ let endpointId = "";
 let appId = "";
 
 function raw(over: Partial<cm.RawSample> & { at: number }): cm.RawSample {
-  return { containerId: "c1", containerName: "web-1", applicationId: "", service: "", cpuNs: 0, memUsage: 100, memLimit: 1000, netRx: 0, netTx: 0, blkRead: 0, blkWrite: 0, pids: 3, ...over };
+  return { containerId: "c1", containerName: "web-1", applicationId: "", service: "", replica: 1, cpuNs: 0, memUsage: 100, memLimit: 1000, netRx: 0, netTx: 0, blkRead: 0, blkWrite: 0, pids: 3, ...over };
 }
 
 beforeAll(async () => {
@@ -75,6 +75,7 @@ describe("interval maths", () => {
     expect(cm.seriesKey("app1", "web", "x-web-1")).toBe("app:app1:web");
     expect(cm.seriesKey("app1", "", "app1-dep2")).toBe("app:app1:app");
     expect(cm.seriesKey("", "", "postgres")).toBe("name:postgres");
+    expect(cm.seriesKey("app1", "web", "x-web-2", 2)).toBe("app:app1:web#2");
   });
 });
 
@@ -122,7 +123,8 @@ describe("storing, rolling up and reading", () => {
     expect(n).toBe(1);
     const row = await prisma.containerUsageHourly.findFirst();
     // 60 s of CPU over each 600 s interval = 10%
-    expect(row).toMatchObject({ key: "name:redis", samples: 4, cpuAvg: 10, cpuMax: 10, memAvg: 500, memMax: 800 });
+    // The first sample has no interval, so three 600 s intervals are covered
+    expect(row).toMatchObject({ key: "name:redis", samples: 4, seconds: 1800, cpuAvg: 10, cpuMax: 10, memAvg: 500, memMax: 800 });
     // Idempotent
     await cm.rollup(hourAgo, hourAgo + HOUR);
     expect(await prisma.containerUsageHourly.count()).toBe(1);
@@ -144,13 +146,15 @@ describe("storing, rolling up and reading", () => {
     const docker = {
       listContainers: vi.fn(async () => [
         { Id: "aaa", Names: ["/storefront-web-1"], Labels: { "com.docker.compose.project": "storefront", "com.docker.compose.service": "web" } },
+        { Id: "ccc", Names: ["/storefront-web-2"], Labels: { "com.docker.compose.project": "storefront", "com.docker.compose.service": "web", "com.docker.compose.container-number": "2" } },
         { Id: "bbb", Names: ["/dn-helper"], Labels: { "deploynow.helper": "1" } },
       ]),
       getContainer: vi.fn(() => ({ stats: vi.fn(async () => stats(1e9)) })),
     } as unknown as Docker;
     const e = await prisma.endpoint.findUniqueOrThrow({ where: { id: endpointId } });
-    expect(await cm.collectEndpoint(e, docker)).toBe(1);
-    const row = await prisma.containerSample.findFirstOrThrow();
+    expect(await cm.collectEndpoint(e, docker)).toBe(2);
+    expect((await prisma.containerSample.findFirstOrThrow({ where: { containerId: "ccc" } })).key).toBe(`app:${appId}:web#2`);
+    const row = await prisma.containerSample.findFirstOrThrow({ where: { containerId: "aaa" } });
     expect(row).toMatchObject({ applicationId: appId, service: "web", key: `app:${appId}:web`, memUsage: 4000, netRxTotal: 10, blkReadTotal: 7, pids: 4 });
   });
 

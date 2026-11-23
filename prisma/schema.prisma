@@ -567,6 +567,7 @@ model ContainerUsageHourly {
   service       String   @default("")
   hour          DateTime // start of the hour
   samples       Int      @default(0)
+  seconds       Float    @default(0) // seconds covered by samples with rates
   cpuAvg        Float    @default(0)
   cpuMax        Float    @default(0)
   memAvg        Float    @default(0)
