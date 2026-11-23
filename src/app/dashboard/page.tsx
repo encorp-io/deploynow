@@ -208,7 +208,7 @@ export default function DashboardPage() {
           return (
             <div
               key={stat.label}
-              className="bg-bg-card border border-border rounded-xl p-4"
+              className="dn-surface border border-border rounded-2xl p-4"
             >
               <div className="flex items-center justify-between">
                 <span className="text-xs text-text-muted">{stat.label}</span>
@@ -230,7 +230,7 @@ export default function DashboardPage() {
             Services
           </h2>
           {services.length === 0 ? (
-            <div className="bg-bg-card border border-border rounded-xl p-12 text-center">
+            <div className="dn-surface border border-border rounded-2xl p-12 text-center">
               <Box className="w-12 h-12 text-text-muted mx-auto mb-4" />
               <h3 className="text-lg font-semibold text-text-primary mb-2">
                 No containers found
@@ -265,7 +265,7 @@ export default function DashboardPage() {
           <h2 className="text-sm font-semibold text-text-secondary uppercase tracking-wider mb-4">
             Recent activity
           </h2>
-          <div className="bg-bg-card border border-border rounded-xl p-3 max-h-[600px] overflow-y-auto">
+          <div className="dn-surface border border-border rounded-2xl p-3 max-h-[600px] overflow-y-auto">
             <ActivityFeed logs={logs} />
           </div>
         </div>

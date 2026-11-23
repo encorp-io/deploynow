@@ -92,7 +92,7 @@ function Toast({ item, onClose }: { item: ToastItem; onClose: () => void }) {
   return (
     <div
       role={item.tone === "error" ? "alert" : "status"}
-      className="pointer-events-auto flex items-start gap-3 w-full sm:w-96 bg-bg-card border border-border-bright rounded-xl shadow-2xl shadow-black/40 px-4 py-3 animate-toast-in"
+      className="pointer-events-auto flex items-start gap-3 w-full sm:w-96 dn-glass border border-border-bright rounded-2xl shadow-[var(--dn-shadow-lg)] px-4 py-3 animate-toast-in"
     >
       <Icon
         className={clsx(

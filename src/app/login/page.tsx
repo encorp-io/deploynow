@@ -4,7 +4,8 @@ import { useEffect, useState } from "react";
 import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { startAuthentication } from "@simplewebauthn/browser";
-import { Container, KeyRound, Loader2, LogIn, ShieldCheck } from "lucide-react";
+import { KeyRound, Loader2, LogIn } from "lucide-react";
+import AuthShell, { authInputClass, authPrimaryClass, authSecondaryClass } from "@/components/AuthShell";
 
 const SSO_ERRORS: Record<string, string> = {
   sso_unavailable: "That sign-in option isn't available right now.",
@@ -13,8 +14,7 @@ const SSO_ERRORS: Record<string, string> = {
   rate_limited: "Too many failed attempts. Try again in 15 minutes.",
 };
 
-const inputClass =
-  "w-full px-3 py-2.5 bg-bg-card border border-border rounded-lg text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent/30 transition-colors";
+const inputClass = authInputClass;
 
 export default function LoginPage() {
   const router = useRouter();
@@ -116,24 +116,16 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-4">
-      <div className="w-full max-w-sm">
-        <div className="text-center mb-8">
-          <div className="w-16 h-16 rounded-2xl bg-accent/20 flex items-center justify-center mx-auto mb-4">
-            {needsCode ? <ShieldCheck className="w-8 h-8 text-accent" /> : <Container className="w-8 h-8 text-accent" />}
-          </div>
-          <h1 className="text-2xl font-bold text-text-primary">DeployNow</h1>
-          <p className="text-sm text-text-muted mt-1">
-            {needsCode ? "Enter the code from your authenticator app" : "Sign in to your deployment dashboard"}
-          </p>
-        </div>
-
+    <AuthShell
+      title={needsCode ? "Two-factor check" : "Welcome back"}
+      subtitle={needsCode ? "Enter the code from your authenticator app" : "Sign in to your deployment dashboard"}
+    >
         <form onSubmit={handleSubmit} className="space-y-4">
           {!needsCode ? (
             <>
               <div>
                 <label className="block text-xs font-medium text-text-secondary mb-1.5">Email</label>
-                <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} className={inputClass} placeholder="admin@encorp.io" autoComplete="username" required />
+                <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} className={inputClass} placeholder="you@company.com" autoComplete="username" required />
               </div>
               <div>
                 <label className="block text-xs font-medium text-text-secondary mb-1.5">Password</label>
@@ -157,12 +149,12 @@ export default function LoginPage() {
             </div>
           )}
 
-          {error && <p className="text-xs text-danger bg-danger/10 rounded-lg px-3 py-2">{error}</p>}
+          {error && <p className="text-xs text-danger bg-danger/10 border border-danger/20 rounded-xl px-3 py-2">{error}</p>}
 
           <button
             type="submit"
             disabled={loading}
-            className="w-full py-2.5 bg-accent hover:bg-accent-hover text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+            className={authPrimaryClass}
           >
             {loading && <Loader2 className="w-4 h-4 animate-spin" />}
             {needsCode ? "Verify" : "Sign In"}
@@ -191,18 +183,17 @@ export default function LoginPage() {
               <span className="flex-1 h-px bg-border" />
             </div>
             {passkeySupported && (
-              <button type="button" onClick={passkeyLogin} disabled={loading} className="w-full py-2.5 border border-border hover:bg-bg-secondary rounded-lg text-sm text-text-primary flex items-center justify-center gap-2 disabled:opacity-50">
+              <button type="button" onClick={passkeyLogin} disabled={loading} className={authSecondaryClass}>
                 <KeyRound className="w-4 h-4" /> Sign in with a passkey
               </button>
             )}
             {providers.map((p) => (
-              <a key={p.id} href={`/api/sso/login/${p.id}`} className="w-full py-2.5 border border-border hover:bg-bg-secondary rounded-lg text-sm text-text-primary flex items-center justify-center gap-2">
+              <a key={p.id} href={`/api/sso/login/${p.id}`} className={authSecondaryClass}>
                 <LogIn className="w-4 h-4" /> Continue with {p.name}
               </a>
             ))}
           </div>
         )}
-      </div>
-    </div>
+    </AuthShell>
   );
 }

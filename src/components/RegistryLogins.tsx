@@ -242,7 +242,7 @@ function RegistryLoginList({ ownerType }: { ownerType: "shared" | "personal" }) 
 /** Settings: shared logins that belong to DeployNow rather than a person. */
 export function SharedRegistryLogins() {
   return (
-    <section className="bg-bg-card border border-border rounded-xl p-6">
+    <section className="dn-surface border border-border rounded-2xl p-6">
       <h2 className="text-sm font-semibold text-text-primary mb-1 flex items-center gap-2"><Boxes className="w-4 h-4" /> Registry service accounts</h2>
       <p className="text-xs text-text-muted mb-3">
         Shared Docker Hub, GitHub (GHCR) or other registry logins that belong to DeployNow, not a person, so pulls and auto-updates keep working when someone leaves.

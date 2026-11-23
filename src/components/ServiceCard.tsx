@@ -81,7 +81,7 @@ export default function ServiceCard({
   return (
     <div
       className={clsx(
-        "bg-bg-card border border-border rounded-xl p-5 hover:border-border-bright transition-all duration-300",
+        "dn-surface border border-border rounded-2xl p-5 hover:border-border-bright transition-all duration-300",
         glowClass
       )}
     >

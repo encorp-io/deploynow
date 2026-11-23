@@ -28,7 +28,7 @@ export default function ContainerConsole({ api, endpointId, containerId }: { api
     }
 
     const [{ Terminal }, { FitAddon }] = await Promise.all([import("@xterm/xterm"), import("@xterm/addon-fit")]);
-    const term = new Terminal({ cursorBlink: true, fontSize: 13, theme: { background: "#0a0e1a" }, convertEol: false });
+    const term = new Terminal({ cursorBlink: true, fontSize: 13, fontFamily: `${getComputedStyle(document.documentElement).getPropertyValue("--font-geist-mono") || "ui-monospace"}, Menlo, monospace`, theme: { background: "#070a12", foreground: "#e6eaf2", cursor: "#5fcef9", selectionBackground: "#1d9cff55" }, convertEol: false });
     const fit = new FitAddon();
     term.loadAddon(fit);
     host.current!.innerHTML = "";

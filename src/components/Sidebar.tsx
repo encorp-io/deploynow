@@ -7,7 +7,6 @@ import {
   Activity,
   Archive,
   CalendarClock,
-  Container,
   FolderKanban,
   History,
   LogOut,
@@ -18,6 +17,8 @@ import {
   Users,
   type LucideIcon,
 } from "lucide-react";
+import { BrandLockup } from "./Brand";
+import ThemeToggle from "./ThemeToggle";
 
 type Role = "viewer" | "operator" | "admin" | "owner";
 const RANK: Record<Role, number> = { viewer: 0, operator: 1, admin: 2, owner: 3 };
@@ -65,16 +66,11 @@ export default function Sidebar({ me, onSignOut, onNavigate }: { me: Me | null; 
   const no2fa = me && !me.totpEnabled && !me.passkeys;
 
   return (
-    <div className="h-full bg-bg-secondary border-r border-border flex flex-col">
-      <Link href="/projects" onClick={onNavigate} className="flex items-center gap-3 px-5 h-16 border-b border-border flex-shrink-0">
-        <div className="w-8 h-8 rounded-lg bg-accent/20 flex items-center justify-center">
-          <Container className="w-4.5 h-4.5 text-accent" />
-        </div>
-        <div className="leading-tight">
-          <p className="text-base font-bold text-text-primary">DeployNow</p>
-          <p className="text-[11px] text-text-muted">by Encorp</p>
-        </div>
+    <div className="h-full dn-glass border-r border-border flex flex-col">
+      <Link href="/projects" onClick={onNavigate} aria-label="DeployNow by encorp.ai, home" className="flex items-center px-5 h-[72px] flex-shrink-0">
+        <BrandLockup />
       </Link>
+      <div className="dn-hairline mx-4 flex-shrink-0" />
 
       <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-5" aria-label="Main">
         {groups.map((g) => {
@@ -82,7 +78,7 @@ export default function Sidebar({ me, onSignOut, onNavigate }: { me: Me | null; 
           if (items.length === 0) return null;
           return (
             <div key={g.label}>
-              <p className="px-3 mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-text-muted">{g.label}</p>
+              <p className="px-3 mb-2 text-[10.5px] font-semibold uppercase tracking-[0.12em] text-text-muted/80">{g.label}</p>
               <div className="space-y-0.5">
                 {items.map((item) => {
                   const Icon = item.icon;
@@ -94,11 +90,13 @@ export default function Sidebar({ me, onSignOut, onNavigate }: { me: Me | null; 
                       onClick={onNavigate}
                       aria-current={active ? "page" : undefined}
                       className={clsx(
-                        "flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors",
-                        active ? "bg-accent/15 text-accent" : "text-text-secondary hover:text-text-primary hover:bg-bg-card",
+                        "relative flex items-center gap-3 px-3 py-2 rounded-[10px] text-sm font-medium transition-colors",
+                        active
+                          ? "bg-gradient-to-r from-accent/15 to-accent/[0.03] text-text-primary ring-1 ring-inset ring-accent/20 before:absolute before:left-0 before:top-2 before:bottom-2 before:w-[3px] before:rounded-r-full before:bg-accent before:shadow-[0_0_12px_var(--dn-accent)]"
+                          : "text-text-secondary hover:text-text-primary hover:bg-bg-card-hover",
                       )}
                     >
-                      <Icon className="w-4 h-4" />
+                      <Icon className={clsx("w-4 h-4", active && "text-accent")} />
                       {item.label}
                     </Link>
                   );
@@ -109,12 +107,13 @@ export default function Sidebar({ me, onSignOut, onNavigate }: { me: Me | null; 
         })}
       </nav>
 
-      <div className="p-3 border-t border-border flex-shrink-0">
+      <div className="p-3 flex-shrink-0 space-y-2">
+        <div className="dn-hairline -mx-1 mb-3" />
         {no2fa && (
           <Link
             href="/account?setup=2fa"
             onClick={onNavigate}
-            className="flex items-center gap-2 mb-2 px-3 py-2 rounded-lg bg-warning/10 text-warning text-xs hover:bg-warning/15"
+            className="flex items-center gap-2 px-3 py-2 rounded-[10px] bg-warning/10 border border-warning/20 text-warning text-xs hover:bg-warning/15"
           >
             <ShieldAlert className="w-4 h-4 flex-shrink-0" /> Turn on two-factor sign-in
           </Link>
@@ -125,11 +124,11 @@ export default function Sidebar({ me, onSignOut, onNavigate }: { me: Me | null; 
             onClick={onNavigate}
             title="Your account and security"
             className={clsx(
-              "flex-1 min-w-0 flex items-center gap-2.5 px-2 py-1.5 rounded-lg hover:bg-bg-card",
-              pathname.startsWith("/account") && "bg-bg-card",
+              "flex-1 min-w-0 flex items-center gap-2.5 px-2 py-1.5 rounded-[10px] hover:bg-bg-card-hover",
+              pathname.startsWith("/account") && "bg-bg-card-hover",
             )}
           >
-            <span className="w-8 h-8 rounded-full bg-accent/20 text-accent text-sm font-semibold flex items-center justify-center flex-shrink-0 uppercase">
+            <span className="w-8 h-8 rounded-full dn-gradient text-white text-sm font-semibold flex items-center justify-center flex-shrink-0 uppercase ring-2 ring-bg-secondary shadow-[0_4px_12px_-4px_var(--dn-accent)]">
               {(me?.name || me?.email || "?").slice(0, 1)}
             </span>
             <span className="min-w-0 text-xs leading-tight">
@@ -146,6 +145,7 @@ export default function Sidebar({ me, onSignOut, onNavigate }: { me: Me | null; 
             <LogOut className="w-4 h-4" />
           </button>
         </div>
+        <ThemeToggle />
       </div>
     </div>
   );

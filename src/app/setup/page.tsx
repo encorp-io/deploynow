@@ -2,7 +2,8 @@
 
 import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Container, Loader2, AlertCircle, CheckCircle } from "lucide-react";
+import { Loader2, AlertCircle, CheckCircle } from "lucide-react";
+import AuthShell, { authInputClass, authPrimaryClass } from "@/components/AuthShell";
 
 function SetupForm() {
   const router = useRouter();
@@ -93,7 +94,7 @@ function SetupForm() {
           type="text"
           value={name}
           onChange={(e) => setName(e.target.value)}
-          className="w-full px-3 py-2.5 bg-bg-card border border-border rounded-lg text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent/30 transition-colors"
+          className={authInputClass}
           placeholder="Jane Doe"
           required
         />
@@ -106,7 +107,7 @@ function SetupForm() {
           type="password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
-          className="w-full px-3 py-2.5 bg-bg-card border border-border rounded-lg text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent/30 transition-colors"
+          className={authInputClass}
           placeholder="Min 8 characters"
           required
         />
@@ -119,7 +120,7 @@ function SetupForm() {
           type="password"
           value={confirm}
           onChange={(e) => setConfirm(e.target.value)}
-          className="w-full px-3 py-2.5 bg-bg-card border border-border rounded-lg text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent/30 transition-colors"
+          className={authInputClass}
           placeholder="••••••••"
           required
         />
@@ -134,7 +135,7 @@ function SetupForm() {
       <button
         type="submit"
         disabled={loading}
-        className="w-full py-2.5 bg-accent hover:bg-accent-hover text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+        className={authPrimaryClass}
       >
         {loading && <Loader2 className="w-4 h-4 animate-spin" />}
         Create Account
@@ -145,20 +146,7 @@ function SetupForm() {
 
 export default function SetupPage() {
   return (
-    <div className="min-h-screen flex items-center justify-center px-4">
-      <div className="w-full max-w-sm">
-        <div className="text-center mb-8">
-          <div className="w-16 h-16 rounded-2xl bg-accent/20 flex items-center justify-center mx-auto mb-4">
-            <Container className="w-8 h-8 text-accent" />
-          </div>
-          <h1 className="text-2xl font-bold text-text-primary">
-            Create Account
-          </h1>
-          <p className="text-sm text-text-muted mt-1">
-            Complete your DeployNow registration
-          </p>
-        </div>
-
+    <AuthShell title="Create your account" subtitle="Complete your DeployNow registration">
         <Suspense
           fallback={
             <div className="flex justify-center py-8">
@@ -168,7 +156,6 @@ export default function SetupPage() {
         >
           <SetupForm />
         </Suspense>
-      </div>
-    </div>
+    </AuthShell>
   );
 }

@@ -81,7 +81,7 @@ export function SsoSettings() {
   const set = <K extends keyof ProviderForm>(k: K, v: ProviderForm[K]) => form && setForm({ ...form, [k]: v });
 
   return (
-    <section className="bg-bg-card border border-border rounded-xl p-6">
+    <section className="dn-surface border border-border rounded-2xl p-6">
       <h2 className="text-sm font-semibold text-text-primary mb-1 flex items-center gap-2"><LogIn className="w-4 h-4" /> Single sign-on</h2>
       <p className="text-xs text-text-muted mb-4">
         Let people sign in with Google, Microsoft or another OpenID Connect provider. Redirect URI: <code className="text-accent">{data.redirectUri}</code>

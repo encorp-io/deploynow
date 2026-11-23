@@ -1,41 +1,188 @@
 @import "tailwindcss";
 
-@theme {
-  --color-bg-primary: #0a0e1a;
-  --color-bg-secondary: #111827;
-  --color-bg-card: #1a1f35;
-  --color-bg-card-hover: #222845;
-  --color-border: #2a3050;
-  --color-border-bright: #3b4578;
-  --color-accent: #3b82f6;
-  --color-accent-hover: #2563eb;
-  --color-success: #10b981;
-  --color-warning: #f59e0b;
-  --color-danger: #ef4444;
-  --color-text-primary: #f1f5f9;
-  --color-text-secondary: #94a3b8;
-  --color-text-muted: #64748b;
+/* Dark mode follows the .dark class on <html>, set before paint by the script in layout.tsx */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/*
+ * DeployNow by encorp.ai design tokens.
+ * Brand colours come from the encorp.ai mark: #5FCEF9 → #1D9CFF → #2E6AE0.
+ * Every colour utility in the app (bg-bg-card, text-accent, border-border…) resolves
+ * to one of these variables, so light and dark are a single swap. See brand/README.md.
+ */
+:root {
+  --dn-bg: #f5f7fb;
+  --dn-bg-secondary: #ffffff;
+  --dn-bg-card: #ffffff;
+  --dn-bg-card-hover: #f1f4fa;
+  --dn-border: #e3e8f1;
+  --dn-border-bright: #c9d2e2;
+  --dn-accent: #0b6fe0;
+  --dn-accent-hover: #075bbd;
+  --dn-accent-soft: #5fcef9;
+  --dn-accent-deep: #2e4fe0;
+  --dn-success: #0c8f63;
+  --dn-warning: #b26a00;
+  --dn-danger: #d92d3a;
+  --dn-text: #0b1020;
+  --dn-text-secondary: #46506a;
+  --dn-text-muted: #6b7590;
+  --dn-glow: rgba(29, 156, 255, 0.10);
+  --dn-glow-2: rgba(46, 79, 224, 0.06);
+  --dn-card-highlight: rgba(255, 255, 255, 0.9);
+  --dn-shadow: 0 1px 2px rgba(16, 24, 40, 0.04), 0 4px 16px -6px rgba(16, 24, 40, 0.08);
+  --dn-shadow-lg: 0 24px 64px -16px rgba(16, 24, 40, 0.25);
+  color-scheme: light;
+}
+
+:root.dark {
+  --dn-bg: #05070d;
+  --dn-bg-secondary: #0a0d17;
+  --dn-bg-card: #0e1220;
+  --dn-bg-card-hover: #141a2b;
+  --dn-border: #1b2234;
+  --dn-border-bright: #2a3450;
+  --dn-accent: #1d9cff;
+  --dn-accent-hover: #47afff;
+  --dn-accent-soft: #5fcef9;
+  --dn-accent-deep: #2e4fe0;
+  --dn-success: #2fd59c;
+  --dn-warning: #f5b544;
+  --dn-danger: #ff5c68;
+  --dn-text: #eef2f8;
+  --dn-text-secondary: #a6afc4;
+  --dn-text-muted: #6c7690;
+  --dn-glow: rgba(29, 156, 255, 0.13);
+  --dn-glow-2: rgba(46, 79, 224, 0.10);
+  --dn-card-highlight: rgba(255, 255, 255, 0.04);
+  --dn-shadow: 0 1px 0 rgba(255, 255, 255, 0.02), 0 8px 24px -12px rgba(0, 0, 0, 0.6);
+  --dn-shadow-lg: 0 32px 80px -20px rgba(0, 0, 0, 0.8);
+  color-scheme: dark;
+}
+
+@theme inline {
+  --color-bg-primary: var(--dn-bg);
+  --color-bg-secondary: var(--dn-bg-secondary);
+  --color-bg-card: var(--dn-bg-card);
+  --color-bg-card-hover: var(--dn-bg-card-hover);
+  --color-border: var(--dn-border);
+  --color-border-bright: var(--dn-border-bright);
+  --color-accent: var(--dn-accent);
+  --color-accent-hover: var(--dn-accent-hover);
+  --color-accent-soft: var(--dn-accent-soft);
+  --color-accent-deep: var(--dn-accent-deep);
+  --color-success: var(--dn-success);
+  --color-warning: var(--dn-warning);
+  --color-danger: var(--dn-danger);
+  --color-text-primary: var(--dn-text);
+  --color-text-secondary: var(--dn-text-secondary);
+  --color-text-muted: var(--dn-text-muted);
+  --font-sans: var(--font-geist-sans), "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+
+html {
+  background-color: var(--dn-bg);
 }
 
 body {
-  background-color: var(--color-bg-primary);
-  color: var(--color-text-primary);
-  font-family: "Inter", system-ui, -apple-system, sans-serif;
+  background-color: var(--dn-bg);
+  /* Soft brand glow at the top of every page */
+  background-image:
+    radial-gradient(1200px 520px at 18% -180px, var(--dn-glow), transparent 70%),
+    radial-gradient(900px 420px at 92% -220px, var(--dn-glow-2), transparent 70%);
+  background-attachment: fixed;
+  background-repeat: no-repeat;
+  color: var(--dn-text);
+  font-family: var(--font-sans);
+  font-feature-settings: "ss01", "cv11";
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+h1, h2, h3 {
+  letter-spacing: -0.02em;
+}
+
+::selection {
+  background: color-mix(in srgb, var(--dn-accent) 30%, transparent);
 }
 
 /* Scrollbar styling */
 ::-webkit-scrollbar {
-  width: 6px;
+  width: 8px;
+  height: 8px;
 }
 
 ::-webkit-scrollbar-track {
-  background: var(--color-bg-secondary);
+  background: transparent;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--color-border-bright);
-  border-radius: 3px;
+  background: var(--dn-border-bright);
+  border-radius: 8px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
 }
+
+/* ── Surfaces ─────────────────────────────────────────────── */
+
+/* Cards: a faint top highlight and soft shadow give depth without heavy borders */
+.dn-surface {
+  background-color: var(--dn-bg-card);
+  background-image: linear-gradient(180deg, var(--dn-card-highlight), transparent 120px);
+  box-shadow: inset 0 1px 0 var(--dn-card-highlight), var(--dn-shadow);
+}
+
+/* Glass: sidebars, top bars and dialogs */
+.dn-glass {
+  background-color: color-mix(in srgb, var(--dn-bg-secondary) 82%, transparent);
+  backdrop-filter: saturate(160%) blur(16px);
+  -webkit-backdrop-filter: saturate(160%) blur(16px);
+}
+
+/* Primary actions use the encorp.ai gradient */
+.dn-gradient {
+  background-image: linear-gradient(135deg, var(--dn-accent-soft) -20%, var(--dn-accent) 45%, var(--dn-accent-deep) 120%);
+}
+
+.dn-btn-primary {
+  background-image: linear-gradient(135deg, var(--dn-accent-soft) -30%, var(--dn-accent) 40%, var(--dn-accent-deep) 130%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.25),
+    0 1px 2px rgba(0, 0, 0, 0.2),
+    0 6px 20px -6px color-mix(in srgb, var(--dn-accent) 70%, transparent);
+  transition: filter 150ms ease, box-shadow 150ms ease, transform 150ms ease;
+}
+
+.dn-btn-primary:hover:not(:disabled) {
+  filter: brightness(1.08);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.3),
+    0 1px 2px rgba(0, 0, 0, 0.2),
+    0 10px 28px -6px color-mix(in srgb, var(--dn-accent) 80%, transparent);
+}
+
+.dn-btn-primary:active:not(:disabled) {
+  transform: translateY(0.5px);
+}
+
+.dn-gradient-text {
+  background-image: linear-gradient(100deg, var(--dn-accent-soft), var(--dn-accent) 50%, var(--dn-accent-deep));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* Hairline that fades out at the ends */
+.dn-hairline {
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--dn-border-bright), transparent);
+}
+
+/* Show the right encorp.ai logo for the theme */
+.dn-only-dark { display: none; }
+.dark .dn-only-dark { display: block; }
+.dark .dn-only-light { display: none; }
 
 /* Pulse animation for update available */
 @keyframes pulse-dot {
@@ -49,29 +196,58 @@ body {
 
 /* Glow effect */
 .glow-blue {
-  box-shadow: 0 0 20px rgba(59, 130, 246, 0.15);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--dn-accent) 25%, transparent), 0 8px 32px -8px color-mix(in srgb, var(--dn-accent) 35%, transparent);
 }
 
 .glow-green {
-  box-shadow: 0 0 20px rgba(16, 185, 129, 0.15);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--dn-success) 25%, transparent), 0 8px 32px -8px color-mix(in srgb, var(--dn-success) 30%, transparent);
 }
 
 .glow-orange {
-  box-shadow: 0 0 20px rgba(245, 158, 11, 0.15);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--dn-warning) 25%, transparent), 0 8px 32px -8px color-mix(in srgb, var(--dn-warning) 30%, transparent);
 }
 
 .glow-red {
-  box-shadow: 0 0 20px rgba(239, 68, 68, 0.15);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--dn-danger) 25%, transparent), 0 8px 32px -8px color-mix(in srgb, var(--dn-danger) 30%, transparent);
+}
+
+/* Pages fade up into place */
+@keyframes page-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-page-in {
+  animation: page-in 220ms cubic-bezier(0.2, 0.7, 0.2, 1);
 }
 
 /* Toasts slide up into place */
 @keyframes toast-in {
-  from { opacity: 0; transform: translateY(8px); }
-  to { opacity: 1; transform: translateY(0); }
+  from { opacity: 0; transform: translateY(8px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
 }
 
 .animate-toast-in {
-  animation: toast-in 160ms ease-out;
+  animation: toast-in 180ms cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+/* Dialogs */
+@keyframes dialog-in {
+  from { opacity: 0; transform: translateY(8px) scale(0.985); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.animate-dialog-in {
+  animation: dialog-in 180ms cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.animate-fade-in {
+  animation: fade-in 160ms ease-out;
 }
 
 /* Side drawer on phones */
@@ -81,12 +257,15 @@ body {
 }
 
 .animate-drawer-in {
-  animation: drawer-in 180ms ease-out;
+  animation: drawer-in 200ms cubic-bezier(0.2, 0.7, 0.2, 1);
 }
 
 @media (prefers-reduced-motion: reduce) {
   .animate-toast-in,
   .animate-drawer-in,
+  .animate-dialog-in,
+  .animate-fade-in,
+  .animate-page-in,
   .animate-pulse,
   .pulse-dot {
     animation: none;
