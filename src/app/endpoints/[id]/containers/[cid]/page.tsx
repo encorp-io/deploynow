@@ -1,5 +1,6 @@
 "use client";
 
+import ResourceHistory from "@/components/ResourceHistory";
 import { use, useCallback, useEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
@@ -206,6 +207,7 @@ export default function ContainerPage({ params }: { params: Promise<{ id: string
               ))}
             </div>
           )}
+          <ResourceHistory endpointId={id} containerId={cid} title="Usage history" />
           <Card className="p-5">
             <div className={kv}>
               <span className="text-text-muted">Container id</span><span className="font-mono text-xs">{d.id.slice(0, 12)}</span>
