@@ -8,6 +8,10 @@ versions fix bugs. Every version upgrades the database by itself.
 
 ## [Unreleased]
 
+### Fixed
+- **Passkeys:** about 1 in 110 passkey sign-ins failed with "The passkey couldn't be
+  verified". SimpleWebAuthn is upgraded to v13, which reads every valid signature.
+
 ### Added
 - **Forms and dialogs:** redesigned dropdowns (themed menu with keyboard support and a
   filter for long lists), text fields, checkboxes, radios and toggle switches, and
