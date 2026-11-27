@@ -67,6 +67,7 @@ export const OPERATIONS: Op[] = [
   { method: "get", path: `/projects/${ID}`, summary: "Get a project", tag: "Apps", access: "viewer" },
   { method: "patch", path: `/projects/${ID}`, summary: "Update a project", tag: "Apps", access: "admin" },
   { method: "delete", path: `/projects/${ID}`, summary: "Delete a project", tag: "Apps", access: "admin" },
+  { method: "get", path: `/projects/${ID}/usage`, summary: "What each app in the project uses now, per service and in total, with the last hour as a trend", tag: "Apps", access: "viewer" },
   { method: "post", path: `/projects/${ID}/environments`, summary: "Add an environment", tag: "Apps", access: "admin" },
   { method: "patch", path: `/environments/${ID}`, summary: "Update an environment", tag: "Apps", access: "admin" },
   { method: "delete", path: `/environments/${ID}`, summary: "Delete an environment", tag: "Apps", access: "admin" },
@@ -115,6 +116,8 @@ export const OPERATIONS: Op[] = [
   { method: "post", path: `/tasks/${ID}`, summary: "Run a task now", tag: "Tasks", access: "operator" },
   { method: "delete", path: `/tasks/${ID}`, summary: "Remove a task", tag: "Tasks", access: "admin" },
   { method: "get", path: "/monitoring", summary: "Active and recent alerts, and host usage", tag: "Monitoring", access: "viewer" },
+  { method: "get", path: "/monitoring/usage", summary: "Resource usage of every app per service and in total, plus other containers", tag: "Monitoring", access: "viewer", query: { range: "1h | 6h | 24h | 7d | 30d (default 1h)" } },
+  { method: "get", path: "/overview", summary: "Machines, apps, busiest apps, recent deployments, backups and alerts for the Overview page", tag: "Monitoring", access: "viewer" },
   { method: "get", path: "/metrics", summary: "Prometheus metrics (text format) for hosts, containers, apps and alerts", tag: "Monitoring", access: "viewer" },
 
   // Registries
