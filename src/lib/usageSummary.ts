@@ -231,8 +231,9 @@ export interface HostSample {
 
 /**
  * Host CPU (load per core, %) and memory (% used) per bucket for each endpoint,
- * and for the whole fleet (load and memory added up across hosts). Buckets with
- * no samples repeat the previous value so the lines stay continuous.
+ * and for the whole fleet (load and memory added up across hosts). A bucket with
+ * no samples repeats the previous one so the lines stay continuous; buckets
+ * before a host's first sample stay empty.
  */
 export function hostTrends(samples: HostSample[], from: number, bucketMs: number, n: number) {
   const per = new Map<string, { cpu: number[]; mem: number[]; load: number[]; cpus: number[]; used: number[]; total: number[] }>();
@@ -250,7 +251,8 @@ export function hostTrends(samples: HostSample[], from: number, bucketMs: number
   }
   for (const [id, a] of acc) {
     const row = { cpu: [] as number[], mem: [] as number[], load: [] as number[], cpus: [] as number[], used: [] as number[], total: [] as number[] };
-    let prev = a.find((b) => b.c) ?? { load: 0, cpus: 0, used: 0, total: 0, c: 1 };
+    // Before the first sample nothing was observed: those buckets stay empty (zero, and left out of the fleet)
+    let prev = { load: 0, cpus: 0, used: 0, total: 0, c: 0 };
     for (const b of a) {
       const cur = b.c ? b : prev;
       prev = cur;

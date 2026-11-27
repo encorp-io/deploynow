@@ -89,6 +89,10 @@ describe("helpers", () => {
     expect(t.endpoints.get("a")!.cpu).toEqual([50, 50, 100]); // hour 1 repeats hour 0
     expect(t.endpoints.get("a")!.mem).toEqual([50, 50, 100]);
     expect(t.fleet.cpu).toEqual([25, 50, 75]); // load (2+0, 2+2, 4+2) over 8 cores
+    // A host first seen in hour 1 has nothing before it, and the fleet ignores it there
+    const late = hostTrends([s("a", 0, 2, 500), s("b", 1, 4, 1000)], from, HOUR, 3);
+    expect(late.endpoints.get("b")!.cpu).toEqual([0, 100, 100]);
+    expect(late.fleet.cpu).toEqual([50, 75, 75]);
   });
 });
 
