@@ -333,7 +333,7 @@ model Application {
   volumes             String      @default("[]") // [{name, path}] named volumes
   command             String      @default("")
   restartPolicy       String      @default("unless-stopped")
-  updatePolicy        String      @default("manual") // manual, auto-digest, on-push
+  updatePolicy        String      @default("manual") // manual, on-push (GitHub webhook); "auto-digest" is now autoUpdate
   webhookSecret       String      @default("") // encrypted; GitHub push webhook HMAC secret
   // Pull request previews: each open PR gets its own copy of the app at pr-<n>.<previewDomain>
   previewsEnabled     Boolean     @default(false)
@@ -344,13 +344,27 @@ model Application {
   buildEndpointId     String? // build on this endpoint instead of the target
   registryId          String? // push the built image here; the target pulls it
   pullRegistryId      String? // registry login to pull with; unset = the project's or the shared login for the image's host
+  // Auto-update: check on a schedule and redeploy when the branch has a new commit or an image
+  // (the app's image, or one in its compose file) has a new digest. See lib/apps/autoUpdate.ts
+  autoUpdate          Boolean     @default(false)
+  autoUpdateEvery     Int         @default(15) // minutes between checks
+  autoUpdateDays      String      @default("") // maintenance window weekdays, e.g. "1,2,3,4,5" (0 = Sunday); "" = every day
+  autoUpdateFrom      String      @default("") // window start "HH:MM"; "" = any time
+  autoUpdateTo        String      @default("") // window end "HH:MM"; may be before the start (wraps past midnight)
+  autoUpdateTimezone  String      @default("") // IANA zone for the window; "" = the server's
+  autoUpdateRollback  Boolean     @default(true) // roll back when the update fails or is unhealthy afterwards
+  autoUpdateCheckedAt DateTime?
+  autoUpdatePending   String      @default("") // what the last check found but didn't deploy yet (outside the window, skipped)
+  autoUpdateError     String      @default("") // why the last check failed
+  autoUpdateSkip      String      @default("") // fingerprint of an update that failed; not retried until something newer comes out
   status              String      @default("new") // new, deploying, running, failed, stopped
   currentDeploymentId String?
   createdAt           DateTime    @default(now())
   updatedAt           DateTime    @updatedAt
 
-  deployments Deployment[]
-  domains     Domain[]
+  deployments    Deployment[]
+  domains        Domain[]
+  autoUpdateRuns AutoUpdateRun[]
 
   @@unique([endpointId, slug])
   @@index([environmentId])
@@ -360,13 +374,14 @@ model Deployment {
   id              String      @id @default(cuid())
   applicationId   String
   application     Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
-  trigger         String // manual, push, digest, rollback, redeploy
+  trigger         String // manual, push, digest, rollback, redeploy, preview, auto-update
   status          String      @default("queued") // queued, running, success, failed, cancelled
   commitSha       String      @default("")
   commitMessage   String      @default("")
   imageRef        String      @default("") // image the app runs, digest-pinned when known
   imageDigest     String      @default("")
   renderedCompose String      @default("") // compose apps: rendered file, secret values NOT included
+  serviceImages   String      @default("") // compose apps: {service: image@sha256:…} that ran, so a rollback runs the same images
   envSnapshot     String      @default("[]") // app env at deploy time, secret values still encrypted; used by rollbacks
   containerIds    String      @default("") // comma-separated containers started by this deployment
   error           String      @default("")
@@ -378,6 +393,28 @@ model Deployment {
   finishedAt      DateTime?
 
   @@index([applicationId, createdAt])
+}
+
+/// One automatic update of an app: what changed, the deployment, the health check and any rollback.
+model AutoUpdateRun {
+  id                   String      @id @default(cuid())
+  applicationId        String
+  application          Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  fingerprint          String // identifies the update (commit + image digests), so a failed one isn't retried
+  summary              String      @default("")
+  changes              String      @default("[]") // [{kind: "commit"|"image", name, from, to}]
+  deploymentId         String      @default("")
+  previousDeploymentId String      @default("") // what ran before: the rollback target
+  rollbackDeploymentId String      @default("")
+  // deploying, verifying, success, failed, superseded, rolling-back, rolled-back, rollback-failed, cancelled
+  status               String      @default("deploying")
+  error                String      @default("")
+  verifyAfter          DateTime?
+  createdAt            DateTime    @default(now())
+  finishedAt           DateTime?
+
+  @@index([applicationId, createdAt])
+  @@index([status])
 }
 
 model Domain {
