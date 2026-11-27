@@ -24,6 +24,9 @@ versions fix bugs. Every version upgrades the database by itself.
   with `REQUIRE_2FA=true` on the first start. Existing installs keep their setting.
 
 ### Fixed
+- **Domains behind Cloudflare's proxy:** a domain with HTTPS turned off answered
+  404 when Cloudflare reached the server on port 443 (SSL mode Full). It now has a
+  router on 443 too. Redeploy the app to pick this up.
 - **Turning on 2FA:** after enabling 2FA (or adding a passkey) on a new account, the app kept
   sending you back to the Account page and the sidebar kept asking you to turn it on, until
   you reloaded the page. The sidebar and the page router now pick up the change at once.

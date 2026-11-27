@@ -278,7 +278,15 @@ export function traefikLabels(slug: string, domains: RoutedDomain[], network: st
       labels[`traefik.http.middlewares.${r}-https.redirectscheme.scheme`] = "https";
       labels[`traefik.http.middlewares.${r}-https.redirectscheme.permanent`] = "true";
     } else {
+      // No certificate of our own, but still answer on 443: Cloudflare's proxy (SSL mode Full)
+      // and other TLS-terminating CDNs connect to the origin over HTTPS, and with only a "web"
+      // router Traefik had nothing for them and answered 404. Traefik's default cert serves it.
       labels[`traefik.http.routers.${r}.entrypoints`] = "web";
+      labels[`traefik.http.routers.${r}-tls.rule`] = rule;
+      labels[`traefik.http.routers.${r}-tls.entrypoints`] = "websecure";
+      labels[`traefik.http.routers.${r}-tls.tls`] = "true";
+      labels[`traefik.http.routers.${r}-tls.service`] = r;
+      if (middlewares.length) labels[`traefik.http.routers.${r}-tls.middlewares`] = middlewares.join(",");
     }
   }
   return labels;
