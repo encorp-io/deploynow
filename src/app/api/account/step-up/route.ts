@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { requireUser, readJson } from "@/lib/apiAuth";
 import { verifySecondFactor } from "@/lib/twoFactor";
 import { markStepUp } from "@/lib/sessions";
-import { isRateLimited, recordFailure, recordSuccess } from "@/lib/rateLimit";
+import { isRateLimited, reauthKey, recordFailure, recordSuccess, TOO_MANY_REAUTH } from "@/lib/rateLimit";
 
 /** POST { code }: confirms 2FA for sensitive actions for the next 10 minutes. */
 export async function POST(request: Request) {
@@ -11,9 +11,9 @@ export async function POST(request: Request) {
   if (!gate.ok) return gate.response;
   const { user } = gate;
 
-  const key = `stepup:${user.id}`;
+  const key = reauthKey(user.id);
   if (await isRateLimited(key)) {
-    return NextResponse.json({ error: "Too many attempts. Try again in 15 minutes." }, { status: 429 });
+    return NextResponse.json({ error: TOO_MANY_REAUTH }, { status: 429 });
   }
 
   const row = await prisma.user.findUnique({ where: { id: user.id } });

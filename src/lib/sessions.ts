@@ -18,14 +18,18 @@ export async function createSession(userId: string, ip = "", userAgent = ""): Pr
 
 /**
  * Returns the session with its user if it is still valid, or null if it was
- * revoked, expired, or its user is disabled or gone.
+ * revoked, expired, belongs to someone other than `userId`, or its user is
+ * disabled or gone. Callers that hold a user id from a token must pass it, so a
+ * session id can never stand in for another person's session.
  */
-export async function loadActiveSession(sid: string | undefined | null) {
+export async function loadActiveSession(sid: string | undefined | null, userId?: string | null) {
   if (!sid || typeof sid !== "string") return null;
+  if (userId !== undefined && (!userId || typeof userId !== "string")) return null;
   const s = await prisma.session.findUnique({ where: { id: sid }, include: { user: true } });
   if (!s || s.revokedAt || s.expiresAt.getTime() < Date.now() || !s.user || s.user.disabledAt) {
     return null;
   }
+  if (userId !== undefined && s.userId !== userId) return null;
   if (Date.now() - s.lastSeenAt.getTime() > TOUCH_INTERVAL_MS) {
     await prisma.session.update({ where: { id: sid }, data: { lastSeenAt: new Date() } }).catch(() => {});
   }

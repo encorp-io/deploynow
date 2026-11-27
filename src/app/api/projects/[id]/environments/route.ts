@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { readJson } from "@/lib/apiAuth";
 import { audit, clientIp } from "@/lib/audit";
+import { canPlaceOn, PLACE_DENIED } from "@/lib/apps/placement";
 import { projectGate } from "@/lib/apps/access";
 import { slugify, SLUG_RE } from "@/lib/apps/config";
 
@@ -23,6 +24,7 @@ export async function POST(request: Request, { params }: Params) {
   if (defaultEndpointId && !(await prisma.endpoint.findUnique({ where: { id: defaultEndpointId } }))) {
     return NextResponse.json({ error: "Endpoint not found" }, { status: 404 });
   }
+  if (defaultEndpointId && !canPlaceOn(gate.user, defaultEndpointId)) return NextResponse.json({ error: PLACE_DENIED }, { status: 403 });
   const env = await prisma.environment.create({ data: { projectId: id, name, slug, defaultEndpointId } });
   await audit({ actor: { id: gate.user.id, email: gate.user.email }, ip: clientIp(request), action: "environment.create", message: `${gate.user.email} added environment ${name} to ${gate.project.name}`, targetType: "project", targetId: id });
   return NextResponse.json(env, { status: 201 });

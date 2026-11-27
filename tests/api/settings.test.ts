@@ -33,6 +33,16 @@ describe("GET /api/settings", () => {
     expect(data.vault).toMatchObject({ addr: "", auth: "token", token: "" });
   });
 
+  it("shows the Vault role id and CA only to admins", async () => {
+    const saved = { vaultAddr: "https://vault.x", vaultAuth: "approle", vaultRoleId: "role-123", vaultSecretId: "enc", vaultCaCert: "-----BEGIN CERTIFICATE-----" };
+    mockPrisma.settings.findUnique.mockResolvedValue(saved);
+    signInAs("viewer");
+    const v = (await (await GET()).json()).vault;
+    expect(v).toMatchObject({ addr: "https://vault.x", roleId: "••••••••", secretId: "••••••••", caCert: "" });
+    signInAs("admin");
+    expect((await (await GET()).json()).vault).toMatchObject({ roleId: "role-123", caCert: "-----BEGIN CERTIFICATE-----" });
+  });
+
   it("returns defaults when nothing is saved", async () => {
     signInAs("viewer");
     mockPrisma.settings.findUnique.mockResolvedValue(null);

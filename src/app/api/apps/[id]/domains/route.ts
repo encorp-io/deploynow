@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { readJson } from "@/lib/apiAuth";
 import { audit, clientIp } from "@/lib/audit";
 import { appGate, ID_RE } from "@/lib/apps/access";
+import { hostClaimError } from "@/lib/apps/placement";
 import { basicAuthLine, ConfigError, REDIRECT_CODES, validateHost, validatePath, validateRedirect } from "@/lib/apps/config";
 
 type Params = { params: Promise<{ id: string }> };
@@ -35,6 +36,8 @@ export async function POST(request: Request, { params }: Params) {
   if (app.endpoint.proxyMode === "none") {
     return NextResponse.json({ error: `Set up the edge proxy on ${app.endpoint.name} first (Endpoints → ${app.endpoint.name})` }, { status: 409 });
   }
+  const claim = await hostClaimError(host, app.environment.projectId);
+  if (claim) return NextResponse.json({ error: claim }, { status: 409 });
   if (await prisma.domain.findUnique({ where: { host_path: { host, path } } })) {
     return NextResponse.json({ error: `${host}${path === "/" ? "" : path} is already used by an app` }, { status: 409 });
   }

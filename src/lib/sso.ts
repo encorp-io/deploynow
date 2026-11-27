@@ -149,6 +149,13 @@ export interface Claims extends JWTPayload {
   name?: string;
   tid?: string;
   nonce?: string;
+  /** Microsoft optional claim: the email's domain is verified by the tenant that issued the token */
+  xms_edov?: boolean | string | number;
+}
+
+/** A Microsoft provider that accepts accounts from any tenant, not just the admin's own. */
+export function isMultiTenant(provider: Pick<SsoProvider, "type" | "tenant">): boolean {
+  return provider.type === "microsoft" && MS_MULTI_TENANT.includes(provider.tenant.toLowerCase());
 }
 
 /** Verify an ID token from the provider. */
@@ -170,14 +177,20 @@ export async function verifyIdToken(provider: SsoProvider, idToken: string, nonc
 
 /** The email the provider vouches for, or "" if it can't be trusted to match accounts. */
 export function trustedEmail(provider: SsoProvider, claims: Claims): string {
-  const email = String(claims.email ?? (provider.type === "microsoft" ? (claims.preferred_username ?? "") : "")).toLowerCase().trim();
+  const multi = isMultiTenant(provider);
+  // preferred_username is a display hint that any tenant admin can set; only a
+  // single tenant (ours) is trusted to vouch for it.
+  const raw = claims.email ?? (provider.type === "microsoft" && !multi ? (claims.preferred_username ?? "") : "");
+  const email = String(raw).toLowerCase().trim();
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return "";
-  const domain = email.split("@")[1];
-  const allowed = provider.allowedDomains ? provider.allowedDomains.split(",") : [];
   if (provider.type === "microsoft") {
-    // Entra ID doesn't send email_verified; the tenant owns the address. Trust it for a
-    // single tenant, or for multi-tenant setups only within the allowed domains.
-    return !MS_MULTI_TENANT.includes(provider.tenant) || allowed.includes(domain) ? email : "";
+    // Entra ID doesn't send email_verified. In a single tenant the tenant is ours and owns
+    // the address. With "common" or "organizations" any tenant can sign in, and its admin
+    // can put any address (owner@yourcompany.com) on an account ("nOAuth"). So there the
+    // address is trusted only when Microsoft says the issuing tenant verified the
+    // domain (the xms_edov optional claim, which has to be added to the app registration).
+    if (!multi) return email;
+    return [true, "true", 1, "1"].includes(claims.xms_edov as never) ? email : "";
   }
   return claims.email_verified === true || claims.email_verified === "true" ? email : "";
 }
@@ -186,15 +199,24 @@ export function trustedEmail(provider: SsoProvider, claims: Claims): string {
 export async function resolveUser(provider: SsoProvider, claims: Claims): Promise<User> {
   const email = trustedEmail(provider, claims);
   const allowed = provider.allowedDomains ? provider.allowedDomains.split(",") : [];
-  if (allowed.length && (!email || !allowed.includes(email.split("@")[1]))) {
+  const linked = await prisma.userIdentity.findUnique({ where: { providerId_subject: { providerId: provider.id, subject: String(claims.sub) } }, include: { user: true } });
+  // A multi-tenant Microsoft token without xms_edov has no address we can check against
+  // the allowed domains. An identity linked earlier is still matched by its subject,
+  // so it keeps signing in; anything new needs the verified address.
+  const linkedWithoutEmail = !!linked && !email && isMultiTenant(provider);
+  if (allowed.length && !linkedWithoutEmail && (!email || !allowed.includes(email.split("@")[1]))) {
     throw new SsoError(`Sign-in with ${provider.name} is limited to ${allowed.map((d) => "@" + d).join(", ")} addresses`);
   }
-  const linked = await prisma.userIdentity.findUnique({ where: { providerId_subject: { providerId: provider.id, subject: String(claims.sub) } }, include: { user: true } });
   if (linked) {
-    await prisma.userIdentity.update({ where: { id: linked.id }, data: { lastUsedAt: new Date(), email } });
+    await prisma.userIdentity.update({ where: { id: linked.id }, data: { lastUsedAt: new Date(), ...(email ? { email } : {}) } });
     return linked.user;
   }
-  if (!email) throw new SsoError(`${provider.name} didn't confirm an email address for this account`);
+  if (!email) {
+    if (isMultiTenant(provider)) {
+      throw new SsoError(`${provider.name} didn't confirm that this account's organization owns its email address. Ask an admin to add the email and xms_edov optional claims to the app registration, or to use a single tenant.`);
+    }
+    throw new SsoError(`${provider.name} didn't confirm an email address for this account`);
+  }
   let user = await prisma.user.findUnique({ where: { email } });
   if (!user) {
     if (!provider.autoCreate) throw new SsoError(`There is no DeployNow account for ${email}. Ask an admin to invite you.`);

@@ -20,7 +20,7 @@ vi.mock("@/lib/auth", () => ({ auth: async () => h.session }));
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser, requireStepUp } from "@/lib/apiAuth";
 import { registerClient, validRedirectUri, redirectAllowed, authenticateClient, OAuthError } from "@/lib/oauth/clients";
-import { approve, checkAuthorizeRequest, exchangeCode, pkceChallenge, refreshTokens, resolveAccessToken, revokeGrant, revokeToken, listGrants, resourceMatches } from "@/lib/oauth/server";
+import { approve, checkAuthorizeRequest, errorsMayRedirect, exchangeCode, pkceChallenge, refreshTokens, resolveAccessToken, revokeGrant, revokeToken, listGrants, resourceMatches } from "@/lib/oauth/server";
 import { maxConnectionRole, roleForScope, scopeForRole } from "@/lib/oauth/config";
 import * as tokenRoute from "@/app/api/oauth/token/route";
 import * as registerRoute from "@/app/api/oauth/register/route";
@@ -175,6 +175,24 @@ describe("authorization code flow", () => {
     expect(new URL((wrongResource as { redirect: string }).redirect).searchParams.get("error")).toBe("invalid_target");
     const ok = await checkAuthorizeRequest(authorizeParams(response.client_id, challenge), ctx);
     expect(ok).toMatchObject({ ok: true, req: { requestedRole: "operator" } });
+  });
+
+  it("sends errors back only to apps the person already connected (no open redirect)", async () => {
+    const { response } = await registerClient({ client_name: "Stranger", redirect_uris: ["https://evil.example/cb"], token_endpoint_auth_method: "none" });
+    const bad = await checkAuthorizeRequest(authorizeParams(response.client_id, "", { redirect_uri: "https://evil.example/cb" }), ctx);
+    expect(bad).toMatchObject({ ok: false, clientId: expect.any(String), description: expect.stringMatching(/PKCE/) });
+    expect(await errorsMayRedirect(admin.id, (bad as { clientId: string }).clientId)).toBe(false);
+    // Through the consent API: an error, not a redirect
+    const s = await prisma.session.create({ data: { userId: admin.id, expiresAt: new Date(Date.now() + 3_600_000) } });
+    h.session = { user: { id: admin.id, sid: s.id } };
+    const res = await authorizeRoute.POST(req(`${ISS}/api/oauth/authorize`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ query: authorizeParams(response.client_id, "", { redirect_uri: "https://evil.example/cb" }).toString(), decision: "allow", role: "viewer" }) }));
+    expect(res.status).toBe(400);
+    expect((await res.json()).redirect).toBeUndefined();
+    // Once connected, the app hears about its own mistakes
+    const c = await connect(admin);
+    expect(await errorsMayRedirect(admin.id, c.client.id)).toBe(true);
+    await revokeGrant(c.grant.id, admin.id);
+    expect(await errorsMayRedirect(admin.id, c.client.id)).toBe(false);
   });
 
   it("won't grant more than the person has", async () => {

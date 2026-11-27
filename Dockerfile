@@ -1,7 +1,7 @@
 # ─── Stage 1: deps ────────────────────────────────────────────────────────────
 # Pin digest to prevent silent supply-chain substitution.
 # Update intentionally: docker pull node:22-alpine && docker inspect --format='{{index .RepoDigests 0}}' node:22-alpine
-FROM node:22-alpine@sha256:9bef0ef1e268f60627da9ba7d7605e8831d5b56ad07487d24d1aa386336d1944 AS deps
+FROM node:26-alpine@sha256:6bd9ab43c0ec0190ca7b2d193906cb8b7edf6e7f4afa43ddeccd6452710bffb5 AS deps
 WORKDIR /app
 
 RUN apk add --no-cache libc6-compat openssl
@@ -12,7 +12,7 @@ COPY prisma ./prisma/
 RUN npm ci
 
 # ─── Stage 2: builder ─────────────────────────────────────────────────────────
-FROM node:22-alpine@sha256:9bef0ef1e268f60627da9ba7d7605e8831d5b56ad07487d24d1aa386336d1944 AS builder
+FROM node:26-alpine@sha256:6bd9ab43c0ec0190ca7b2d193906cb8b7edf6e7f4afa43ddeccd6452710bffb5 AS builder
 WORKDIR /app
 
 RUN apk add --no-cache openssl
@@ -35,7 +35,7 @@ RUN npx next build
 RUN node scripts/build-updater.cjs /app/updater
 
 # ─── Stage 3: runner ──────────────────────────────────────────────────────────
-FROM node:22-alpine@sha256:9bef0ef1e268f60627da9ba7d7605e8831d5b56ad07487d24d1aa386336d1944 AS runner
+FROM node:26-alpine@sha256:6bd9ab43c0ec0190ca7b2d193906cb8b7edf6e7f4afa43ddeccd6452710bffb5 AS runner
 WORKDIR /app
 
 # openssl  — needed for self-signed cert generation at startup

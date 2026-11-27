@@ -9,10 +9,10 @@ import proxy, { config } from "@/proxy";
 type Handler = (req: NextRequest & { auth: unknown }) => Response;
 const handler = proxy as unknown as Handler;
 
-function call(path: string, { method = "GET", auth = null as unknown, origin = "", authorization = "" } = {}) {
+function call(path: string, { method = "GET", auth = null as unknown, origin = "", authorization = "", headers = {} as Record<string, string> } = {}) {
   const req = new NextRequest(`http://127.0.0.1:3001${path}`, {
     method,
-    headers: { host: "deploy.example.com:9444", "x-forwarded-proto": "https", ...(origin ? { origin } : {}), ...(authorization ? { authorization } : {}) },
+    headers: { host: "deploy.example.com:9444", "x-forwarded-proto": "https", ...(origin ? { origin } : {}), ...(authorization ? { authorization } : {}), ...headers },
   }) as NextRequest & { auth: unknown };
   req.auth = auth;
   return handler(req);
@@ -29,6 +29,17 @@ describe("proxy", () => {
   it("blocks cross-origin writes and allows same-origin ones", () => {
     expect(call("/api/settings", { method: "PUT", auth: signedIn, origin: "https://evil.example" }).status).toBe(403);
     expect(call("/api/settings", { method: "PUT", auth: signedIn, origin: "https://deploy.example.com:9444" }).status).toBe(200);
+  });
+
+  it("falls back to Sec-Fetch-Site for cookie writes without an Origin", () => {
+    const put = (headers: Record<string, string>) => call("/api/settings", { method: "PUT", auth: signedIn, headers }).status;
+    expect(put({ cookie: "authjs.session-token=x", "sec-fetch-site": "cross-site" })).toBe(403);
+    expect(put({ cookie: "authjs.session-token=x", "sec-fetch-site": "same-site" })).toBe(403);
+    expect(put({ cookie: "authjs.session-token=x", "sec-fetch-site": "same-origin" })).toBe(200);
+    expect(put({ cookie: "authjs.session-token=x", "sec-fetch-site": "none" })).toBe(200);
+    expect(put({ cookie: "authjs.session-token=x" })).toBe(200);
+    // No cookie: nothing for a forged request to ride on
+    expect(put({ "sec-fetch-site": "cross-site" })).toBe(200);
   });
 
   it("sends signed-out visitors to login, and APIs get 401", () => {

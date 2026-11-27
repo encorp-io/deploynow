@@ -38,6 +38,13 @@ describe("sessions", () => {
     expect(mockPrisma.session.update).not.toHaveBeenCalled();
   });
 
+  it("refuses a session that belongs to someone other than the token's user", async () => {
+    mockPrisma.session.findUnique.mockResolvedValue({ id: "s", userId: "alice", revokedAt: null, expiresAt: future(), lastSeenAt: new Date(), user: { disabledAt: null } });
+    expect(await loadActiveSession("s", "alice")).not.toBeNull();
+    expect(await loadActiveSession("s", "mallory")).toBeNull();
+    expect(await loadActiveSession("s", null)).toBeNull();
+  });
+
   it("touches lastSeenAt at most once a minute", async () => {
     mockPrisma.session.findUnique.mockResolvedValue({ id: "s", revokedAt: null, expiresAt: future(), lastSeenAt: new Date(Date.now() - 120_000), user: { disabledAt: null } });
     await loadActiveSession("s");
@@ -71,12 +78,18 @@ describe("apiAuth", () => {
   it("re-checks the database on every request", async () => {
     mockAuth.mockResolvedValue({ user: { id: "u", sid: "s" } });
     mockPrisma.user.findUnique.mockResolvedValue(dbUser);
-    mockPrisma.session.findUnique.mockResolvedValue({ id: "s", revokedAt: null, stepUpAt: null });
+    const live = { id: "s", userId: "u", revokedAt: null, stepUpAt: null, expiresAt: future() };
+    mockPrisma.session.findUnique.mockResolvedValue(live);
     expect(await getCurrentUser()).toMatchObject({ role: "operator", totpEnabled: true, bindings: [{ role: "admin", scopeId: "ep" }] });
 
-    mockPrisma.session.findUnique.mockResolvedValue({ id: "s", revokedAt: new Date() });
+    mockPrisma.session.findUnique.mockResolvedValue({ ...live, revokedAt: new Date() });
     expect(await getCurrentUser()).toBeNull();
-    mockPrisma.session.findUnique.mockResolvedValue({ id: "s", revokedAt: null });
+    mockPrisma.session.findUnique.mockResolvedValue({ ...live, expiresAt: new Date(Date.now() - 1) });
+    expect(await getCurrentUser()).toBeNull();
+    // Someone else's session id next to my user id
+    mockPrisma.session.findUnique.mockResolvedValue({ ...live, userId: "someone-else" });
+    expect(await getCurrentUser()).toBeNull();
+    mockPrisma.session.findUnique.mockResolvedValue(live);
     mockPrisma.user.findUnique.mockResolvedValue({ ...dbUser, disabledAt: new Date() });
     expect(await getCurrentUser()).toBeNull();
   });
@@ -84,7 +97,7 @@ describe("apiAuth", () => {
   it("gates on permission and endpoint scope", async () => {
     mockAuth.mockResolvedValue({ user: { id: "u", sid: "s" } });
     mockPrisma.user.findUnique.mockResolvedValue(dbUser);
-    mockPrisma.session.findUnique.mockResolvedValue({ id: "s", revokedAt: null, stepUpAt: null });
+    mockPrisma.session.findUnique.mockResolvedValue({ id: "s", userId: "u", revokedAt: null, stepUpAt: null, expiresAt: future() });
     expect((await requireUser("container.remove", { endpointId: "ep" })).ok).toBe(true);
     const denied = await requireUser("container.remove", { endpointId: "other" });
     expect(denied.ok).toBe(false);
