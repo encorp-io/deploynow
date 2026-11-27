@@ -6,7 +6,7 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/apiAuth";
 import { issuerUrl, maxConnectionRole, mcpEnabled, mcpResourceUrl, SCOPES } from "@/lib/oauth/config";
-import { checkAuthorizeRequest } from "@/lib/oauth/server";
+import { checkAuthorizeRequest, errorsMayRedirect } from "@/lib/oauth/server";
 import { roleAtLeast } from "@/lib/rbac";
 import ConsentForm from "./ConsentForm";
 import AuthShell from "@/components/AuthShell";
@@ -37,6 +37,7 @@ export default async function AuthorizePage({ searchParams }: { searchParams: Pr
   const check = await checkAuthorizeRequest(params, ctx);
   if (!check.ok) {
     if ("fatal" in check) return <Problem text={check.fatal} />;
+    if (!(await errorsMayRedirect(user.id, check.clientId))) return <Problem text={`The app sent a request DeployNow can't accept: ${check.description}`} />;
     redirect(check.redirect);
   }
   const { req } = check;

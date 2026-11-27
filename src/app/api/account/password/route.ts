@@ -4,12 +4,15 @@ import { requireUser, readJson } from "@/lib/apiAuth";
 import { hashPassword, validatePasswordStrength, verifyPassword } from "@/lib/password";
 import { revokeAllSessions } from "@/lib/sessions";
 import { audit, clientIp } from "@/lib/audit";
+import { isRateLimited, reauthKey, recordFailure, recordSuccess, TOO_MANY_REAUTH } from "@/lib/rateLimit";
 
 /** POST { currentPassword, newPassword }: signs out every other session. */
 export async function POST(request: Request) {
   const gate = await requireUser();
   if (!gate.ok) return gate.response;
   const { user } = gate;
+  const key = reauthKey(user.id);
+  if (await isRateLimited(key)) return NextResponse.json({ error: TOO_MANY_REAUTH }, { status: 429 });
 
   const body = await readJson(request);
   const current = typeof body.currentPassword === "string" ? body.currentPassword : "";
@@ -20,9 +23,11 @@ export async function POST(request: Request) {
 
   const row = await prisma.user.findUnique({ where: { id: user.id } });
   if (!row || !(await verifyPassword(current, row.password))) {
+    await recordFailure(key);
     return NextResponse.json({ error: "Current password is wrong" }, { status: 400 });
   }
 
+  await recordSuccess(key);
   await prisma.user.update({ where: { id: user.id }, data: { password: await hashPassword(next as string) } });
   const revoked = await revokeAllSessions(user.id, user.sid);
   await audit({

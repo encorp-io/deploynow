@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { readJson } from "@/lib/apiAuth";
 import { audit, clientIp } from "@/lib/audit";
+import { canPlaceOn, PLACE_DENIED } from "@/lib/apps/placement";
 import { ID_RE, notFound, projectGate } from "@/lib/apps/access";
 
 type Params = { params: Promise<{ id: string }> };
@@ -19,6 +20,7 @@ export async function PATCH(request: Request, { params }: Params) {
   const body = await readJson(request);
   const defaultEndpointId = typeof body.endpointId === "string" && body.endpointId ? body.endpointId : null;
   if (defaultEndpointId && !(await prisma.endpoint.findUnique({ where: { id: defaultEndpointId } }))) return notFound("Endpoint");
+  if (defaultEndpointId && defaultEndpointId !== env.defaultEndpointId && !canPlaceOn(gate.user, defaultEndpointId)) return NextResponse.json({ error: PLACE_DENIED }, { status: 403 });
   const updated = await prisma.environment.update({ where: { id }, data: { defaultEndpointId } });
   return NextResponse.json(updated);
 }

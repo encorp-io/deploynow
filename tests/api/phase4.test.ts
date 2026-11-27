@@ -245,9 +245,9 @@ describe("build server and previews settings", () => {
     expect((await apps.POST(req("POST", { environmentId: envId, name: "img", image: "nginx", buildEndpointId: builderId, registryId: reg.id }))).status).toBe(400);
     expect((await apps.POST(req("POST", { environmentId: envId, name: "img2", image: "nginx", previewsEnabled: true, previewDomain: "p.example.com" }))).status).toBe(400);
     expect((await appRoute.PATCH(req("PATCH", { previewsEnabled: true }), p({ id: ok.body.id }))).status).toBe(400);
-    expect((await appRoute.PATCH(req("PATCH", { previewsEnabled: true, previewDomain: "Preview.Example.com" }), p({ id: ok.body.id }))).status).toBe(200);
+    expect((await appRoute.PATCH(req("PATCH", { previewsEnabled: true, previewDomain: "Preview.Builds.Example.com" }), p({ id: ok.body.id }))).status).toBe(200);
     const view = await json(await appRoute.GET(req("GET"), p({ id: ok.body.id })));
-    expect(view.body).toMatchObject({ previewsEnabled: true, previewDomain: "preview.example.com", registryId: reg.id });
+    expect(view.body).toMatchObject({ previewsEnabled: true, previewDomain: "preview.builds.example.com", registryId: reg.id });
   });
 });
 

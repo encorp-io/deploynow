@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { encryptSecret } from "@/lib/secretsCrypto";
 import { requireUser, readJson } from "@/lib/apiAuth";
+import { can } from "@/lib/rbac";
 import { audit, clientIp } from "@/lib/audit";
 import { validateVaultAddr } from "@/lib/vault";
 import { defaultAgentUrl } from "@/lib/agent/hub";
@@ -13,6 +14,8 @@ export async function GET() {
   if (!gate.ok) return gate.response;
 
   const settings = await prisma.settings.findUnique({ where: { id: "singleton" } });
+  // Vault connection details (role id, CA, namespace) are for the people who manage settings
+  const manager = can(gate.user, "settings.manage");
   return NextResponse.json({
     githubUser: settings?.githubUser ?? "",
     githubToken: settings?.githubToken ? MASK : "",
@@ -29,9 +32,9 @@ export async function GET() {
       namespace: settings?.vaultNamespace ?? "",
       auth: settings?.vaultAuth ?? "token",
       token: settings?.vaultToken ? MASK : "",
-      roleId: settings?.vaultRoleId ?? "",
+      roleId: manager ? (settings?.vaultRoleId ?? "") : settings?.vaultRoleId ? MASK : "",
       secretId: settings?.vaultSecretId ? MASK : "",
-      caCert: settings?.vaultCaCert ?? "",
+      caCert: manager ? (settings?.vaultCaCert ?? "") : "",
     },
   });
 }

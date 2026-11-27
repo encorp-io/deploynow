@@ -19,7 +19,7 @@ vi.mock("@/lib/sessions", async (orig) => ({
   revokeSession: vi.fn(async () => true),
 }));
 vi.mock("@/lib/twoFactor", async (orig) => ({ ...(await orig<typeof import("@/lib/twoFactor")>()), verifySecondFactor: vi.fn() }));
-vi.mock("@/lib/rateLimit", () => ({ isRateLimited: vi.fn(async () => false), recordFailure: vi.fn(), recordSuccess: vi.fn() }));
+vi.mock("@/lib/rateLimit", async (orig) => ({ ...(await orig<typeof import("@/lib/rateLimit")>()), isRateLimited: vi.fn(async () => false), recordFailure: vi.fn(), recordSuccess: vi.fn() }));
 vi.mock("@/lib/password", async (orig) => ({
   ...(await orig<typeof import("@/lib/password")>()),
   hashPassword: vi.fn(async () => "scrypt$new"),
@@ -30,6 +30,7 @@ import { signInAs, signOut } from "../helpers/apiAuthMock";
 import { markStepUp, revokeAllSessions, revokeSession } from "@/lib/sessions";
 import { verifySecondFactor } from "@/lib/twoFactor";
 import { isRateLimited, recordFailure } from "@/lib/rateLimit";
+import { verifyPassword } from "@/lib/password";
 import { currentStep, totpAt } from "@/lib/totp";
 import { GET as ACCOUNT, PATCH as RENAME } from "@/app/api/account/route";
 import { POST as TWOFA } from "@/app/api/account/2fa/route";
@@ -138,6 +139,16 @@ describe("password and sessions", () => {
     const res = await PASSWORD(json("POST", { currentPassword: "the-right-password", newPassword: "a-new-long-password" }));
     expect(await res.json()).toEqual({ success: true, revokedSessions: 2 });
     expect(revokeAllSessions).toHaveBeenCalledWith("cuser0000000000000000000001", "csess0000000000000000000001");
+  });
+
+  it("limits guesses at the current password, sharing the step-up budget", async () => {
+    signInAs("viewer");
+    row();
+    expect((await PASSWORD(json("POST", { currentPassword: "wrong", newPassword: "a-new-long-password" }))).status).toBe(400);
+    expect(recordFailure).toHaveBeenCalledWith("stepup:cuser0000000000000000000001");
+    vi.mocked(isRateLimited).mockResolvedValueOnce(true);
+    expect((await PASSWORD(json("POST", { currentPassword: "the-right-password", newPassword: "a-new-long-password" }))).status).toBe(429);
+    expect(verifyPassword).toHaveBeenCalledTimes(1);
   });
 
   it("lists sessions and marks the current one", async () => {
