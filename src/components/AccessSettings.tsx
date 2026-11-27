@@ -131,7 +131,7 @@ export function SsoSettings() {
             <input type="checkbox" checked={form.autoCreate} onChange={(e) => set("autoCreate", e.target.checked)} /> Create an account on first sign-in for people in the allowed domains
           </label>
           <label className="flex items-center gap-2 text-xs text-text-secondary">
-            <input type="checkbox" checked={form.enabled} onChange={(e) => set("enabled", e.target.checked)} /> Show on the sign-in page
+            <input type="checkbox" role="switch" checked={form.enabled} onChange={(e) => set("enabled", e.target.checked)} /> Show on the sign-in page
           </label>
           <div className="flex gap-2">
             <Button type="button" onClick={save} loading={busy}>{form.id ? "Save" : "Add provider"}</Button>

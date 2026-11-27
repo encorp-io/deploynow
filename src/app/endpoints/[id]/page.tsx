@@ -4,7 +4,7 @@ import { use, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { clsx } from "clsx";
-import { Play, Square, RotateCw, Trash2, Pencil, RefreshCw, Eraser } from "lucide-react";
+import { Eraser, Pencil, Play, RefreshCw, RotateCw, Server, Square, Trash2 } from "lucide-react";
 import { useApi } from "@/components/AppShell";
 import ProxyCard from "@/components/ProxyCard";
 import AgentCard from "@/components/AgentCard";
@@ -175,7 +175,7 @@ export default function EndpointPage({ params }: { params: Promise<{ id: string 
             onChange={(e) => setFilter(e.target.value)}
             placeholder={`Filter ${tab}…`}
             aria-label={`Filter ${tab}`}
-            className="flex-1 md:w-56 px-3 py-1.5 bg-bg-secondary border border-border rounded-lg text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-accent"
+            className="dn-input flex-1 md:w-56"
           />
           <Button variant="secondary" loading={busy === "prune"} onClick={() => prune(tab)} title={`Remove unused ${tab}`}><Eraser className="w-4 h-4" /> Prune</Button>
         </div>
@@ -264,7 +264,7 @@ export default function EndpointPage({ params }: { params: Promise<{ id: string 
       </Card>
 
       {editing && (
-        <Modal title={`Edit ${endpoint.name}`} onClose={() => setEditing(false)} wide>
+        <Modal icon={Server} title={`Edit ${endpoint.name}`} onClose={() => setEditing(false)} wide>
           <EndpointForm
             api={api}
             existing={endpoint}

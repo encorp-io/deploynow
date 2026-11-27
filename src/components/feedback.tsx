@@ -1,8 +1,8 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { clsx } from "clsx";
-import { AlertTriangle, CheckCircle2, Info, X, XCircle } from "lucide-react";
+import { AlertTriangle, CheckCircle2, HelpCircle, Info, X, XCircle } from "lucide-react";
 import { Button, Input, Modal } from "./ui";
 
 /* ── Confirm dialog ───────────────────────────────────────────────────────── */
@@ -34,30 +34,38 @@ function ConfirmDialog({ opts, onDone }: { opts: ConfirmOptions; onDone: (ok: bo
   const [typed, setTyped] = useState("");
   const danger = opts.danger ?? true;
   const blocked = !!opts.typeToConfirm && typed.trim() !== opts.typeToConfirm;
+  const formId = useId();
   return (
-    <Modal title={opts.title} onClose={() => onDone(false)}>
+    <Modal
+      title={opts.title}
+      icon={danger ? AlertTriangle : HelpCircle}
+      tone={danger ? "danger" : "accent"}
+      description={opts.message}
+      onClose={() => onDone(false)}
+      footer={
+        <>
+          <Button type="button" variant="ghost" onClick={() => onDone(false)}>Cancel</Button>
+          <Button type="submit" form={formId} variant={danger ? "danger-solid" : "primary"} disabled={blocked} autoFocus={!opts.typeToConfirm}>
+            {opts.confirmLabel ?? "Confirm"}
+          </Button>
+        </>
+      }
+    >
       <form
+        id={formId}
         onSubmit={(e) => {
           e.preventDefault();
           if (!blocked) onDone(true);
         }}
-        className="space-y-4"
       >
-        {opts.message && <div className="text-sm text-text-secondary">{opts.message}</div>}
         {opts.typeToConfirm && (
           <label className="block">
-            <span className="block text-xs text-text-secondary mb-1.5">
-              Type <code className="text-text-primary font-mono">{opts.typeToConfirm}</code> to confirm
+            <span className="block text-[13px] text-text-secondary mb-1.5">
+              Type <code className="text-text-primary font-mono bg-bg-secondary border border-border rounded-md px-1.5 py-0.5">{opts.typeToConfirm}</code> to confirm
             </span>
-            <Input autoFocus value={typed} onChange={(e) => setTyped(e.target.value)} autoComplete="off" spellCheck={false} />
+            <Input autoFocus value={typed} onChange={(e) => setTyped(e.target.value)} autoComplete="off" spellCheck={false} aria-invalid={typed.length > 0 && blocked ? true : undefined} />
           </label>
         )}
-        <div className="flex justify-end gap-2">
-          <Button type="button" variant="ghost" onClick={() => onDone(false)}>Cancel</Button>
-          <Button type="submit" variant={danger ? "danger-solid" : "primary"} disabled={blocked} autoFocus={!opts.typeToConfirm}>
-            {opts.confirmLabel ?? "Confirm"}
-          </Button>
-        </div>
       </form>
     </Modal>
   );

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Network } from "lucide-react";
 import { useApi } from "./AppShell";
-import { Badge, Button, Card, ErrorText, Field, Input } from "./ui";
+import { Badge, Button, Card, ErrorText, Field, Input, Select } from "./ui";
 
 interface ProxyInfo {
   mode: "none" | "managed" | "external";
@@ -85,10 +85,10 @@ export default function ProxyCard({ endpointId }: { endpointId: string }) {
             <Input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="ops@example.com" />
           </Field>
           <Field label="How to prove domain ownership" hint="Use Cloudflare DNS when port 80 isn't reachable, or the domain sits behind Cloudflare's proxy">
-            <select value={challenge} onChange={(e) => setChallenge(e.target.value as ProxyInfo["challenge"])} className="w-full px-3 py-2 bg-bg-secondary border border-border rounded-lg text-sm text-text-primary">
+            <Select value={challenge} onChange={(e) => setChallenge(e.target.value as ProxyInfo["challenge"])}>
               <option value="http">HTTP challenge on port 80</option>
               <option value="cloudflare">DNS challenge with Cloudflare</option>
-            </select>
+            </Select>
           </Field>
           {challenge === "cloudflare" && (
             <Field label="Cloudflare API token" hint="Create one with Zone → DNS → Edit for the zones you use">

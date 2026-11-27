@@ -51,7 +51,7 @@ export default function ConsentForm(props: { query: string; clientName: string; 
           <legend className="text-xs font-medium text-text-secondary mb-2">What may it do?</legend>
           {props.options.map((o) => (
             <label key={o.role} className={`flex gap-3 p-3 rounded-xl border cursor-pointer transition-colors ${role === o.role ? "border-accent/60 bg-accent/10 ring-1 ring-inset ring-accent/20" : "border-border bg-bg-secondary/50 hover:border-border-bright"}`}>
-              <input type="radio" name="role" value={o.role} checked={role === o.role} onChange={() => setRole(o.role)} className="mt-1 accent-[var(--color-accent)]" />
+              <input type="radio" name="role" value={o.role} checked={role === o.role} onChange={() => setRole(o.role)} className="mt-0.5" />
               <span>
                 <span className="block text-sm font-medium text-text-primary">{o.label}</span>
                 <span className="block text-xs text-text-muted">{o.text}</span>

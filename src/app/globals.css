@@ -31,6 +31,17 @@
   --dn-card-highlight: rgba(255, 255, 255, 0.9);
   --dn-shadow: 0 1px 2px rgba(16, 24, 40, 0.04), 0 4px 16px -6px rgba(16, 24, 40, 0.08);
   --dn-shadow-lg: 0 24px 64px -16px rgba(16, 24, 40, 0.25);
+  /* Form fields, menus and dialogs */
+  --dn-field-bg: #f8fafd;
+  --dn-field-bg-focus: #ffffff;
+  --dn-field-border: #dce3ee;
+  --dn-field-border-hover: #c3cde0;
+  --dn-field-inset: inset 0 1px 2px rgba(16, 24, 40, 0.05);
+  --dn-check-border: #c3cde0;
+  --dn-switch-off: #dfe5ef;
+  --dn-popover-bg: #ffffff;
+  --dn-backdrop: rgba(15, 23, 42, 0.38);
+  --dn-dialog-glow: rgba(29, 156, 255, 0.10);
   color-scheme: light;
 }
 
@@ -56,6 +67,16 @@
   --dn-card-highlight: rgba(255, 255, 255, 0.04);
   --dn-shadow: 0 1px 0 rgba(255, 255, 255, 0.02), 0 8px 24px -12px rgba(0, 0, 0, 0.6);
   --dn-shadow-lg: 0 32px 80px -20px rgba(0, 0, 0, 0.8);
+  --dn-field-bg: #080b15;
+  --dn-field-bg-focus: #0a0e1a;
+  --dn-field-border: #1f2739;
+  --dn-field-border-hover: #313c5a;
+  --dn-field-inset: inset 0 1px 2px rgba(0, 0, 0, 0.45);
+  --dn-check-border: #344060;
+  --dn-switch-off: #1c2436;
+  --dn-popover-bg: #0e1220;
+  --dn-backdrop: rgba(2, 4, 10, 0.66);
+  --dn-dialog-glow: rgba(29, 156, 255, 0.16);
   color-scheme: dark;
 }
 
@@ -261,6 +282,8 @@ h1, h2, h3 {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .animate-pop-in,
+  .animate-sheet-in,
   .animate-toast-in,
   .animate-drawer-in,
   .animate-dialog-in,
@@ -273,7 +296,430 @@ h1, h2, h3 {
 }
 
 /* Visible keyboard focus everywhere */
-:where(a, button, input, select, textarea, [tabindex]):focus-visible {
+/* Fields, checkboxes and radios draw their own focus ring (see the layers above) */
+:where(a, button, input, select, textarea, [tabindex]):not(.dn-input, [type="checkbox"], [type="radio"]):focus-visible {
   outline: 2px solid color-mix(in srgb, var(--color-accent) 70%, transparent);
   outline-offset: 2px;
+}
+
+/* ── Form fields ──────────────────────────────────────────────
+ * One look for inputs, textareas and select triggers. At rest the field is a
+ * quiet inset well; on focus the border lights up with the encorp.ai gradient
+ * and a soft halo. In a layer so utilities (pl-9, w-24, text-center…) still win.
+ */
+@layer components {
+  .dn-input {
+    display: block;
+    width: 100%;
+    min-height: 2.5rem;
+    padding: 0.5rem 0.8rem;
+    font-size: 0.875rem;
+    line-height: 1.25rem;
+    color: var(--dn-text);
+    border: 1px solid var(--dn-field-border);
+    border-radius: 12px;
+    background-color: var(--dn-field-bg);
+    box-shadow: var(--dn-field-inset);
+    transition: border-color 160ms ease, box-shadow 200ms ease, background-color 160ms ease;
+    outline: none;
+  }
+
+  .dn-input::placeholder {
+    color: color-mix(in srgb, var(--dn-text-muted) 80%, transparent);
+  }
+
+  .dn-input:hover:not(:disabled):not(:focus):not([data-open]) {
+    border-color: var(--dn-field-border-hover);
+  }
+
+  .dn-input:focus,
+  .dn-input:focus-visible,
+  .dn-input[data-open] {
+    outline: none;
+    border-color: transparent;
+    background:
+      linear-gradient(var(--dn-field-bg-focus), var(--dn-field-bg-focus)) padding-box,
+      linear-gradient(135deg, var(--dn-accent-soft), var(--dn-accent) 45%, var(--dn-accent-deep)) border-box;
+    box-shadow:
+      0 0 0 4px color-mix(in srgb, var(--dn-accent) 16%, transparent),
+      0 10px 28px -14px color-mix(in srgb, var(--dn-accent) 70%, transparent);
+  }
+
+  .dn-input:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+  }
+
+  .dn-input[aria-invalid="true"] {
+    border-color: color-mix(in srgb, var(--dn-danger) 60%, transparent);
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--dn-danger) 12%, transparent);
+  }
+
+  /* Keep autofilled fields on theme instead of the browser's yellow/blue */
+  .dn-input:-webkit-autofill,
+  .dn-input:-webkit-autofill:hover,
+  .dn-input:-webkit-autofill:focus {
+    -webkit-text-fill-color: var(--dn-text);
+    caret-color: var(--dn-text);
+    transition: background-color 600000s 0s, color 600000s 0s;
+  }
+
+  textarea.dn-input {
+    min-height: 5.5rem;
+    resize: vertical;
+    line-height: 1.5;
+  }
+
+  .dn-input-sm {
+    min-height: 2rem;
+    padding: 0.3rem 0.65rem;
+    font-size: 0.8125rem;
+    border-radius: 10px;
+  }
+
+  .dn-input-lg {
+    min-height: 2.875rem;
+    padding: 0.7rem 0.95rem;
+  }
+
+  /* Select trigger: same well, label on the left, chevron on the right */
+  .dn-select {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    text-align: left;
+    cursor: pointer;
+    padding-right: 0.6rem;
+  }
+
+  /* Native <select> fallback, if one is ever rendered */
+  select.dn-input {
+    appearance: none;
+    padding-right: 2rem;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236c7690' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m7 15 5 5 5-5M7 9l5-5 5 5'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0.6rem center;
+    background-size: 1rem;
+  }
+
+  /* Dropdown panel */
+  .dn-popover {
+    background-color: var(--dn-popover-bg);
+    backdrop-filter: saturate(170%) blur(18px);
+    -webkit-backdrop-filter: saturate(170%) blur(18px);
+    border: 1px solid var(--dn-border-bright);
+    border-radius: 14px;
+    box-shadow:
+      inset 0 1px 0 var(--dn-card-highlight),
+      0 18px 48px -12px rgba(0, 0, 0, 0.35),
+      0 0 0 1px color-mix(in srgb, var(--dn-accent) 6%, transparent);
+  }
+
+  .dn-option {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.5rem 0.65rem 0.5rem 0.85rem;
+    border-radius: 9px;
+    font-size: 0.875rem;
+    color: var(--dn-text-secondary);
+    cursor: pointer;
+    user-select: none;
+    transition: background-color 120ms ease, color 120ms ease;
+  }
+
+  .dn-option[data-active] {
+    color: var(--dn-text);
+    background: linear-gradient(90deg, color-mix(in srgb, var(--dn-accent) 16%, transparent), color-mix(in srgb, var(--dn-accent) 6%, transparent));
+  }
+
+  .dn-option[aria-selected="true"] {
+    color: var(--dn-text);
+    font-weight: 500;
+  }
+
+  /* Gradient tick on the left of the chosen option */
+  .dn-option[aria-selected="true"]::before {
+    content: "";
+    position: absolute;
+    left: 0.3rem;
+    top: 28%;
+    bottom: 28%;
+    width: 3px;
+    border-radius: 3px;
+    background: linear-gradient(180deg, var(--dn-accent-soft), var(--dn-accent-deep));
+    box-shadow: 0 0 10px color-mix(in srgb, var(--dn-accent) 60%, transparent);
+  }
+
+  .dn-option[aria-disabled="true"] {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+}
+
+/* ── Checkboxes, radios and switches ──────────────────────────
+ * Styled globally so every <input type="checkbox|radio"> matches.
+ * Add role="switch" to a checkbox to draw it as a toggle.
+ */
+@layer base {
+  input[type="checkbox"],
+  input[type="radio"] {
+    appearance: none;
+    -webkit-appearance: none;
+    flex-shrink: 0;
+    position: relative;
+    display: inline-grid;
+    place-content: center;
+    width: 1.125rem;
+    height: 1.125rem;
+    margin: 0;
+    vertical-align: -0.2em;
+    border: 1.5px solid var(--dn-check-border);
+    border-radius: 6px;
+    background-color: var(--dn-field-bg);
+    box-shadow: var(--dn-field-inset);
+    cursor: pointer;
+    transition: background-color 160ms ease, border-color 160ms ease, box-shadow 200ms ease, transform 120ms ease;
+  }
+
+  input[type="radio"] {
+    border-radius: 999px;
+  }
+
+  input[type="checkbox"]::before,
+  input[type="radio"]::before {
+    content: "";
+    transform: scale(0);
+    transition: transform 220ms cubic-bezier(0.3, 1.6, 0.5, 1);
+  }
+
+  input[type="checkbox"]::before {
+    width: 0.75rem;
+    height: 0.75rem;
+    background: #fff;
+    -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 12.5l4.5 4.5L19 7.5'/%3E%3C/svg%3E") center / contain no-repeat;
+    mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 12.5l4.5 4.5L19 7.5'/%3E%3C/svg%3E") center / contain no-repeat;
+  }
+
+  input[type="checkbox"]:indeterminate::before {
+    -webkit-mask: none;
+    mask: none;
+    height: 2px;
+    width: 0.55rem;
+    border-radius: 2px;
+    transform: scale(1);
+  }
+
+  input[type="radio"]::before {
+    width: 0.45rem;
+    height: 0.45rem;
+    border-radius: 999px;
+    background: #fff;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+  }
+
+  input[type="checkbox"]:hover:not(:disabled),
+  input[type="radio"]:hover:not(:disabled) {
+    border-color: color-mix(in srgb, var(--dn-accent) 65%, var(--dn-check-border));
+  }
+
+  input[type="checkbox"]:checked,
+  input[type="checkbox"]:indeterminate,
+  input[type="radio"]:checked {
+    border-color: transparent;
+    background-color: var(--dn-accent);
+    background-image: linear-gradient(135deg, var(--dn-accent-soft) -30%, var(--dn-accent) 45%, var(--dn-accent-deep) 130%);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.25),
+      0 4px 12px -4px color-mix(in srgb, var(--dn-accent) 80%, transparent);
+  }
+
+  input[type="checkbox"]:checked::before,
+  input[type="radio"]:checked::before {
+    transform: scale(1);
+  }
+
+  input[type="checkbox"]:active:not(:disabled),
+  input[type="radio"]:active:not(:disabled) {
+    transform: scale(0.9);
+  }
+
+  input[type="checkbox"]:focus-visible,
+  input[type="radio"]:focus-visible {
+    outline: none;
+    box-shadow:
+      0 0 0 3px var(--dn-bg-card),
+      0 0 0 5px color-mix(in srgb, var(--dn-accent) 70%, transparent);
+  }
+
+  input[type="checkbox"]:disabled,
+  input[type="radio"]:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+
+  /* Switch */
+  input[type="checkbox"][role="switch"] {
+    display: inline-flex;
+    align-items: center;
+    width: 2.25rem;
+    height: 1.3rem;
+    padding: 2px;
+    border: 1px solid var(--dn-field-border);
+    border-radius: 999px;
+    background-color: var(--dn-switch-off);
+    background-image: none;
+  }
+
+  input[type="checkbox"][role="switch"]::before {
+    -webkit-mask: none;
+    mask: none;
+    width: calc(1.3rem - 6px);
+    height: calc(1.3rem - 6px);
+    border-radius: 999px;
+    background: #fff;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3), 0 0 0 0.5px rgba(0, 0, 0, 0.06);
+    transform: translateX(0);
+    transition: transform 260ms cubic-bezier(0.3, 1.4, 0.5, 1), width 160ms ease;
+  }
+
+  input[type="checkbox"][role="switch"]:checked {
+    border-color: transparent;
+    background-color: var(--dn-accent);
+    background-image: linear-gradient(135deg, var(--dn-accent-soft) -30%, var(--dn-accent) 45%, var(--dn-accent-deep) 130%);
+  }
+
+  input[type="checkbox"][role="switch"]:checked::before {
+    transform: translateX(calc(2.25rem - 1.3rem));
+  }
+
+  /* The knob stretches a little while pressed */
+  input[type="checkbox"][role="switch"]:active:not(:disabled) {
+    transform: none;
+  }
+
+  input[type="checkbox"][role="switch"]:active:not(:disabled)::before {
+    width: calc(1.3rem + 1px);
+  }
+
+  input[type="checkbox"][role="switch"]:checked:active:not(:disabled)::before {
+    transform: translateX(calc(2.25rem - 1.3rem - 7px));
+  }
+
+  label:has(> input[type="checkbox"]:not(:disabled)),
+  label:has(> input[type="radio"]:not(:disabled)) {
+    cursor: pointer;
+  }
+}
+
+/* ── Dialogs ──────────────────────────────────────────────── */
+
+.dn-backdrop {
+  background-color: var(--dn-backdrop);
+  background-image: radial-gradient(900px 520px at 50% 18%, var(--dn-dialog-glow), transparent 70%);
+  backdrop-filter: blur(10px) saturate(140%);
+  -webkit-backdrop-filter: blur(10px) saturate(140%);
+}
+
+/* Gradient-lit edge: brighter at the top, fading into the normal border */
+.dn-dialog {
+  position: relative;
+  border: 1px solid transparent;
+  background:
+    radial-gradient(520px 180px at 50% -60px, var(--dn-dialog-glow), transparent 75%) padding-box,
+    linear-gradient(var(--dn-bg-card), var(--dn-bg-card)) padding-box,
+    linear-gradient(180deg, color-mix(in srgb, var(--dn-accent) 45%, var(--dn-border-bright)), var(--dn-border-bright) 22%, var(--dn-border) 70%) border-box;
+  box-shadow:
+    inset 0 1px 0 var(--dn-card-highlight),
+    var(--dn-shadow-lg),
+    0 0 80px -30px color-mix(in srgb, var(--dn-accent) 45%, transparent);
+}
+
+/* Light streak along the top edge */
+.dn-dialog::before {
+  content: "";
+  position: absolute;
+  top: -1px;
+  left: 18%;
+  right: 18%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--dn-accent-soft), var(--dn-accent), transparent);
+  opacity: 0.9;
+  pointer-events: none;
+}
+
+.dn-icon-tile {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 12px;
+  color: var(--dn-accent);
+  border: 1px solid color-mix(in srgb, var(--dn-accent) 28%, transparent);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--dn-accent-soft) 18%, transparent), color-mix(in srgb, var(--dn-accent-deep) 12%, transparent));
+  box-shadow: 0 8px 24px -10px color-mix(in srgb, var(--dn-accent) 60%, transparent), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.dn-icon-tile[data-tone="danger"] {
+  color: var(--dn-danger);
+  border-color: color-mix(in srgb, var(--dn-danger) 30%, transparent);
+  background: color-mix(in srgb, var(--dn-danger) 12%, transparent);
+  box-shadow: 0 8px 24px -10px color-mix(in srgb, var(--dn-danger) 60%, transparent), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+.dn-icon-tile[data-tone="warning"] {
+  color: var(--dn-warning);
+  border-color: color-mix(in srgb, var(--dn-warning) 30%, transparent);
+  background: color-mix(in srgb, var(--dn-warning) 12%, transparent);
+  box-shadow: 0 8px 24px -10px color-mix(in srgb, var(--dn-warning) 55%, transparent);
+}
+
+.dn-kbd {
+  display: inline-flex;
+  align-items: center;
+  height: 1.25rem;
+  padding: 0 0.35rem;
+  border-radius: 6px;
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  color: var(--dn-text-muted);
+  border: 1px solid var(--dn-border);
+  border-bottom-width: 2px;
+  background: var(--dn-bg-secondary);
+}
+
+/* Dropdown panels open from their trigger */
+@keyframes pop-in {
+  from { opacity: 0; transform: translateY(var(--dn-pop-from, -4px)) scale(0.97); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.animate-pop-in {
+  animation: pop-in 150ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+/* Desktop dialogs settle in with a slight spring and de-blur */
+@keyframes dialog-spring {
+  0% { opacity: 0; transform: translateY(14px) scale(0.96); filter: blur(4px); }
+  60% { opacity: 1; filter: blur(0); }
+  100% { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); }
+}
+
+/* Phones get a bottom sheet that slides up */
+@keyframes sheet-in {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+
+.animate-sheet-in {
+  animation: sheet-in 280ms cubic-bezier(0.2, 0.9, 0.25, 1);
+}
+
+@media (min-width: 640px) {
+  .animate-sheet-in {
+    animation: dialog-spring 320ms cubic-bezier(0.2, 0.9, 0.25, 1.05);
+  }
 }

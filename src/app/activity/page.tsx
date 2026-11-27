@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { clsx } from "clsx";
 import { Search, ArrowUpDown, ChevronLeft, ChevronRight, History, X, CheckCircle, AlertCircle } from "lucide-react";
 import { useApi } from "@/components/AppShell";
-import { Badge, Button, Card, PageHeader, timeAgo, Skeleton } from "@/components/ui";
+import { Badge, Button, Card, Input, PageHeader, Select, timeAgo, Skeleton } from "@/components/ui";
 
 interface AuditRow {
   id: string;
@@ -31,7 +31,6 @@ interface AuditResponse {
   endpoints: { id: string; name: string }[];
 }
 
-const select = "px-3 py-2 bg-bg-card border border-border rounded-lg text-sm text-text-primary";
 
 function formatDateTime(date: string) {
   return new Date(date).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit" });
@@ -79,31 +78,31 @@ export default function AuditPage() {
 
       <div className="flex flex-wrap items-center gap-2 mb-4">
         <div className="relative flex-1 min-w-[220px] max-w-md">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted" />
-          <input
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted pointer-events-none z-10" />
+          <Input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search message, details or person"
-            className="w-full pl-9 pr-8 py-2 bg-bg-card border border-border rounded-lg text-sm text-text-primary placeholder:text-text-muted"
+            className="pl-9 pr-8" aria-label="Search the audit log"
           />
           {search && (
-            <button onClick={() => setSearch("")} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-text-muted"><X className="w-4 h-4" /></button>
+            <button onClick={() => setSearch("")} aria-label="Clear search" className="absolute right-2.5 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-primary"><X className="w-4 h-4" /></button>
           )}
         </div>
-        <select value={action} onChange={(e) => setAction(e.target.value)} className={select}>
+        <Select value={action} onChange={(e) => setAction(e.target.value)} className="w-auto min-w-[10rem]">
           <option value="">All actions</option>
           {(data?.actionTypes ?? []).map((a) => <option key={a} value={a}>{a}</option>)}
-        </select>
-        <select value={outcome} onChange={(e) => setOutcome(e.target.value)} className={select}>
+        </Select>
+        <Select value={outcome} onChange={(e) => setOutcome(e.target.value)} className="w-auto min-w-[10rem]">
           <option value="">Any outcome</option>
           <option value="success">Succeeded</option>
           <option value="failure">Failed</option>
-        </select>
+        </Select>
         {(data?.endpoints.length ?? 0) > 0 && (
-          <select value={endpointId} onChange={(e) => setEndpointId(e.target.value)} className={select}>
+          <Select value={endpointId} onChange={(e) => setEndpointId(e.target.value)} className="w-auto min-w-[10rem]">
             <option value="">All endpoints</option>
             {data!.endpoints.map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}
-          </select>
+          </Select>
         )}
         <Button variant="secondary" onClick={() => setSort(sort === "desc" ? "asc" : "desc")}>
           <ArrowUpDown className="w-4 h-4" /> {sort === "desc" ? "Newest first" : "Oldest first"}

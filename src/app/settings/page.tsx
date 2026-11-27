@@ -83,7 +83,7 @@ function FormCard({
 function Checkbox({ checked, onChange, label, hint }: { checked: boolean; onChange: (v: boolean) => void; label: string; hint?: ReactNode }) {
   return (
     <label className="flex items-start gap-3 cursor-pointer">
-      <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} className="mt-0.5 w-4 h-4 accent-[var(--color-accent)]" />
+      <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} className="mt-0.5" />
       <span>
         <span className="block text-sm text-text-primary">{label}</span>
         {hint && <span className="block text-xs text-text-muted mt-0.5">{hint}</span>}

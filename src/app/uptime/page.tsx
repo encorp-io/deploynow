@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { clsx } from "clsx";
-import { ExternalLink, HeartPulse, Pencil, Play, Plus, Trash2 } from "lucide-react";
+import { Activity, ExternalLink, HeartPulse, Pencil, Play, Plus, Trash2 } from "lucide-react";
 import { useApi } from "@/components/AppShell";
 import { Badge, Button, Card, EmptyState, ErrorText, Field, IconButton, Input, Modal, PageHeader, PageSkeleton, Select, Tabs, formatTime, timeAgo } from "@/components/ui";
 import { useConfirm, useToast } from "@/components/feedback";
@@ -269,7 +269,7 @@ export default function UptimePage() {
           )}
           {canManage && (
             <label className="flex items-center gap-2 text-sm text-text-secondary">
-              <input type="checkbox" checked={data.statusPage.enabled} onChange={(e) => statusPage({ enabled: e.target.checked })} /> On
+              <input type="checkbox" role="switch" checked={data.statusPage.enabled} onChange={(e) => statusPage({ enabled: e.target.checked })} /> On
             </label>
           )}
         </div>
@@ -283,7 +283,7 @@ export default function UptimePage() {
       </Card>
 
       {form && (
-        <Modal
+        <Modal icon={Activity}
           title={form.id ? "Edit check" : "Add uptime check"}
           wide
           onClose={() => setForm(null)}
@@ -332,7 +332,7 @@ export default function UptimePage() {
           </div>
           <div className="mt-4 flex flex-wrap gap-4 text-sm text-text-secondary">
             <label className="flex items-center gap-2"><input type="checkbox" checked={form.public} onChange={(e) => setForm({ ...form, public: e.target.checked })} /> Show on the status page</label>
-            <label className="flex items-center gap-2"><input type="checkbox" checked={form.enabled} onChange={(e) => setForm({ ...form, enabled: e.target.checked })} /> Active</label>
+            <label className="flex items-center gap-2"><input type="checkbox" role="switch" checked={form.enabled} onChange={(e) => setForm({ ...form, enabled: e.target.checked })} /> Active</label>
           </div>
           <p className="mt-3 text-xs text-text-muted">Alerts go to the notification channels that subscribe to the uptime events (Settings → Notifications).</p>
           <div className="mt-3"><ErrorText>{formError}</ErrorText></div>

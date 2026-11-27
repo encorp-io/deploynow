@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { ErrorText } from "./ui";
+import { ErrorText, Select } from "./ui";
 
 /** Live (or last N lines of) container logs, shared by the container and app pages. */
 export default function ContainerLogs({ endpointId, containerId }: { endpointId: string; containerId: string }) {
@@ -43,11 +43,11 @@ export default function ContainerLogs({ endpointId, containerId }: { endpointId:
     <div className="space-y-3">
       <div className="flex items-center gap-3 text-sm">
         <label className="flex items-center gap-2 text-text-secondary">
-          <input type="checkbox" checked={follow} onChange={(e) => setFollow(e.target.checked)} /> Follow
+          <input type="checkbox" role="switch" checked={follow} onChange={(e) => setFollow(e.target.checked)} /> Follow
         </label>
-        <select value={tail} onChange={(e) => setTail(Number(e.target.value))} className="px-2 py-1 bg-bg-secondary border border-border rounded-md text-text-primary">
+        <Select value={tail} onChange={(e) => setTail(Number(e.target.value))} size="sm" className="w-auto" aria-label="Lines to show">
           {[100, 300, 1000, 5000].map((n) => <option key={n} value={n}>last {n} lines</option>)}
-        </select>
+        </Select>
       </div>
       <ErrorText>{error}</ErrorText>
       <pre ref={box} className="h-[480px] overflow-auto bg-bg-primary border border-border rounded-lg p-3 text-xs font-mono whitespace-pre-wrap break-all">

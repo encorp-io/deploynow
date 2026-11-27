@@ -4,7 +4,7 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState, ty
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { signOut } from "next-auth/react";
-import { Menu, X } from "lucide-react";
+import { Menu, ShieldCheck, X } from "lucide-react";
 import { BrandLockup } from "./Brand";
 import Sidebar, { type Me } from "./Sidebar";
 import { FeedbackProvider } from "./feedback";
@@ -152,7 +152,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
         </main>
       </div>
       {prompt && (
-        <Modal title="Confirm it's you" onClose={cancel}>
+        <Modal icon={ShieldCheck} title="Confirm it's you" onClose={cancel}>
           <form
             onSubmit={(e) => {
               e.preventDefault();

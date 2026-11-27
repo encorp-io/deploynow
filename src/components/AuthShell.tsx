@@ -51,7 +51,7 @@ export default function AuthShell({ title, subtitle, children, wide }: { title: 
 }
 
 export const authInputClass =
-  "w-full px-3.5 py-2.5 bg-bg-secondary border border-border rounded-xl text-sm text-text-primary placeholder:text-text-muted/80 shadow-[inset_0_1px_2px_rgba(0,0,0,0.06)] hover:border-border-bright focus:outline-none focus:border-accent focus:ring-[3px] focus:ring-accent/20 transition-[border-color,box-shadow]";
+  "dn-input dn-input-lg";
 
 export const authPrimaryClass =
   "w-full py-2.5 dn-btn-primary text-white rounded-xl text-sm font-medium disabled:opacity-50 flex items-center justify-center gap-2";

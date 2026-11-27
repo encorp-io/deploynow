@@ -3,12 +3,12 @@
 import { use, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Boxes, Globe, LayoutTemplate, Plus, Trash2 } from "lucide-react";
+import { Boxes, Globe, Layers, LayoutTemplate, Plus, Trash2 } from "lucide-react";
 import { useApi } from "@/components/AppShell";
-import { Badge, Button, Card, ErrorText, Field, IconButton, Input, Modal, PageHeader, PageSkeleton, timeAgo } from "@/components/ui";
+import { Badge, Button, Card, ErrorText, Field, IconButton, Input, Modal, PageHeader, PageSkeleton, Select, timeAgo } from "@/components/ui";
 import { useConfirm, useToast } from "@/components/feedback";
 import { TemplatePicker } from "@/components/Templates";
-import { AppForm, appStatusTone, emptyApp, selectClass, SOURCE_LABELS, type AppFormValue } from "@/components/apps";
+import { AppForm, appStatusTone, emptyApp, SOURCE_LABELS, type AppFormValue } from "@/components/apps";
 
 interface AppRow {
   id: string;
@@ -178,7 +178,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
       </div>
 
       {newApp && (
-        <Modal
+        <Modal icon={Boxes}
           title="New app"
           wide
           onClose={() => setNewApp(null)}
@@ -200,13 +200,13 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
       )}
 
       {newEnv && (
-        <Modal title="New environment" onClose={() => setNewEnv(null)}>
+        <Modal icon={Layers} title="New environment" onClose={() => setNewEnv(null)}>
           <div className="space-y-3">
             <Field label="Name"><Input value={newEnv.name} onChange={(e) => setNewEnv({ ...newEnv, name: e.target.value })} placeholder="staging" autoFocus /></Field>
             <Field label="Default endpoint">
-              <select value={newEnv.endpointId} onChange={(e) => setNewEnv({ ...newEnv, endpointId: e.target.value })} className={selectClass}>
+              <Select value={newEnv.endpointId} onChange={(e) => setNewEnv({ ...newEnv, endpointId: e.target.value })}>
                 {endpoints.map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}
-              </select>
+              </Select>
             </Field>
             <ErrorText>{formError}</ErrorText>
             <div className="flex justify-end gap-2 pt-2">

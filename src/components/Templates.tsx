@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, ExternalLink, LayoutTemplate, Search } from "lucide-react";
+import { ArrowLeft, ExternalLink, LayoutTemplate, Rocket, Search } from "lucide-react";
 import { useApi } from "./AppShell";
 import { Badge, Button, ErrorText, Field, Input, Modal, Select } from "./ui";
 import { useToast } from "./feedback";
@@ -98,7 +98,7 @@ export function TemplatePicker({ environmentId, defaultEndpointId, endpoints, on
 
   if (!picked) {
     return (
-      <Modal title="New app from a template" wide onClose={onClose}>
+      <Modal icon={LayoutTemplate} title="New app from a template" wide onClose={onClose}>
         <div className="relative mb-4">
           <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
           <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search templates" className="pl-9" autoFocus />
@@ -135,7 +135,7 @@ export function TemplatePicker({ environmentId, defaultEndpointId, endpoints, on
   const canCreate = form.name.trim() && (form.expose !== "domain" || form.domain.trim()) && (form.expose !== "port" || form.hostPort);
 
   return (
-    <Modal
+    <Modal icon={Rocket}
       title={picked.name}
       wide
       onClose={onClose}

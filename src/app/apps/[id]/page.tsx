@@ -5,9 +5,9 @@ import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { clsx } from "clsx";
-import { Copy, ExternalLink, Globe, Info, Lock, Plus, Rocket, RotateCcw, ScrollText, Square, SquareTerminal, Trash2, Webhook } from "lucide-react";
+import { Copy, ExternalLink, Eye, Globe, Info, Lock, Plus, Rocket, RotateCcw, ScrollText, Square, SquareTerminal, Trash2, Webhook } from "lucide-react";
 import { useApi } from "@/components/AppShell";
-import { Badge, Button, Card, ErrorText, Field, IconButton, Input, Modal, PageHeader, PageSkeleton, stateTone, timeAgo } from "@/components/ui";
+import { Badge, Button, Card, ErrorText, Field, IconButton, Input, Modal, PageHeader, PageSkeleton, Select, stateTone, timeAgo } from "@/components/ui";
 import { useConfirm, useToast } from "@/components/feedback";
 import { AppBuildSettings } from "@/components/AppBuildSettings";
 import { AppRegistryLogin } from "@/components/RegistryLogins";
@@ -541,12 +541,12 @@ export default function AppPage({ params }: { params: Promise<{ id: string }> })
                   <div className="col-span-12 sm:col-span-8"><Field label="Redirect to"><Input value={domain.redirectTo} onChange={(e) => setDomain({ ...domain, redirectTo: e.target.value })} placeholder="https://example.com" /></Field></div>
                   <div className="col-span-12 sm:col-span-4">
                     <Field label="Status">
-                      <select value={domain.redirectCode} onChange={(e) => setDomain({ ...domain, redirectCode: e.target.value })} className="w-full px-3 py-2 bg-bg-secondary border border-border rounded-lg text-sm text-text-primary">
+                      <Select value={domain.redirectCode} onChange={(e) => setDomain({ ...domain, redirectCode: e.target.value })}>
                         <option value="308">308 permanent</option>
                         <option value="301">301 permanent</option>
                         <option value="307">307 temporary</option>
                         <option value="302">302 temporary</option>
-                      </select>
+                      </Select>
                     </Field>
                   </div>
                 </>
@@ -625,7 +625,7 @@ export default function AppPage({ params }: { params: Promise<{ id: string }> })
       )}
 
       {revealed && (
-        <Modal title={revealed.key} onClose={() => setRevealed(null)}>
+        <Modal icon={Eye} title={revealed.key} onClose={() => setRevealed(null)}>
           <Input readOnly value={revealed.value} className="font-mono" onFocus={(e) => e.target.select()} />
           <p className="text-xs text-text-muted mt-2">This view was written to the audit log.</p>
           <div className="flex justify-end mt-4"><Button onClick={() => setRevealed(null)}>Done</Button></div>
@@ -633,7 +633,7 @@ export default function AppPage({ params }: { params: Promise<{ id: string }> })
       )}
 
       {confirmDelete && (
-        <Modal title={`Delete ${app.name}?`} onClose={() => setConfirmDelete(false)}>
+        <Modal icon={Trash2} tone="danger" title={`Delete ${app.name}?`} onClose={() => setConfirmDelete(false)}>
           <p className="text-sm text-text-secondary mb-4">Its deployments, logs and settings are removed from DeployNow.</p>
           <div className="flex flex-col gap-2">
             <Button variant="danger" onClick={() => remove(false)} loading={busy === "delete"}>Delete and remove containers</Button>
