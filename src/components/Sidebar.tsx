@@ -9,6 +9,7 @@ import {
   CalendarClock,
   FolderKanban,
   History,
+  LayoutDashboard,
   LogOut,
   PackageCheck,
   Server,
@@ -29,6 +30,7 @@ const groups: { label: string; items: NavItem[] }[] = [
   {
     label: "Deploy",
     items: [
+      { href: "/overview", label: "Overview", icon: LayoutDashboard },
       { href: "/projects", label: "Projects", icon: FolderKanban },
       { href: "/endpoints", label: "Endpoints", icon: Server },
     ],
@@ -68,7 +70,7 @@ export default function Sidebar({ me, onSignOut, onNavigate }: { me: Me | null; 
 
   return (
     <div className="h-full dn-glass border-r border-border flex flex-col">
-      <Link href="/projects" onClick={onNavigate} aria-label="DeployNow by encorp.ai, home" className="flex items-center px-5 h-[72px] flex-shrink-0">
+      <Link href="/overview" onClick={onNavigate} aria-label="DeployNow by encorp.ai, home" className="flex items-center px-5 h-[72px] flex-shrink-0">
         <BrandLockup />
       </Link>
       <div className="dn-hairline mx-4 flex-shrink-0" />

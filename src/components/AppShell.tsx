@@ -138,7 +138,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
           <button onClick={() => setMenuOpen(true)} aria-label="Open menu" aria-expanded={menuOpen} className="p-1.5 -ml-1.5 rounded-lg text-text-secondary hover:text-text-primary hover:bg-bg-card">
             <Menu className="w-5 h-5" />
           </button>
-          <Link href="/projects" aria-label="DeployNow, home" className="flex items-center">
+          <Link href="/overview" aria-label="DeployNow, home" className="flex items-center">
             <BrandLockup size="sm" />
           </Link>
         </header>

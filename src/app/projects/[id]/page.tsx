@@ -9,6 +9,7 @@ import { Badge, Button, Card, ErrorText, Field, IconButton, Input, Modal, PageHe
 import { useConfirm, useToast } from "@/components/feedback";
 import { TemplatePicker } from "@/components/Templates";
 import { AppForm, appStatusTone, emptyApp, SOURCE_LABELS, type AppFormValue } from "@/components/apps";
+import { AppServicesUsage, UsageCells, type AppUsage } from "@/components/usage";
 
 interface AppRow {
   id: string;
@@ -39,6 +40,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
   const [newEnv, setNewEnv] = useState<{ name: string; endpointId: string } | null>(null);
   const [formError, setFormError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [usage, setUsage] = useState<Record<string, AppUsage>>({});
 
   const load = useCallback(async () => {
     const [p, e] = await Promise.all([api<ProjectView>(`/api/projects/${id}`), api<{ id: string; name: string }[]>("/api/endpoints")]);
@@ -50,6 +52,21 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
   useEffect(() => {
     load();
   }, [load]);
+
+  // Live usage per app and service, refreshed with the per-minute samples
+  useEffect(() => {
+    let stop = false;
+    const tick = async () => {
+      const res = await api<{ apps: Record<string, AppUsage> }>(`/api/projects/${id}/usage`);
+      if (!stop && res.ok) setUsage((res.data as { apps: Record<string, AppUsage> }).apps);
+    };
+    tick();
+    const t = setInterval(tick, 20_000);
+    return () => {
+      stop = true;
+      clearInterval(t);
+    };
+  }, [api, id]);
 
   const createApp = async () => {
     if (!newApp) return;
@@ -152,24 +169,34 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
                 </div>
               ) : (
                 env.apps.map((a, i) => (
-                  <Link key={a.id} href={`/apps/${a.id}`} className={`flex flex-wrap sm:flex-nowrap items-center gap-x-4 gap-y-1 px-4 py-3 hover:bg-bg-secondary ${i ? "border-t border-border" : ""}`}>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="font-medium text-text-primary">{a.name}</span>
-                        <Badge tone={appStatusTone(a.status)}>{a.status}</Badge>
+                  <div key={a.id} className={i ? "border-t border-border" : ""}>
+                    <Link href={`/apps/${a.id}`} className="flex flex-wrap lg:flex-nowrap items-center gap-x-4 gap-y-2 px-4 py-3 hover:bg-bg-secondary">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium text-text-primary">{a.name}</span>
+                          <Badge tone={appStatusTone(a.status)}>{a.status}</Badge>
+                        </div>
+                        <p className="text-xs text-text-muted font-mono truncate mt-0.5">{SOURCE_LABELS[a.sourceType]} · {a.image || a.gitRepo || "inline compose"}</p>
+                        {a.domains.length > 0 && (
+                          <div className="hidden md:flex flex-wrap gap-x-3 gap-y-0.5 mt-1">
+                            {a.domains.map((d) => (
+                              <span key={d.host + d.path} className="inline-flex items-center gap-1 text-xs text-text-secondary"><Globe className="w-3 h-3" />{d.host}{d.path !== "/" ? d.path : ""}</span>
+                            ))}
+                          </div>
+                        )}
                       </div>
-                      <p className="text-xs text-text-muted font-mono truncate mt-0.5">{SOURCE_LABELS[a.sourceType]} · {a.image || a.gitRepo || "inline compose"}</p>
-                    </div>
-                    <div className="hidden md:flex flex-wrap gap-1 justify-end max-w-xs">
-                      {a.domains.map((d) => (
-                        <span key={d.host + d.path} className="inline-flex items-center gap-1 text-xs text-text-secondary"><Globe className="w-3 h-3" />{d.host}{d.path !== "/" ? d.path : ""}</span>
-                      ))}
-                    </div>
-                    <div className="sm:text-right text-xs text-text-muted sm:w-36 flex sm:block gap-2">
-                      <p>{a.endpoint.name}</p>
-                      <p>{a.lastDeployment ? `deployed ${timeAgo(a.lastDeployment.finishedAt ?? a.lastDeployment.createdAt)}` : "never deployed"}</p>
-                    </div>
-                  </Link>
+                      {usage[a.id]?.now && (
+                        <div className="w-full sm:w-auto" title="All services of the app added up, latest sample">
+                          <UsageCells u={usage[a.id].now} compact />
+                        </div>
+                      )}
+                      <div className="sm:text-right text-xs text-text-muted sm:w-36 flex sm:block gap-2">
+                        <p>{a.endpoint.name}</p>
+                        <p>{a.lastDeployment ? `deployed ${timeAgo(a.lastDeployment.finishedAt ?? a.lastDeployment.createdAt)}` : "never deployed"}</p>
+                      </div>
+                    </Link>
+                    {usage[a.id] && usage[a.id].services.length > 0 && <AppServicesUsage usage={usage[a.id]} />}
+                  </div>
                 ))
               )}
             </Card>

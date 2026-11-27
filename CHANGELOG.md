@@ -9,6 +9,12 @@ versions fix bugs. Every version upgrades the database by itself.
 ## [Unreleased]
 
 ### Added
+- **Overview dashboard:** a new home page with machines, apps, CPU, memory and backups at a
+  glance, the latest deploy log, each machine's load over 24 hours, the busiest apps and alerts.
+- **Usage per service:** on a project page, every app lists its services (containers) with
+  their CPU, memory and network, and the app total.
+- **Monitoring:** CPU and memory lines per machine, and an apps and services view (now, or the
+  average over 1 hour to 30 days) with a filter, sorting and containers DeployNow did not deploy.
 - **One-command setup:** `curl -fsSL https://raw.githubusercontent.com/encorp-io/deploynow/main/setup.sh | sudo bash`
   asks for a domain, port, admin email and password (Enter keeps the defaults), installs
   Docker if it's missing, writes `docker-compose.yml` and `.env` and starts DeployNow.

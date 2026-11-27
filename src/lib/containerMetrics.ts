@@ -409,7 +409,7 @@ export function toSeries(units: Unit[], from: number, bucketMs: number): Omit<Se
  * Usage history for the series matching `where` (by app, or by endpoint + key).
  * Short ranges read raw samples; 7 and 30 days read the hourly rollups.
  */
-export async function readHistory(where: { applicationId?: string; endpointId?: string; key?: string }, range: Range, now = Date.now()): Promise<{ range: Range; from: string; to: string; bucketSeconds: number; series: Series[] }> {
+export async function readHistory(where: { applicationId?: string | { in: string[] }; endpointId?: string | { in: string[] }; key?: string }, range: Range, now = Date.now()): Promise<{ range: Range; from: string; to: string; bucketSeconds: number; series: Series[] }> {
   const r = RANGES[range];
   const from = Math.floor((now - r.ms) / r.bucket) * r.bucket;
   let units: Unit[];
