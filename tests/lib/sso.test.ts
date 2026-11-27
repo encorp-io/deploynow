@@ -168,6 +168,10 @@ describe("sign-in flow", () => {
     // Same claims, but the issuing tenant verified the domain: that's the real owner
     const u = await sso.resolveUser(p, { ...attacker, sub: "real-sub", xms_edov: true });
     expect(u.id).toBe(owner.id);
+    // Later sign-ins of that linked identity work even before xms_edov is configured
+    const again = await sso.resolveUser(p, { sub: "real-sub", tid: attacker.tid, preferred_username: "boss@victim.io" });
+    expect(again.id).toBe(owner.id);
+    expect((await prisma.userIdentity.findFirst({ where: { subject: "real-sub" } }))?.email).toBe("boss@victim.io");
   });
 
   it("checks the Microsoft tenant", async () => {

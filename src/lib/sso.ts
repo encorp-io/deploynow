@@ -199,12 +199,16 @@ export function trustedEmail(provider: SsoProvider, claims: Claims): string {
 export async function resolveUser(provider: SsoProvider, claims: Claims): Promise<User> {
   const email = trustedEmail(provider, claims);
   const allowed = provider.allowedDomains ? provider.allowedDomains.split(",") : [];
-  if (allowed.length && (!email || !allowed.includes(email.split("@")[1]))) {
+  const linked = await prisma.userIdentity.findUnique({ where: { providerId_subject: { providerId: provider.id, subject: String(claims.sub) } }, include: { user: true } });
+  // A multi-tenant Microsoft token without xms_edov has no address we can check against
+  // the allowed domains. An identity linked earlier is still matched by its subject,
+  // so it keeps signing in; anything new needs the verified address.
+  const linkedWithoutEmail = !!linked && !email && isMultiTenant(provider);
+  if (allowed.length && !linkedWithoutEmail && (!email || !allowed.includes(email.split("@")[1]))) {
     throw new SsoError(`Sign-in with ${provider.name} is limited to ${allowed.map((d) => "@" + d).join(", ")} addresses`);
   }
-  const linked = await prisma.userIdentity.findUnique({ where: { providerId_subject: { providerId: provider.id, subject: String(claims.sub) } }, include: { user: true } });
   if (linked) {
-    await prisma.userIdentity.update({ where: { id: linked.id }, data: { lastUsedAt: new Date(), email } });
+    await prisma.userIdentity.update({ where: { id: linked.id }, data: { lastUsedAt: new Date(), ...(email ? { email } : {}) } });
     return linked.user;
   }
   if (!email) {
