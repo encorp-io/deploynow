@@ -139,7 +139,7 @@ export async function prepare(latestRelease: string): Promise<SelfUpdateSetup> {
   const dataBind = data ? bindFor(data) : null;
   if (!dataBind) throw new SelfUpdateError(`${dataDir()} isn't on a volume, so an update would lose DeployNow's data.`);
 
-  // A pinned tag in a compose .env (DEPLOYNOW_TAG=2.0.0) moves along, so `docker compose up` later keeps the new version
+  // A pinned tag in a compose .env (DEPLOYNOW_TAG=1.0.0) moves along, so `docker compose up` later keeps the new version
   let envBind = "";
   let envFile = "";
   let envFileHost = "";
