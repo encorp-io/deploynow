@@ -10,6 +10,7 @@ import { useApi } from "@/components/AppShell";
 import { Badge, Button, Card, ErrorText, Field, IconButton, Input, Modal, PageHeader, PageSkeleton, Select, stateTone, timeAgo } from "@/components/ui";
 import { useConfirm, useToast } from "@/components/feedback";
 import { AppBuildSettings } from "@/components/AppBuildSettings";
+import { AppAutoUpdate, type AutoUpdateValue } from "@/components/AppAutoUpdate";
 import { AppRegistryLogin } from "@/components/RegistryLogins";
 import ContainerLogs from "@/components/ContainerLogs";
 import ResourceHistory from "@/components/ResourceHistory";
@@ -32,7 +33,7 @@ interface Deployment {
   finishedAt: string | null;
 }
 interface DomainRow { id: string; host: string; path: string; containerPort: number; service: string; https: boolean; redirectTo: string; redirectCode: number; basicAuthUser: string }
-interface AppView extends Omit<AppFormValue, "endpointId"> {
+interface AppView extends Omit<AppFormValue, "endpointId">, AutoUpdateValue {
   id: string;
   status: string;
   env: EnvRow[];
@@ -605,6 +606,24 @@ export default function AppPage({ params }: { params: Promise<{ id: string }> })
             )}
           </Card>
 
+          {!app.previewOfId && (
+            <AppAutoUpdate
+              key={`${app.autoUpdate}-${app.autoUpdateEvery}-${app.autoUpdateFrom}-${app.autoUpdateTo}-${app.autoUpdateDays.join("")}-${app.autoUpdateTimezone}-${app.autoUpdateRollback}`}
+              app={app}
+              canManage={app.can.manage}
+              canDeploy={app.can.deploy}
+              onSave={save}
+              busy={busy === "save"}
+              onDeployment={(depId) => {
+                const d = app.deployments.find((x) => x.id === depId);
+                if (d) {
+                  setSelected(d);
+                  setTab("deployments");
+                }
+              }}
+            />
+          )}
+
           {app.can.manage && (app.sourceType !== "image" || !!app.image) && <AppRegistryLogin app={app} onSave={save} busy={busy === "save"} />}
 
           {(app.sourceType === "git-dockerfile" || (app.sourceType === "git-compose" && !app.previewOfId)) && app.can.manage && (
@@ -615,7 +634,7 @@ export default function AppPage({ params }: { params: Promise<{ id: string }> })
             <Card className="p-5">
               <h3 className="text-sm font-semibold text-text-primary mb-1 flex items-center gap-2"><Webhook className="w-4 h-4" /> GitHub webhook</h3>
               <p className="text-sm text-text-muted mb-3">
-                In the repository: Settings → Webhooks → Add webhook, content type <code>application/json</code>, with the push event (and pull request events for previews). Then set Updates to &quot;Deploy on every push&quot;. DeployNow must be reachable from GitHub.
+                In the repository: Settings → Webhooks → Add webhook, content type <code>application/json</code>, with the push event (and pull request events for previews). Then set Push to deploy to &quot;Deploy on every push&quot;. DeployNow must be reachable from GitHub.
               </p>
               {webhook ? (
                 <div className="space-y-2">

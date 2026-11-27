@@ -6,6 +6,7 @@ import { audit, clientIp } from "@/lib/audit";
 import { ID_RE, notFound, projectGate } from "@/lib/apps/access";
 import { ConfigError, validateAppInput } from "@/lib/apps/config";
 import { validateAppExtras } from "@/lib/apps/extras";
+import { validateAutoUpdateInput } from "@/lib/apps/autoUpdate";
 import { EnvError } from "@/lib/apps/env";
 import { encryptSecret } from "@/lib/secretsCrypto";
 import { canPlaceOn, PLACE_DENIED } from "@/lib/apps/placement";
@@ -26,7 +27,7 @@ export async function POST(request: Request) {
   let input;
   try {
     input = validateAppInput(body);
-    input = { ...input, ...(await validateAppExtras(body, input.sourceType, endpointId, { actor: gate.user, projectId: env.projectId })) };
+    input = { ...input, ...(await validateAppExtras(body, input.sourceType, endpointId, { actor: gate.user, projectId: env.projectId })), ...validateAutoUpdateInput(body) };
   } catch (err) {
     if (err instanceof ConfigError || err instanceof EnvError) return NextResponse.json({ error: err.message }, { status: 400 });
     throw err;
