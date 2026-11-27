@@ -324,6 +324,15 @@ describe("startSelfUpdate", () => {
     remote.digest = "sha256:edge1";
   });
 
+  it("asks only GHCR and Docker Hub whether the running build is the newest", async () => {
+    const { runsNewestBuild } = await import("@/lib/selfUpdate");
+    const { getRemoteDigests } = await import("@/lib/ghcr");
+    vi.mocked(getRemoteDigests).mockClear();
+    const t = fakeTarget({ Config: { Image: "registry.example.com/team/deploynow:latest", Labels: {} } });
+    expect(await runsNewestBuild({ target: t.value as never, next: { ref: "registry.example.com/team/deploynow:latest", tag: "latest", pinned: false, changed: false } })).toBe(false);
+    expect(getRemoteDigests).not.toHaveBeenCalled();
+  });
+
   it("auto-update goes for a new release once, and not again after it failed", async () => {
     const t = fakeTarget();
     target.value = t.value;

@@ -169,6 +169,8 @@ export async function prepare(latestRelease: string, channel: Channel = ""): Pro
 export async function runsNewestBuild(setup: Pick<SelfUpdateSetup, "target" | "next">): Promise<boolean> {
   if (setup.next.changed || setup.next.pinned) return false;
   const p = parseImageRef(setup.next.ref);
+  // getRemoteDigests speaks to GHCR and Docker Hub only: never send another registry's login to Docker Hub
+  if (p.registry !== "ghcr.io" && p.registry !== "docker.io") return false;
   const local = await setup.target.docker
     .getImage(setup.target.self.Image)
     .inspect()
