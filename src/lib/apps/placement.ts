@@ -52,6 +52,11 @@ export async function hostClaimError(host: string, projectId: string): Promise<s
     select: { id: true },
   });
   if (taken) return `${h} is already used by an app in another project`;
+  // pr-N.<preview domain> belongs to the project whose app has that preview domain
+  const m = /^pr-\d+\.(.+)$/.exec(h);
+  if (m && (await prisma.application.findFirst({ where: { previewDomain: m[1], environment: { projectId: { not: projectId } } }, select: { id: true } }))) {
+    return `${h} is reserved for pull request previews of an app in another project`;
+  }
   return null;
 }
 
@@ -72,5 +77,12 @@ export async function previewDomainError(domain: string, projectId: string, appI
     select: { id: true },
   });
   if (other) return `${d} is already the preview domain of an app in another project`;
+  const previewHost = new RegExp(`^pr-\\d+\\.${d.replace(/\./g, "\\.")}$`);
+  const claimed = await prisma.domain.findMany({
+    where: { host: { endsWith: `.${d}` }, application: { environment: { projectId: { not: projectId } } } },
+    select: { host: true },
+  });
+  const hit = claimed.find((c) => previewHost.test(c.host));
+  if (hit) return `${hit.host} is already used by an app in another project, so ${d} can't be a preview domain here`;
   return null;
 }

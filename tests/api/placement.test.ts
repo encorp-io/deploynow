@@ -185,4 +185,23 @@ describe("domain claims", () => {
     // Saving the app again with its own preview domain still works
     expect((await appRoute.PATCH(req("PATCH", { previewsEnabled: true, previewDomain: "preview.example.com" }), p({ id: appA }))).status).toBe(200);
   });
+
+  it("keeps preview hosts and other projects' hosts apart", async () => {
+    const a = await newProject("PrevC");
+    const b = await newProject("PrevD");
+    signInAs("admin");
+    const git = { endpointId: edgeId, sourceType: "git-dockerfile", gitRepo: "https://github.com/acme/web", gitBranch: "main" };
+    const appA = (await json(await apps.POST(req("POST", { ...git, environmentId: a.envId, name: "pc" })))).body.id;
+    const appB = (await json(await apps.POST(req("POST", { ...git, environmentId: b.envId, name: "pd" })))).body.id;
+    // B already routes a host that A's previews would get
+    expect((await domains.POST(req("POST", { host: "pr-7.prv.example.com", path: "/admin", containerPort: 80 }), p({ id: appB }))).status).toBe(201);
+    const r = await json(await appRoute.PATCH(req("PATCH", { previewsEnabled: true, previewDomain: "prv.example.com" }), p({ id: appA })));
+    expect(r.status).toBe(400);
+    expect(r.body.error).toMatch(/pr-7\.prv\.example\.com/);
+    // and once A owns a preview domain, B can't claim one of its preview hosts
+    expect((await appRoute.PATCH(req("PATCH", { previewsEnabled: true, previewDomain: "prv2.example.com" }), p({ id: appA }))).status).toBe(200);
+    const c = await json(await domains.POST(req("POST", { host: "pr-3.prv2.example.com", containerPort: 80 }), p({ id: appB })));
+    expect(c.status).toBe(409);
+    expect(c.body.error).toMatch(/reserved for pull request previews/);
+  });
 });
