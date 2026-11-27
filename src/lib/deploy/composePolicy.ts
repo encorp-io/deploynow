@@ -178,8 +178,9 @@ export function checkComposeRuntime(doc: unknown, opts: RuntimeOptions): void {
   const deny = (msg: string): never => {
     throw new ComposePolicyError(`${msg}. ${TRUSTED_HINT}`);
   };
-  const ownPrefix = `${opts.slug}`;
-  const projectPrefix = `${opts.slug}_`;
+  // "<slug>_" and not just "<slug>": otherwise app "shop" could name a volume shop-prod_db and get app "shop-prod"'s data
+  const ownPrefix = `${opts.slug}_`;
+  const projectPrefix = ownPrefix;
   const services = isObj(doc.services) ? doc.services : {};
   const names = new Set(Object.keys(services));
 
@@ -188,7 +189,7 @@ export function checkComposeRuntime(doc: unknown, opts: RuntimeOptions): void {
   for (const [name, def] of Object.entries(volumes)) {
     if (!isObj(def)) continue;
     if (truthy(def.external) || isObj(def.external)) deny(`Volume "${name}" is external: an app can only use its own volumes`);
-    if (typeof def.name === "string" && def.name !== `${projectPrefix}${name}` && !def.name.startsWith(ownPrefix)) {
+    if (typeof def.name === "string" && !def.name.startsWith(ownPrefix)) {
       deny(`Volume "${name}" is named ${def.name}: an app's volume names must start with ${ownPrefix}`);
     }
     if (def.driver !== undefined && def.driver !== "local") deny(`Volume "${name}" uses the ${String(def.driver)} driver`);
@@ -202,7 +203,7 @@ export function checkComposeRuntime(doc: unknown, opts: RuntimeOptions): void {
     const real = typeof def.name === "string" ? def.name : name;
     const isProxy = !!opts.proxyNetwork && real === opts.proxyNetwork;
     if ((truthy(def.external) || isObj(def.external)) && !isProxy) deny(`Network "${name}" is external: an app can only join its own networks`);
-    if (typeof def.name === "string" && !isProxy && def.name !== `${projectPrefix}${name}` && !def.name.startsWith(ownPrefix)) {
+    if (typeof def.name === "string" && !isProxy && !def.name.startsWith(ownPrefix)) {
       deny(`Network "${name}" is named ${def.name}: an app's network names must start with ${ownPrefix}`);
     }
     if (def.driver !== undefined && !["bridge", "overlay"].includes(String(def.driver))) deny(`Network "${name}" uses the ${String(def.driver)} driver`);
@@ -212,6 +213,15 @@ export function checkComposeRuntime(doc: unknown, opts: RuntimeOptions): void {
     if (!isObj(svc)) continue;
     const s = `Service "${name}"`;
     if (truthy(svc.privileged)) deny(`${s} is privileged`);
+    if (truthy(svc.use_api_socket)) deny(`${s} sets use_api_socket, which hands it the Docker API`);
+    if (isObj(svc.build)) {
+      const b = svc.build;
+      if (truthy(b.privileged)) deny(`${s} builds with privileged: true`);
+      for (const e of list(b.entitlements)) deny(`${s} asks the build for the ${String(e)} entitlement`);
+      if (b.network !== undefined && b.network !== null && !["default", "none"].includes(String(b.network))) {
+        deny(`${s} builds on the ${String(b.network)} network`);
+      }
+    }
     for (const cap of list(svc.cap_add)) {
       const c = String(cap).toUpperCase().replace(/^CAP_/, "");
       if (!DEFAULT_CAPS.has(c)) deny(`${s} adds the ${c} capability`);

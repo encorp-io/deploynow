@@ -305,7 +305,22 @@ export async function runDeployment(deploymentId: string, ctx: RunContext = {}):
       await withDockerCli(toConnection(app.endpoint), await registryLogins(pullCtx), async (cli) => {
         const run = (args: string[], timeoutMs = 30 * 60_000) =>
           runCommand("docker", [...base, ...args], { cwd: composeDir, env: { ...cliEnv, ...cli.env }, onOutput: log, signal: ctx.signal, timeoutMs });
+        // Check the file as compose will run it, after ${VAR} interpolation (and before a build can use it)
+        const checkResolved = async () => {
+          const resolved = path.join(cli.dir, "resolved.json");
+          await run(["config", "--format", "json", "-o", resolved], 2 * 60_000);
+          try {
+            checkComposeRuntime(JSON.parse(fs.readFileSync(resolved, "utf8")), {
+              slug: app.slug,
+              proxyNetwork,
+              ownLabels: (svc) => render.ownLabels.get(svc) ?? new Set(),
+            });
+          } finally {
+            fs.rmSync(resolved, { force: true });
+          }
+        };
         if (!rollbackOf) {
+          await checkResolved();
           log("Pulling images");
           await run(["pull", "--ignore-buildable", "--ignore-pull-failures", "--quiet"]);
           log("Building");
@@ -313,15 +328,7 @@ export async function runDeployment(deploymentId: string, ctx: RunContext = {}):
         }
         envFile.write(env.vars);
         if (env.vars.length) log("Wrote the variables to .env (load them in a service with env_file: .env)");
-        // Check the file as compose will run it, after ${VAR} interpolation
-        const resolved = path.join(cli.dir, "resolved.json");
-        await run(["config", "--format", "json", "-o", resolved], 2 * 60_000);
-        checkComposeRuntime(JSON.parse(fs.readFileSync(resolved, "utf8")), {
-          slug: app.slug,
-          proxyNetwork,
-          ownLabels: (svc) => render.ownLabels.get(svc) ?? new Set(),
-        });
-        fs.rmSync(resolved, { force: true });
+        await checkResolved();
         log("Starting services");
         await run(["up", "-d", "--remove-orphans", "--no-build", "--wait", "--wait-timeout", String(Math.round((ctx.healthTimeoutMs ?? 300_000) / 1000))], 15 * 60_000);
       });

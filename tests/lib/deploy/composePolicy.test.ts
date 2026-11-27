@@ -48,6 +48,11 @@ describe("checkComposeRuntime", () => {
     ["volumes_from: [container:deploynow]", /volumes from/],
     ['labels: ["traefik.http.routers.x.rule=Host(`dn.example.com`)"]', /Traefik label/],
     ["labels: {traefik.enable: 'true'}", /Traefik label/],
+    ["use_api_socket: true", /use_api_socket/],
+    ["build: {context: ., privileged: true}", /builds with privileged/],
+    ["build: {context: ., entitlements: [security.insecure]}", /security.insecure entitlement/],
+    ["build: {context: ., entitlements: [network.host]}", /network.host entitlement/],
+    ["build: {context: ., network: host}", /host network/],
   ])("refuses %s", (yaml, msg) => {
     expect(runtime(svc(yaml))).toThrow(ComposePolicyError);
     expect(runtime(svc(yaml))).toThrow(msg);
@@ -60,6 +65,9 @@ describe("checkComposeRuntime", () => {
     expect(top("volumes:\n  d: { driver: local, driver_opts: { type: none, o: bind, device: / } }\n")).toThrow(/driver_opts/);
     expect(top("networks:\n  n: { external: true, name: dn-other-prod }\n")).toThrow(/external/);
     expect(top("networks:\n  n: { name: host }\n")).toThrow(/must start with shop/);
+    // An overlapping slug is someone else's app: "shop" must not reach "shop-prod"'s data
+    expect(top("volumes:\n  d: { name: shop-prod_db }\n")).toThrow(/must start with shop_/);
+    expect(top("networks:\n  n: { name: shop-prod_default }\n")).toThrow(/must start with shop_/);
     expect(top("networks:\n  n: { driver: macvlan }\n")).toThrow(/macvlan/);
     // The edge proxy network DeployNow attaches is fine
     expect(top("networks:\n  dn-proxy: { external: true, name: dn-proxy }\n")).not.toThrow();
