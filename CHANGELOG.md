@@ -8,6 +8,12 @@ versions fix bugs. Every version upgrades the database by itself.
 
 ## [Unreleased]
 
+### Security
+- Putting an app on an endpoint (new app, template, build server, environment default)
+  now needs operator rights on that endpoint, not just admin on the project.
+- Apps can no longer route DeployNow's own domain (on any path), or a host or preview
+  domain that another project already uses.
+
 ### Added
 - **Auto-update for compose and Git apps** (app → Settings → Auto-update): compose apps
   follow new digests of the images in their compose file, Git apps poll their branch for
