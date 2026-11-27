@@ -62,6 +62,19 @@ named like passwords, secrets, tokens or API keys). Docker and Traefik still see
 DeployNow finds its own container by the `io.deploynow.self` label (set by the image
 and `docker-compose.yml`), by its image name and by its container id.
 
+## Images and updates
+
+- Images on `ghcr.io/encorp-io` are built by GitHub Actions from this repository,
+  signed with cosign (keyless) and published with SLSA provenance and an SBOM. Each
+  release lists its image digests in `image-digests.txt`. Check one with `cosign verify`
+  (see [Upgrading](upgrading.md#by-hand)).
+- Self-update and auto-update check that signature, and the digest for a release,
+  before switching, and start only the exact image they checked.
+- The workflows pin each action to a commit, so a moved tag upstream can't change what
+  builds the images.
+- In the image, the app's files belong to root; the app runs as `nextjs` and can write
+  only to `/data`, `/tmp` and Next.js's cache.
+
 ## The Docker socket
 
 Mounting `/var/run/docker.sock` lets DeployNow manage the machine it runs on. It's

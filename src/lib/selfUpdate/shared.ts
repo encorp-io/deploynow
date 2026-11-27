@@ -21,6 +21,8 @@ export interface SelfUpdateStatus {
   fromImage: string; // image id the old container ran
   targetRef: string; // image reference the new container runs
   targetVersion: string; // "" for a floating tag until the new container answers
+  targetDigest?: string; // repo@sha256:… that was checked before the switch
+  verification?: string; // what was checked (signature, release digest), for the Updates panel
   startedAt: string;
   finishedAt?: string;
   message?: string;
@@ -36,6 +38,8 @@ export interface SelfUpdatePlan {
   id: string;
   selfId: string;
   targetRef: string;
+  /** The image id DeployNow pulled and checked; the updater starts nothing else */
+  targetImageId?: string;
   /** Status file inside the updater (the data volume is mounted at the same path) */
   statusFile: string;
   /** SQLite database to snapshot before the new version migrates it ("" for none) */

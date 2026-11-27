@@ -44,13 +44,14 @@ import {
   type SelfUpdatePlan,
   type SelfUpdateStatus,
 } from "./shared";
+import { VerifyError, verifyTarget } from "./verify";
 
 export type { SelfUpdateStatus } from "./shared";
 
 export class SelfUpdateError extends Error {
   constructor(
     message: string,
-    public code: "disabled" | "unsupported" | "busy" | "current" | "pull" | "docker" = "unsupported",
+    public code: "disabled" | "unsupported" | "busy" | "current" | "pull" | "verify" | "docker" = "unsupported",
   ) {
     super(message);
   }
@@ -201,8 +202,9 @@ export async function startSelfUpdate(opts: StartOptions = {}): Promise<SelfUpda
   if (existing?.State.Running) throw new SelfUpdateError("An update is already running.", "busy");
   if (isRunning(prior) && existing?.State.Running) throw new SelfUpdateError("An update is already running.", "busy");
 
+  const auth = await registryAuthFor(next.ref);
   try {
-    await pullImage(docker, next.ref, await registryAuthFor(next.ref));
+    await pullImage(docker, next.ref, auth);
   } catch (err) {
     throw new SelfUpdateError(`Couldn't pull ${next.ref}: ${dockerErrorMessage(err)}`, "pull");
   }
@@ -210,6 +212,30 @@ export async function startSelfUpdate(opts: StartOptions = {}): Promise<SelfUpda
   // Same image under a new tag (latest → 1.0.0 on the stable channel) still goes ahead, so the
   // container and the compose .env name the tag the channel follows from now on
   if (pulled.Id === target.self.Image && !next.changed) throw new SelfUpdateError(`${next.ref} is the image DeployNow already runs.`, "current");
+
+  // The updater runs the new image as root with the socket: check it is the one the tag stands for (verify.ts)
+  let verified;
+  try {
+    verified = await verifyTarget(docker, splitRef(next.ref)?.repo ?? "", next, pulled, { auth });
+  } catch (err) {
+    const message = err instanceof VerifyError ? err.message : `Couldn't check ${next.ref}: ${(err as Error).message}`;
+    await audit({
+      actor: opts.actor,
+      ip: opts.ip,
+      action: "deploynow.update",
+      outcome: "failure",
+      message: `DeployNow didn't update to ${next.ref}: the image failed its check`,
+      details: message,
+    }).catch(() => {});
+    await notify({
+      event: "update.installed",
+      ok: false,
+      title: `DeployNow update to ${next.tag} blocked`,
+      text: message,
+      fields: { From: VERSION, To: next.ref },
+    }).catch(() => {});
+    throw new SelfUpdateError(message, "verify");
+  }
 
   if (existing) await docker.getContainer(existing.Id).remove({ force: true }).catch(() => {});
 
@@ -221,6 +247,8 @@ export async function startSelfUpdate(opts: StartOptions = {}): Promise<SelfUpda
     fromImage: target.self.Image,
     targetRef: next.ref,
     targetVersion: next.pinned ? next.tag.replace(/^v/, "") : "",
+    targetDigest: verified.digest,
+    verification: verified.note,
     startedAt: new Date().toISOString(),
     actor: opts.auto ? "auto" : opts.actor?.email ?? "",
     ...(opts.autoKey ? { autoKey: opts.autoKey } : {}),
@@ -232,6 +260,7 @@ export async function startSelfUpdate(opts: StartOptions = {}): Promise<SelfUpda
     id,
     selfId: target.self.Id,
     targetRef: next.ref,
+    targetImageId: pulled.Id,
     statusFile: file,
     dbFile: dbFile(),
     envFile: setup.envFile,
@@ -269,7 +298,7 @@ export async function startSelfUpdate(opts: StartOptions = {}): Promise<SelfUpda
     ip: opts.ip,
     action: "deploynow.update",
     message: `${opts.auto ? "Auto-update" : opts.actor?.email ?? "Someone"} started updating DeployNow ${VERSION} to ${next.pinned || next.changed ? next.tag : next.ref}`,
-    details: `Image: ${next.ref} (${pulled.Id.slice(0, 19)}…)`,
+    details: [`Image: ${next.ref} (${verified.digest || pulled.Id})`, verified.note].filter(Boolean).join("\n"),
   });
   return status;
 }

@@ -214,11 +214,24 @@ cd "$DIR"
 
 TAG="${TAG:-$(grep -s '^DEPLOYNOW_TAG=' .env | cut -d= -f2- || true)}"
 TAG="${TAG:-latest}"
+# docker-compose.yml comes from the release being installed, not from whatever main has today
+latest_release() {
+  local tag
+  tag="$(curl -fsSL --max-time 15 -H 'Accept: application/vnd.github+json' "https://api.github.com/repos/${REPO}/releases/latest" 2>/dev/null \
+    | grep -o '"tag_name": *"[^"]*"' | head -n1 | sed 's/.*"\([^"]*\)"$/\1/' || true)"
+  [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] && echo "$tag"
+}
 case "$TAG" in
-  latest|edge) REF="main" ;;
+  edge) REF="main" ;; # edge is built from main
+  latest)
+    REF="$(latest_release || true)"
+    if [ -z "$REF" ]; then warn "Couldn't look up the newest release; using docker-compose.yml from main."; REF="main"; fi
+    ;;
   v*) REF="$TAG" ;;
   *) REF="v$TAG" ;;
 esac
+[[ "$REF" =~ ^(main|v[0-9A-Za-z.-]+)$ ]] || die "--tag $TAG isn't a release such as 2.1.0, latest or edge"
+
 if [ -f docker-compose.yml ]; then
   say "Keeping your docker-compose.yml"
 else
@@ -248,7 +261,7 @@ if [ "$UPGRADE" = 0 ]; then
 # every stored secret, and without it a restored database can't be read.
 AUTH_SECRET=$(openssl rand -base64 32)
 ADMIN_EMAIL=$EMAIL
-# Only read on the first start. Remove it once you've signed in and changed it.
+# Only read on the first start: setup.sh removes it once DeployNow is up
 ADMIN_PASSWORD='$PASSWORD'
 NEXTAUTH_URL=$URL
 DEPLOYNOW_PORT=$PORT
@@ -269,6 +282,7 @@ DOMAIN="$(grep '^DEPLOYNOW_DOMAIN=' .env | cut -d= -f2- || true)"
 
 if [ "$NO_START" = "1" ]; then
   say "Files written to $DIR. Start with: cd $DIR && docker compose up -d"
+  grep -q '^ADMIN_PASSWORD=' .env && say "After the first start, remove ADMIN_PASSWORD from .env and run docker compose up -d again."
   exit 0
 fi
 
@@ -286,18 +300,30 @@ if ! docker compose pull -q 2>/tmp/deploynow-pull.log; then
 fi
 docker compose up -d --remove-orphans
 
-say "Waiting for DeployNow to start"
-CID="$(docker compose ps -q | head -n1)"
-STATUS=""
-for _ in $(seq 1 60); do
-  STATUS="$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "$CID" 2>/dev/null || true)"
-  [ "$STATUS" = "healthy" ] && break
-  [ "$STATUS" = "exited" ] && break
-  sleep 2
-done
-if [ "$STATUS" != "healthy" ]; then
+wait_healthy() {
+  local cid status=""
+  cid="$(docker compose ps -q | head -n1)"
+  for _ in $(seq 1 60); do
+    status="$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "$cid" 2>/dev/null || true)"
+    [ "$status" = "healthy" ] && return 0
+    [ "$status" = "exited" ] && break
+    sleep 2
+  done
   docker compose logs --tail 40 || true
-  die "DeployNow didn't become healthy (status: ${STATUS:-unknown}). The log is above; see https://github.com/$REPO/blob/main/docs/install.md#troubleshooting"
+  die "DeployNow didn't become healthy (status: ${status:-unknown}). The log is above; see https://github.com/$REPO/blob/main/docs/install.md#troubleshooting"
+}
+
+say "Waiting for DeployNow to start"
+wait_healthy
+
+# The owner account exists now. ADMIN_PASSWORD is only read on the first start, and left in
+# .env the container would keep it in its environment, where docker inspect shows it.
+if grep -q '^ADMIN_PASSWORD=' .env; then
+  say "Removing the first-start password from .env"
+  tmp="$(mktemp)"; grep -v -e '^ADMIN_PASSWORD=' -e '^# Only read on the first start' .env > "$tmp" || true
+  cat "$tmp" > .env; rm -f "$tmp"
+  docker compose up -d --remove-orphans >/dev/null 2>&1 || docker compose up -d --remove-orphans
+  wait_healthy
 fi
 
 IP_URL="https://$(public_ip):$PORT"

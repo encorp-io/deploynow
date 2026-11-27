@@ -76,7 +76,7 @@ export async function POST(request: Request) {
       await startSelfUpdate({ actor, ip });
     } catch (err) {
       const e = err as SelfUpdateError;
-      const code = e instanceof SelfUpdateError ? ({ busy: 409, current: 409, disabled: 400, unsupported: 400, pull: 502, docker: 500 } as const)[e.code] : 500;
+      const code = e instanceof SelfUpdateError ? ({ busy: 409, current: 409, disabled: 400, unsupported: 400, pull: 502, verify: 422, docker: 500 } as const)[e.code] : 500;
       return NextResponse.json({ error: e.message || "Update failed" }, { status: code });
     }
   }

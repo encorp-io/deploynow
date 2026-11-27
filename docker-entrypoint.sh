@@ -44,6 +44,11 @@ async function seed() {
     console.log('[deployer] Owner account created: ' + adminEmail);
   } else {
     console.log('[deployer] Users exist — skipping user seed');
+    if (process.env.ADMIN_PASSWORD) {
+      console.warn('[deployer] WARNING: ADMIN_PASSWORD is still set but is only read on the first start, so it is ignored.');
+      console.warn('[deployer]          Remove it from the .env next to docker-compose.yml and run docker compose up -d:');
+      console.warn('[deployer]          until then anyone who can run docker inspect on this container can read it.');
+    }
   }
 
   // Seed settings. GitHub credentials can come from env so onboarding can skip that step.
@@ -85,6 +90,9 @@ async function seed() {
 }
 seed().catch(e => { console.error(e.message); process.exit(1); });
 "
+
+# The first-start password has done its job: keep it out of nginx's and Next.js's environment
+unset ADMIN_PASSWORD
 
 # ── Docker socket check ───────────────────────────────────────────────────────
 if [ -S /var/run/docker.sock ]; then

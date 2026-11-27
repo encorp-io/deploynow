@@ -58,25 +58,29 @@ curl -fsSL https://raw.githubusercontent.com/encorp-io/deploynow/main/setup.sh \
 
 ```bash
 mkdir -p /opt/deploynow && cd /opt/deploynow
-curl -fsSLO https://raw.githubusercontent.com/encorp-io/deploynow/main/docker-compose.yml
+curl -fsSLO https://raw.githubusercontent.com/encorp-io/deploynow/v1.0.0/docker-compose.yml   # the release you install
 cat > .env <<END
 AUTH_SECRET=$(openssl rand -base64 32)
 ADMIN_EMAIL=you@example.com
 ADMIN_PASSWORD=choose-a-long-password
 NEXTAUTH_URL=https://your-server:9444
 DOCKER_GID=$(stat -c %g /var/run/docker.sock)
-DEPLOYNOW_TAG=2.0.0
+DEPLOYNOW_TAG=1.0.0
 END
 chmod 600 .env
 docker compose up -d
+# Once you can sign in: the password is only read on the first start
+sed -i '/^ADMIN_PASSWORD=/d' .env && docker compose up -d
 ```
 
 Every setting is listed in the [README](../README.md#environment-variables).
 
 ## After the first sign-in
 
-1. Change the password and, ideally, set up 2FA or a passkey under **Account**. Then
-   remove `ADMIN_PASSWORD` from `.env`; it's only read on the first start.
+1. Change the password and, ideally, set up 2FA or a passkey under **Account**.
+   `setup.sh` removes `ADMIN_PASSWORD` from `.env` once DeployNow is up, and recreates
+   the container so `docker inspect` no longer shows it. If you wrote `.env` yourself,
+   remove it and run `docker compose up -d`; DeployNow logs a warning while it is set.
 2. No domain yet? Under **Settings → Domain**, give DeployNow one such as
    `deploy.example.com` for a Let's Encrypt certificate. Port 9444 keeps working with
    the self-signed one.

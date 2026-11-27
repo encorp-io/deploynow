@@ -23,7 +23,12 @@ commands use the agent of the server's own version.
 
 Settings → Updates → **Update now** (admins). DeployNow:
 
-1. pulls the new image (nothing changes if that fails);
+1. pulls the new image and checks it (nothing changes if either fails): the image's
+   cosign signature must come from this repository's release workflow, for the git ref
+   the tag stands for (`refs/tags/v1.1.0` for `1.1.0`, `main` for `edge`, any release
+   tag for `latest`), and for a release, its digest must match the `image-digests.txt`
+   attached to the GitHub release. From here on the update uses that exact image: the
+   updater refuses to start if the tag points elsewhere by then;
 2. starts a short-lived `deploynow-updater` container from its own image, with the
    Docker socket and DeployNow's data volume and no network. A container can't replace
    itself, because stopping it ends the process doing the work, so the updater does it;
@@ -62,6 +67,13 @@ until the next one.
 It needs `/var/run/docker.sock` mounted (the default compose file does) and `/data` on a
 volume. `DEPLOYNOW_SELF_UPDATE=off` turns it off; the steps below always work.
 
+The signature check runs cosign in a container (`ghcr.io/sigstore/cosign/cosign`, pinned
+by digest) and needs to reach ghcr.io and Sigstore (`rekor.sigstore.dev`,
+`tuf-repo-cdn.sigstore.dev`). `DEPLOYNOW_VERIFY_IMAGES=off` skips it, for example behind
+a registry mirror. Images built elsewhere (a fork, your own registry) aren't checked
+unless `DEPLOYNOW_IMAGE_SIGNER` gives the certificate identity to expect, as a regular
+expression such as `^https://github.com/you/deploynow/`.
+
 The updater ships with this version, so the upgrade *to* it is done by hand once.
 
 ### With the installer
@@ -73,7 +85,14 @@ curl -fsSL https://raw.githubusercontent.com/encorp-io/deploynow/main/setup.sh |
 
 ### By hand
 
-Next to your `docker-compose.yml`:
+Next to your `docker-compose.yml`. To check the image first (optional, needs
+[cosign](https://docs.sigstore.dev/cosign/system_config/installation/)):
+
+```bash
+cosign verify ghcr.io/encorp-io/deploynow:1.1.0 \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  --certificate-identity https://github.com/encorp-io/deploynow/.github/workflows/docker-publish.yml@refs/tags/v1.1.0
+```
 
 ```bash
 sed -i 's/^DEPLOYNOW_TAG=.*/DEPLOYNOW_TAG=1.1.0/' .env   # or edit it

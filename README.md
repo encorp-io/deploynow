@@ -141,7 +141,7 @@ deploynow api GET /endpoints
 |---|---|---|---|
 | `AUTH_SECRET` | **Yes** | | Signs sessions and encrypts stored secrets. Keep it safe: if it changes, stored secrets can't be read. `openssl rand -base64 32` |
 | `ADMIN_EMAIL` | No | `admin@example.com` | Owner account created on first boot |
-| `ADMIN_PASSWORD` | First boot | | Password for that account, at least 12 characters |
+| `ADMIN_PASSWORD` | First boot | | Password for that account, at least 12 characters. Ignored once an account exists: remove it afterwards (setup.sh does) |
 | `NEXTAUTH_URL` | Recommended | from the request | Public URL. Used for links, SSO and the agent address. A domain set under Settings → Domain takes precedence |
 | `IGNORE_PLATFORM_DOMAIN` | No | | `true` ignores the domain stored under Settings → Domain, if it ever needs bypassing without the UI |
 | `UI_HTTP_PORT` | No | `9080` | Internal plain-HTTP port Traefik forwards the platform domain to. Not published on the host |
@@ -149,6 +149,8 @@ deploynow api GET /endpoints
 | `DOCKER_GID` | With the socket | `999` | Group of `/var/run/docker.sock` |
 | `DEPLOYNOW_DATA_DIR` | No | the database's folder | Deploy logs, build checkouts and backup staging |
 | `AGENT_PORT` | No | `8444` | Port agents connect to; `off` disables it |
+| `DEPLOYNOW_VERIFY_IMAGES` | No | on | `off` skips the cosign signature and release digest check before a self-update |
+| `DEPLOYNOW_IMAGE_SIGNER` | No | | Certificate identity (regular expression) to require when self-updating from your own image |
 | `AGENT_PUBLIC_URL` | No | the platform domain's or `NEXTAUTH_URL`'s host on `AGENT_PORT` | Address agents dial. Can also be set under Settings |
 | `AGENT_IMAGE` | No | `ghcr.io/encorp-io/deploynow-agent:<this version>` | Agent image in the join command |
 | `RESTIC_IMAGE` | No | `restic/restic:0.18.1` | restic image used for backups on endpoints |

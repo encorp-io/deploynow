@@ -73,6 +73,21 @@ async function main() {
   // Let DeployNow finish answering the request that started this
   await new Promise((r) => setTimeout(r, plan.delayMs ?? 3000));
 
+  // Start only the image DeployNow pulled and checked: if the tag was moved since, stop here
+  if (plan.targetImageId) {
+    let id = "";
+    try {
+      id = (await docker.getImage(plan.targetRef).inspect()).Id;
+    } catch {
+      /* gone */
+    }
+    if (id !== plan.targetImageId)
+      return finish(
+        "failed",
+        `${plan.targetRef} no longer points at the image that was checked (${plan.targetImageId.slice(0, 19)}…), so nothing was changed.`,
+      );
+  }
+
   const snapDir = path.join(path.dirname(plan.statusFile), "pre-update-db");
   let snapshotted = false;
   save({ state: "replacing" });

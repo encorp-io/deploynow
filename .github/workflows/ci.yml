@@ -7,6 +7,9 @@ on:
     branches: [main, master]
   workflow_call: # the release workflow runs CI before it publishes
 
+permissions:
+  contents: read
+
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
@@ -16,9 +19,8 @@ jobs:
     name: Type check
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
-
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
           cache: npm
@@ -50,9 +52,8 @@ jobs:
       DATABASE_URL: file:/tmp/test.db
       NEXTAUTH_URL: http://localhost:3000
     steps:
-      - uses: actions/checkout@v7
-
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
           cache: npm
@@ -64,7 +65,7 @@ jobs:
         run: npx prisma generate
 
       # The agent integration test builds the Go agent and drives it against Docker
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         with:
           go-version: "1.24"
           cache-dependency-path: agent/go.sum
@@ -79,8 +80,8 @@ jobs:
       run:
         working-directory: agent
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         with:
           go-version: "1.24"
           cache-dependency-path: agent/go.sum
@@ -97,9 +98,8 @@ jobs:
       AUTH_SECRET: ci-placeholder-secret-not-used-in-tests
       NEXTAUTH_URL: http://localhost:3000
     steps:
-      - uses: actions/checkout@v7
-
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
           cache: npm

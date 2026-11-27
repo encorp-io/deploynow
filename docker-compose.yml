@@ -32,9 +32,11 @@ services:
       # Generate with: openssl rand -base64 32
       AUTH_SECRET: ${AUTH_SECRET}
 
-      # First-boot admin credentials (only used when no users exist in DB)
+      # First-boot admin credentials (only used when no users exist in DB).
+      # Remove ADMIN_PASSWORD from .env after the first start (setup.sh does) and run
+      # docker compose up -d: until then docker inspect shows it.
       ADMIN_EMAIL:    ${ADMIN_EMAIL:-admin@example.com}
-      ADMIN_PASSWORD: ${ADMIN_PASSWORD}   # required on first boot, min 12 chars
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}   # required on first boot, min 12 chars
 
       # SQLite database (inside /data volume)
       DATABASE_URL: file:/data/deployer.db
