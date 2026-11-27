@@ -9,6 +9,11 @@ versions fix bugs. Every version upgrades the database by itself.
 ## [Unreleased]
 
 ### Fixed
+- **Domains behind Cloudflare's proxy:** a domain with HTTPS turned off answered
+  404 when Cloudflare reached the server on port 443 (SSL mode Full). It now has a
+  router on 443 too. The managed Traefik also trusts the X-Forwarded-* headers from
+  Cloudflare's IP ranges, so SSL mode Flexible no longer loops on the https redirect.
+  To pick this up, redeploy the app and save the edge proxy on the endpoint page again.
 - **Passkeys:** about 1 in 110 passkey sign-ins failed with "The passkey couldn't be
   verified". SimpleWebAuthn is upgraded to v13, which reads every valid signature.
 

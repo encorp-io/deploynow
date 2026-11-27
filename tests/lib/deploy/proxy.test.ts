@@ -33,6 +33,9 @@ describe("proxyArgs", () => {
     expect(a).toContain("--providers.docker.exposedbydefault=false");
     expect(a).toContain("--providers.docker.network=deploynow");
     expect(a).toContain("--certificatesresolvers.letsencrypt.acme.email=ops@example.com");
+    // Trusts Cloudflare's X-Forwarded-Proto so Flexible SSL doesn't loop on the https redirect
+    expect(a.find((x) => x.startsWith("--entrypoints.web.forwardedheaders.trustedips="))).toContain("173.245.48.0/20");
+    expect(a.find((x) => x.startsWith("--entrypoints.websecure.forwardedheaders.trustedips="))).toContain("2606:4700::/32");
   });
 });
 

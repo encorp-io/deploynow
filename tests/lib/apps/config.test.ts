@@ -108,6 +108,11 @@ describe("traefikLabels", () => {
     const l = traefikLabels("web", [{ ...d, https: false, path: "/api" }], "n");
     expect(l["traefik.http.routers.dn-web-34567890.rule"]).toBe("Host(`a.example.com`) && PathPrefix(`/api`)");
     expect(l["traefik.http.routers.dn-web-34567890.entrypoints"]).toBe("web");
+    // Answers on 443 too, so Cloudflare's proxy (SSL mode Full) doesn't get a 404
+    expect(l["traefik.http.routers.dn-web-34567890-tls.entrypoints"]).toBe("websecure");
+    expect(l["traefik.http.routers.dn-web-34567890-tls.tls"]).toBe("true");
+    expect(l["traefik.http.routers.dn-web-34567890-tls.rule"]).toBe("Host(`a.example.com`) && PathPrefix(`/api`)");
+    expect(l["traefik.http.routers.dn-web-34567890-tls.tls.certresolver"]).toBeUndefined();
     expect(traefikLabels("web", [], "n")).toEqual({});
   });
 });
