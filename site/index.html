@@ -498,10 +498,11 @@ Never commit real secrets. Keep local development working.</pre>
       <p class="lede reveal">Run it on any Linux server with 1 GB of RAM, amd64 or arm64. Docker is installed for you if it's missing.</p>
       <ul class="checks reveal">
         <li>Asks for a domain (or uses the server's IP), the port, the admin email and a password</li>
+        <li>With a domain, HTTPS with Let's Encrypt is set up for you once DNS points at the server</li>
         <li>Leave the password blank and it generates a strong one</li>
         <li>Run it again any time to upgrade; your settings are kept</li>
       </ul>
-      <p class="fine reveal">Unattended install: add <code>-s -- --yes</code> after <code>bash</code>. Prefer to do it by hand? See the <a href="https://github.com/encorp-io/deploynow/blob/main/docs/install.md">install guide</a>.</p>
+      <p class="fine reveal">Unattended: <code>… | sudo bash -s -- --yes --domain deploy.example.com --email you@example.com</code>. Prefer to do it by hand? See the <a href="https://github.com/encorp-io/deploynow/blob/main/docs/install.md">install guide</a>.</p>
     </div>
     <div class="term reveal">
       <div class="term-bar">
@@ -512,10 +513,10 @@ Never commit real secrets. Keep local development working.</pre>
 <pre><span class="p">$</span> <span id="qs">curl -fsSL https://raw.githubusercontent.com/encorp-io/deploynow/main/setup.sh | sudo bash</span>
 
 <span class="c">==&gt; DeployNow setup</span>
-<span class="q">Domain</span> (blank to use 203.0.113.7): <b>deploy.acme.com</b>
+<span class="q">Domain for DeployNow</span> (Enter to use the IP): <b>deploy.acme.com</b>
 <span class="q">Dashboard port</span> [9444]:
-<span class="q">Admin email</span>: <b>you@acme.com</b>
-<span class="q">Admin password</span> (blank to generate):
+<span class="q">Admin email</span> [admin@example.com]: <b>you@acme.com</b>
+<span class="q">Admin password</span> [Enter = generate one]:
 <span class="c">==&gt; Installing Docker … done</span>
 <span class="c">==&gt; Starting DeployNow … healthy</span>
 

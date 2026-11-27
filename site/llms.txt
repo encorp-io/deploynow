@@ -4,7 +4,7 @@
 
 Key facts:
 
-- Install: the one-line `setup.sh` installs Docker if missing, asks for a domain (or uses the server IP), the dashboard port (default 9444), the admin email and a password (blank generates one), then starts DeployNow. Add `-s -- --yes` after `bash` for an unattended install. Running it again upgrades and keeps settings.
+- Install: the one-line `setup.sh` installs Docker if missing, asks for a domain (or uses the server IP), the dashboard port (default 9444), the admin email and a password (blank generates one), then starts DeployNow. For an unattended install: `... | sudo bash -s -- --yes --domain deploy.example.com --email you@example.com`. With a domain, Traefik and Let's Encrypt are set up automatically once DNS points at the server (ports 80/443). Running it again upgrades and keeps settings.
 - Runs as a single container with an embedded SQLite database. Dashboard on port 9444; agents connect on 8444.
 - Machines: the local Docker socket, SSH, Docker TLS, and an outbound agent over mutual TLS for machines behind NAT (no open ports).
 - Apps: deploy from a container image (any registry), a Dockerfile or compose file in Git, or a pasted compose file. Zero-downtime replace, rollback, GitHub push-to-deploy, pull request previews at `pr-<n>.<domain>`, 22 one-click templates.
