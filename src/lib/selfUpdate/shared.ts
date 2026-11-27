@@ -99,16 +99,39 @@ export function splitRef(ref: string): { repo: string; tag: string } | null {
 }
 
 /**
- * The image to move to. A pinned tag moves to the newest release (keeping a "v"
- * prefix if the old tag had one); any other tag is pulled again as it is.
+ * Which images an update follows (Settings → Updates → Update channel):
+ *   ""        the tag DeployNow runs now: a release moves to the newest release, latest/edge/2.1 are pulled again
+ *   "stable"  the newest release, pinned (1.0.0), whatever tag runs now
+ *   "edge"    every build from main (the edge tag)
  */
-export function nextImageRef(currentRef: string, latestRelease: string): { ref: string; pinned: boolean; tag: string } | null {
+export const CHANNELS = ["", "stable", "edge"] as const;
+export type Channel = (typeof CHANNELS)[number];
+
+export function isChannel(v: unknown): v is Channel {
+  return typeof v === "string" && (CHANNELS as readonly string[]).includes(v);
+}
+
+export interface NextImage {
+  ref: string;
+  pinned: boolean; // one exact release
+  tag: string;
+  changed: boolean; // the tag differs from the one running (a channel switch or a newer release)
+}
+
+/**
+ * The image to move to. A pinned tag moves to the newest release (keeping a "v"
+ * prefix if the old tag had one); any other tag is pulled again as it is, unless
+ * a channel says otherwise.
+ */
+export function nextImageRef(currentRef: string, latestRelease: string, channel: Channel = ""): NextImage | null {
   const parts = splitRef(currentRef);
   if (!parts) return null;
-  if (!isPinnedTag(parts.tag)) return { ref: `${parts.repo}:${parts.tag}`, pinned: false, tag: parts.tag };
+  const out = (tag: string, pinned: boolean): NextImage => ({ ref: `${parts.repo}:${tag}`, pinned, tag, changed: tag !== parts.tag });
+  if (channel === "edge") return out("edge", false);
+  if (channel === "" && !isPinnedTag(parts.tag)) return out(parts.tag, false);
   if (!latestRelease) return null;
-  const tag = parts.tag.startsWith("v") ? `v${latestRelease.replace(/^v/, "")}` : latestRelease.replace(/^v/, "");
-  return { ref: `${parts.repo}:${tag}`, pinned: true, tag };
+  const v = latestRelease.replace(/^v/, "");
+  return out(parts.tag.startsWith("v") ? `v${v}` : v, true);
 }
 
 /** Set KEY=value in .env text, keeping everything else. Returns null when the key isn't there. */

@@ -38,6 +38,9 @@ export interface SelfUpdateInfo {
   reason: string;
   image: string;
   pinned: boolean;
+  target: string;
+  installable: boolean;
+  channel: "" | "stable" | "edge";
   auto: boolean;
   hour: number;
   envDisabled: boolean;
@@ -177,10 +180,13 @@ export function DeployNowUpdates() {
   const tag = info.latest ?? "";
   const su = info.selfUpdate;
   const last = su?.status && !RUNNING.includes(su.status.state) ? su.status : null;
-  // A moving tag (latest, edge) can always be pulled again; a pinned one only moves to a newer release
-  const canInstall = !!su?.supported && !su.envDisabled && (su.pinned ? !!info.available : true);
+  // The server works out what Update now would pull for the chosen channel
+  const canInstall = !!su?.supported && !su.envDisabled && !!su.installable;
+  const runningTag = su?.image.split(":").pop() ?? "";
+  const targetTag = su?.target.split(":").pop() ?? "";
+  const switching = !!targetTag && targetTag !== runningTag;
   const install = async () => {
-    const what = su?.pinned || info.available ? `DeployNow ${tag}` : `the newest ${su?.image.split(":").pop() ?? ""} image`;
+    const what = su?.pinned ? `DeployNow ${targetTag}` : switching ? `the ${targetTag} image` : `the newest ${runningTag} image`;
     const ok = await confirm({
       title: `Update to ${what}?`,
       message:
@@ -239,7 +245,7 @@ export function DeployNowUpdates() {
       <div className="mt-4 flex flex-wrap items-center gap-3">
         {su?.supported && !su.envDisabled && (
           <Button type="button" onClick={install} loading={busy === "install"} disabled={!canInstall || waiting}>
-            {busy !== "install" && <ArrowUpCircle className="w-4 h-4" />} {su.pinned || info.available ? "Update now" : "Pull and update"}
+            {busy !== "install" && <ArrowUpCircle className="w-4 h-4" />} {su.pinned || switching ? "Update now" : "Pull and update"}
           </Button>
         )}
         <Button type="button" variant="secondary" onClick={() => post({ check: true }, "check")} loading={busy === "check"} disabled={info.envDisabled || !info.enabled || waiting}>
@@ -257,6 +263,22 @@ export function DeployNowUpdates() {
 
       {su && su.supported && !su.envDisabled && (
         <div className="mt-5 border-t border-border pt-4 space-y-3">
+          <div className="flex flex-wrap items-center gap-3 text-sm">
+            <span className="text-text-primary">Update channel</span>
+            <Select size="sm" value={su.channel} onChange={(e) => post({ channel: e.target.value }, "channel")} disabled={busy === "channel" || waiting} aria-label="Update channel">
+              <option value="stable">Stable: the newest release</option>
+              <option value="edge">Edge: every build from main</option>
+              <option value="">{`Keep the running tag (${runningTag || "current"})`}</option>
+            </Select>
+          </div>
+          <p className="text-xs text-text-muted -mt-1">
+            {su.channel === "stable"
+              ? "Update now and auto-update move to the newest release (for example 1.0.0) and pin it, so only tagged releases are installed."
+              : su.channel === "edge"
+                ? "Update now and auto-update follow the edge image, built from every commit on main. Newest features, may break."
+                : "Updates follow the tag DeployNow was started with: a release moves to the newest release, latest or edge is pulled again."}
+            {switching && ` Next update: ${runningTag} → ${targetTag}.`}
+          </p>
           <Checkbox
             variant="switch"
             checked={su.auto}
@@ -266,7 +288,7 @@ export function DeployNowUpdates() {
             hint={
               su.pinned
                 ? "When a newer release is out, DeployNow updates itself and moves DEPLOYNOW_TAG in your compose .env along. A version that fails its health check is rolled back and not tried again."
-                : `When a new ${su.image.split(":").pop()} image is published, DeployNow pulls it and updates itself. A version that fails its health check is rolled back and not tried again.`
+                : `When a new ${targetTag || runningTag} image is published, DeployNow pulls it and updates itself. A version that fails its health check is rolled back and not tried again.`
             }
           />
           {su.auto && (

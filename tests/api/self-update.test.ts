@@ -67,6 +67,15 @@ describe("/api/updates self-update", () => {
     expect(store.s).toMatchObject({ selfUpdateAuto: true, selfUpdateHour: 3 });
     expect((await POST(post({ hour: 24 }))).status).toBe(400);
   });
+
+  it("saves the update channel", async () => {
+    signInAs("admin");
+    expect((await POST(post({ channel: "edge" }))).status).toBe(200);
+    expect(store.s.selfUpdateChannel).toBe("edge");
+    expect((await POST(post({ channel: "nightly" }))).status).toBe(400);
+    signInAs("operator");
+    expect((await POST(post({ channel: "stable" }))).status).toBe(403);
+  });
 });
 
 describe("Services → Update on DeployNow's own container", () => {

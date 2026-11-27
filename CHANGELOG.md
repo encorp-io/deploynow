@@ -9,6 +9,10 @@ versions fix bugs. Every version upgrades the database by itself.
 ## [Unreleased]
 
 ### Added
+- **Update channel** (Settings → Updates): updates follow *stable* (the newest release,
+  pinned, e.g. `1.0.0`), *edge* (every build from `main`) or the tag DeployNow was started
+  with. Update now and auto-update both use it, and a channel switch moves `DEPLOYNOW_TAG`
+  in the compose `.env` too.
 - **Overview dashboard:** a new home page with machines, apps, CPU, memory and backups at a
   glance, the latest deploy log, each machine's load over 24 hours, the busiest apps and alerts.
 - **Usage per service:** on a project page, every app lists its services (containers) with

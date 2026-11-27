@@ -44,6 +44,16 @@ later `docker compose up -d` keeps the new version. A tag that moves (`latest`, 
 `edge`) is pulled again. If your `docker-compose.yml` names a version itself instead of
 `${DEPLOYNOW_TAG}`, change it there after updating.
 
+**Update channel** (same page) picks what updates follow:
+
+| Channel | Update now and auto-update move to |
+|---|---|
+| Stable | the newest release, pinned (`1.0.0`), even from `latest` or `edge` |
+| Edge | the `edge` image, built from every commit on `main` |
+| Keep the running tag (default) | the newest release for a pinned tag, the same tag again for `latest`, `2.0` or `edge` |
+
+Switching channel moves `DEPLOYNOW_TAG` in the compose `.env` on the next update.
+
 **Install updates automatically** (same page) does this on its own when a newer release
 is out, or for `edge` and other moving tags when a new image is published. You can keep
 it to one hour of the day (server time). A version that rolled back is not tried again
