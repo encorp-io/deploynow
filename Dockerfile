@@ -31,6 +31,8 @@ ENV DATABASE_URL="file:/tmp/build-dummy.db"
 RUN npx prisma generate && npx prisma migrate deploy
 RUN mkdir -p public
 RUN npx next build
+# The self-updater (src/lib/selfUpdate/runner.ts) as plain Node, run from this image by a helper container
+RUN node scripts/build-updater.cjs /app/updater
 
 # ─── Stage 3: runner ──────────────────────────────────────────────────────────
 FROM node:22-alpine@sha256:9bef0ef1e268f60627da9ba7d7605e8831d5b56ad07487d24d1aa386336d1944 AS runner
@@ -79,6 +81,9 @@ COPY --from=builder /app/prisma              ./prisma
 COPY --from=builder /app/node_modules/prisma ./node_modules/prisma
 # bcryptjs — verifies v1 password hashes until they are rehashed on login
 COPY --from=builder /app/node_modules/bcryptjs ./node_modules/bcryptjs
+
+# ── Self-updater (Settings → Updates → Update now) ──────────────────────────
+COPY --from=builder --chown=nextjs:nodejs /app/updater ./updater
 
 # ── Entrypoint ────────────────────────────────────────────────────────────────
 COPY --chown=nextjs:nodejs docker-entrypoint.sh /app/docker-entrypoint.sh

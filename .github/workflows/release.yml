@@ -19,7 +19,7 @@ jobs:
       contents: write
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0   # full history for changelog
 
@@ -48,7 +48,7 @@ jobs:
           ## Install or upgrade
 
           \`\`\`bash
-          curl -fsSL https://raw.githubusercontent.com/${{ github.repository }}/${GITHUB_REF_NAME}/install.sh | sudo DEPLOYNOW_TAG=${VERSION} bash
+          curl -fsSL https://raw.githubusercontent.com/${{ github.repository }}/${GITHUB_REF_NAME}/setup.sh | sudo DEPLOYNOW_TAG=${VERSION} bash
           \`\`\`
 
           Or set \`DEPLOYNOW_TAG=${VERSION}\` in the \`.env\` next to your \`docker-compose.yml\` and run \`docker compose pull && docker compose up -d\`.

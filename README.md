@@ -84,18 +84,19 @@ DeployNow ships with a dark theme by default and a matching light theme. Switch 
 You need a Linux machine (amd64 or arm64) with ports 9444 and 8444 open.
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/encorp-io/deploynow/main/install.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/encorp-io/deploynow/main/setup.sh | sudo bash
 ```
 
-It installs Docker if needed, writes `/opt/deploynow/.env` with a random `AUTH_SECRET`
-and owner password, starts DeployNow and prints where to sign in. Prefer to do it by
+It asks for a domain, port, admin email and password (Enter keeps the defaults), installs
+Docker if needed, writes `/opt/deploynow/docker-compose.yml` and `.env`, starts DeployNow
+and prints where to sign in. `--yes` skips the questions. Prefer to do it by
 hand, or want options? See [docs/install.md](docs/install.md).
 
 While the repository is private, the image on GHCR is private too: run `docker login ghcr.io` with a GitHub token that has `read:packages` first.
 
 Then:
 
-1. Sign in, and set up 2FA or a passkey when asked. Admins must have one.
+1. Sign in. Set up 2FA or a passkey under **Account**; owners can require it for admins under **Settings → Security and sign-in**.
 2. The local machine is already added as the `local` endpoint. Add others under **Endpoints**: SSH, TLS, or **Agent** for a machine behind NAT, where you copy the `docker run` command shown.
 3. On an endpoint, set up the edge proxy (managed Traefik or an existing one) if you want domains.
 4. Optional: under **Settings → Domain**, serve DeployNow itself on a domain such as `deploy.example.com`. It goes through the local endpoint's edge proxy with a Let's Encrypt certificate, and port 9444 keeps working as a fallback.

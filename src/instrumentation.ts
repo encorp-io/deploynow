@@ -10,6 +10,9 @@ export async function register() {
     // The platform domain (Settings → Domain): load it, then put its Traefik route back
     const { reconcilePlatformDomain } = await import("./lib/platformDomain");
     await reconcilePlatformDomain();
+    // DEPLOYNOW_DOMAIN from setup.sh: route it and get a certificate (in the background)
+    const { applySetupDomain } = await import("./lib/setupDomain");
+    applySetupDomain().catch((err) => console.error("[deployer] DEPLOYNOW_DOMAIN:", err instanceof Error ? err.message : err));
 
     const { startWsServer } = await import("./lib/wsServer");
     startWsServer();
@@ -31,6 +34,9 @@ export async function register() {
 
     const { startUpdateChecker } = await import("./lib/updates");
     startUpdateChecker();
+    // Reports a finished self-update and runs auto-update (Settings → Updates)
+    const { startSelfUpdateWorker } = await import("./lib/selfUpdate");
+    startSelfUpdateWorker();
     const { startUptimeChecker } = await import("./lib/uptime");
     startUptimeChecker();
 

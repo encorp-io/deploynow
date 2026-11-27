@@ -9,7 +9,7 @@ import {
   verifyAuthenticationResponse,
   verifyRegistrationResponse,
   type AuthenticationResponseJSON,
-  type AuthenticatorTransportFuture,
+  type AuthenticatorTransport,
   type RegistrationResponseJSON,
 } from "@simplewebauthn/server";
 import type { Passkey } from "@prisma/client";
@@ -23,7 +23,7 @@ export class PasskeyError extends Error {}
 
 type RegistrationResponse = RegistrationResponseJSON;
 type AuthenticationResponse = AuthenticationResponseJSON;
-type Transport = AuthenticatorTransportFuture;
+type Transport = AuthenticatorTransport;
 
 /**
  * The relying party: the address the browser is on and its host name. A passkey

@@ -8,14 +8,54 @@ versions fix bugs. Every version upgrades the database by itself.
 
 ## [Unreleased]
 
+### Added
+- **One-command setup:** `curl -fsSL https://raw.githubusercontent.com/encorp-io/deploynow/main/setup.sh | sudo bash`
+  asks for a domain, port, admin email and password (Enter keeps the defaults), installs
+  Docker if it's missing, writes `docker-compose.yml` and `.env` and starts DeployNow.
+  `--yes` runs it without questions; `install.sh` still works and runs `setup.sh --yes`.
+- **`DEPLOYNOW_DOMAIN`:** serve the UI on a domain from the first start. DeployNow turns on
+  the managed edge proxy, gets a Let's Encrypt certificate (to `ACME_EMAIL`) and switches to
+  the domain once it answers, the same as Settings → Domain. `DEPLOYNOW_PORT` picks the
+  dashboard's host port.
+
+### Changed
+- **2FA is optional on a new install.** Admins and owners are no longer made to set it up
+  before using DeployNow; owners can require it under Settings → Security and sign-in, or
+  with `REQUIRE_2FA=true` on the first start. Existing installs keep their setting.
+
 ### Fixed
 - **Domains behind Cloudflare's proxy:** a domain with HTTPS turned off answered
   404 when Cloudflare reached the server on port 443 (SSL mode Full). It now has a
   router on 443 too. Redeploy the app to pick this up.
+- **Turning on 2FA:** after enabling 2FA (or adding a passkey) on a new account, the app kept
+  sending you back to the Account page and the sidebar kept asking you to turn it on, until
+  you reloaded the page. The sidebar and the page router now pick up the change at once.
+- **Updating DeployNow from its own UI:** the Update button on DeployNow's own container
+  stopped DeployNow and never brought it back, because the process doing the recreate
+  ran inside the container it stopped. That button now uses the new self-update below.
+- **Compose env vars:** an app's environment variables only filled `${NAME}` in the compose
+  file, so a service with `env_file: .env` got none of them. They are now also written to
+  `.env` next to the compose file at deploy time (a `.env` from the repository is kept, and
+  the app's values win).
 - **Passkeys:** about 1 in 110 passkey sign-ins failed with "The passkey couldn't be
   verified". SimpleWebAuthn is upgraded to v13, which reads every valid signature.
 
 ### Added
+- **Self-update:** Settings → Updates → **Update now**. DeployNow pulls the new image,
+  then a short-lived `deploynow-updater` container (started from DeployNow's own image,
+  with the Docker socket and the data volume, no network) replaces DeployNow with the
+  same configuration, waits for its health check, and rolls back to the previous
+  container, with the database copied just before the switch, when the new version
+  doesn't come up healthy. A pinned tag (`2.0.0`) moves to the newest release and
+  `DEPLOYNOW_TAG` in the compose `.env` moves with it; `latest`, `edge` and `2.0` are
+  pulled again. Optional **auto-update**, any time or within one hour of the day; a
+  version that rolled back isn't tried again. The outcome lands in the audit log and
+  the new "DeployNow updated itself (or rolled back)" notification.
+  `DEPLOYNOW_SELF_UPDATE=off` turns it off.
+- **Import .env:** upload, drop or paste a .env file on an app's Environment tab. It reads
+  comments, quotes, multi-line values and `export`, previews what changes, lets you merge
+  (file wins), add new only or replace all, imports password and token names as secrets,
+  and saves right away. The tab also shows when there are unsaved changes.
 - **Forms and dialogs:** redesigned dropdowns (themed menu with keyboard support and a
   filter for long lists), text fields, checkboxes, radios and toggle switches, and
   dialogs (lit edge, icon header, focus kept inside, bottom sheet on phones).

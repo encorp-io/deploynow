@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { containerOnlyConfig, networkEndpointConfig, recreateContainer, withAnonymousVolumes } from "@/lib/docker/recreate";
+import { containerOnlyConfig, networkEndpointConfig, recreateContainer, RollbackError, stagedRecreate, withAnonymousVolumes } from "@/lib/docker/recreate";
 
 const OLD_ID = "abcdef123456" + "0".repeat(52);
 
@@ -84,7 +84,7 @@ describe("recreateContainer", () => {
       start: vi.fn(async () => {}),
       remove: vi.fn(async () => {}),
     };
-    const created = { id: "new", start: vi.fn(async () => { if (startFails) throw new Error("port in use"); }), remove: vi.fn(async () => {}) };
+    const created = { id: "new", start: vi.fn(async () => { if (startFails) throw new Error("port in use"); }), stop: vi.fn(async () => {}), remove: vi.fn(async () => {}) };
     const net = { connect: vi.fn(async () => {}) };
     const docker = {
       getContainer: vi.fn(() => old),
@@ -115,5 +115,39 @@ describe("recreateContainer", () => {
     expect(old.rename).toHaveBeenLastCalledWith({ name: "web" });
     expect(old.start).toHaveBeenCalled();
     expect(old.remove).not.toHaveBeenCalled();
+  });
+
+  it("keeps the old container until commit, and rolls back on request", async () => {
+    const { docker, old, created } = fakeDocker();
+    const order: string[] = [];
+    old.stop.mockImplementation(async () => { order.push("stop-old"); });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const staged = await stagedRecreate(docker as any, OLD_ID, { image: "nginx:1.27", afterStop: () => { order.push("afterStop"); } });
+    expect(order).toEqual(["stop-old", "afterStop"]);
+    expect(staged.newId).toBe("new");
+    expect(old.remove).not.toHaveBeenCalled();
+    const opts = (docker.createContainer.mock.calls[0] as unknown[])[0] as Record<string, unknown>;
+    expect(opts.Image).toBe("nginx:1.27");
+
+    await staged.rollback(() => { order.push("beforeStart"); });
+    expect(created.remove).toHaveBeenCalled();
+    expect(old.rename).toHaveBeenLastCalledWith({ name: "web" });
+    expect(order.at(-1)).toBe("beforeStart");
+    expect(old.start).toHaveBeenCalled();
+  });
+
+  it("says so when the old container won't start again either", async () => {
+    const { docker, old } = fakeDocker(true);
+    old.start.mockRejectedValue(new Error("no space left"));
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const err = await recreateContainer(docker as any, OLD_ID).catch((e) => e);
+    expect(err).toBeInstanceOf(RollbackError);
+    expect(err.message).toMatch(/port in use; starting the old container again also failed: no space left/);
+
+    const ok = fakeDocker();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const staged = await stagedRecreate(ok.docker as any, OLD_ID);
+    ok.old.start.mockRejectedValue(new Error("no space left"));
+    await expect(staged.rollback()).rejects.toThrow("no space left");
   });
 });

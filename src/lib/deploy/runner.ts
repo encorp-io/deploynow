@@ -25,6 +25,7 @@ import { audit } from "../audit";
 import { notify } from "../notify";
 import { publicBaseUrl } from "../publicOrigin";
 import { makeMasker, readStoredEnv, resolveEnv } from "../apps/env";
+import { prepareComposeEnvFile } from "./envFile";
 import { parsePorts, parseVolumes, splitCommand, traefikLabels } from "../apps/config";
 import { checkout } from "./git";
 import { createLogger, type DeployLogger } from "./log";
@@ -280,6 +281,8 @@ export async function runDeployment(deploymentId: string, ctx: RunContext = {}):
       result.renderedCompose = rendered;
       const file = path.join(composeDir, ".deploynow-compose.yml");
       fs.writeFileSync(file, rendered, { mode: 0o600 });
+      // Only the repository's own .env while building; the app's values go in right before up
+      const envFile = prepareComposeEnvFile(composeDir);
 
       const base = ["compose", "--progress", "plain", "-p", app.slug, "-f", file];
       await withDockerCli(toConnection(app.endpoint), await registryLogins(pullCtx), async (cli) => {
@@ -291,6 +294,8 @@ export async function runDeployment(deploymentId: string, ctx: RunContext = {}):
           log("Building");
           await run(["build"]);
         }
+        envFile.write(env.vars);
+        if (env.vars.length) log("Wrote the variables to .env (load them in a service with env_file: .env)");
         log("Starting services");
         await run(["up", "-d", "--remove-orphans", "--no-build", "--wait", "--wait-timeout", String(Math.round((ctx.healthTimeoutMs ?? 300_000) / 1000))], 15 * 60_000);
       });

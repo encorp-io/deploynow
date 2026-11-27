@@ -30,3 +30,6 @@ npm-debug.log*
 # Test coverage
 coverage/
 tsconfig.tsbuildinfo
+
+# Self-updater build (scripts/build-updater.cjs)
+updater/

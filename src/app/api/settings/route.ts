@@ -18,7 +18,7 @@ export async function GET() {
     githubToken: settings?.githubToken ? MASK : "",
     pollingInterval: settings?.pollingInterval ?? 60,
     autoUpdateLatest: settings?.autoUpdateLatest ?? false,
-    require2faForAdmins: settings?.require2faForAdmins ?? true,
+    require2faForAdmins: settings?.require2faForAdmins ?? false,
     agentPublicUrl: settings?.agentPublicUrl ?? "",
     agentDefaultUrl: defaultAgentUrl(),
     alertDiskPercent: settings?.alertDiskPercent ?? 90,

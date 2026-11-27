@@ -19,13 +19,51 @@ commands use the agent of the server's own version.
 
 ## Upgrade
 
-With the installer:
+### From the UI
+
+Settings → Updates → **Update now** (admins). DeployNow:
+
+1. pulls the new image (nothing changes if that fails);
+2. starts a short-lived `deploynow-updater` container from its own image, with the
+   Docker socket and DeployNow's data volume and no network. A container can't replace
+   itself, because stopping it ends the process doing the work, so the updater does it;
+3. the updater stops DeployNow (kept as `deploynow-old-<time>`), copies the database,
+   and starts the new version with the same ports, volumes, environment, labels and
+   restart policy;
+4. it waits up to five minutes for the new container's health check. Healthy: the old
+   container is removed. Not healthy, crashing or exited: the new container is removed,
+   the database copy is put back and the old container starts again.
+
+The page reconnects on its own and shows the outcome, with what the new version printed
+when it failed. It is also in the audit log, and channels that subscribe to "DeployNow
+updated itself (or rolled back)" get it.
+
+Which image: a pinned tag (`2.0.0`) moves to the newest release, and when DeployNow was
+started with Docker Compose, `DEPLOYNOW_TAG` in the project's `.env` is moved too, so a
+later `docker compose up -d` keeps the new version. A tag that moves (`latest`, `2.0`,
+`edge`) is pulled again. If your `docker-compose.yml` names a version itself instead of
+`${DEPLOYNOW_TAG}`, change it there after updating.
+
+**Install updates automatically** (same page) does this on its own when a newer release
+is out, or for `edge` and other moving tags when a new image is published. You can keep
+it to one hour of the day (server time). A version that rolled back is not tried again
+until the next one.
+
+It needs `/var/run/docker.sock` mounted (the default compose file does) and `/data` on a
+volume. `DEPLOYNOW_SELF_UPDATE=off` turns it off; the steps below always work.
+
+The updater ships with this version, so the upgrade *to* it is done by hand once.
+
+### With the installer
+
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/encorp-io/deploynow/main/install.sh | sudo DEPLOYNOW_TAG=2.1.0 bash
+curl -fsSL https://raw.githubusercontent.com/encorp-io/deploynow/main/setup.sh | sudo DEPLOYNOW_TAG=2.1.0 bash
 ```
 
-By hand, next to your `docker-compose.yml`:
+### By hand
+
+Next to your `docker-compose.yml`:
 
 ```bash
 sed -i 's/^DEPLOYNOW_TAG=.*/DEPLOYNOW_TAG=2.1.0/' .env   # or edit it

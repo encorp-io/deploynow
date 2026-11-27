@@ -181,6 +181,7 @@ export default function AppPage({ params }: { params: Promise<{ id: string }> })
   const [revealed, setRevealed] = useState<{ key: string; value: string } | null>(null);
   const [webhook, setWebhook] = useState<{ url: string; secret: string } | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const envDirty = !!app && JSON.stringify(env) !== JSON.stringify(app.env);
 
   const load = useCallback(async () => {
     const res = await api<AppView>(`/api/apps/${id}`);
@@ -222,12 +223,15 @@ export default function AppPage({ params }: { params: Promise<{ id: string }> })
     load();
   };
 
-  const save = async (body: Record<string, unknown>, what: string) => {
+  const save = async (body: Record<string, unknown>, what: string): Promise<boolean> => {
     setBusy("save");
     setError("");
     const res = await api(`/api/apps/${id}`, { method: "PATCH", body });
     setBusy("");
-    if (!res.ok) return toast.error(res.data.error ?? "Could not save");
+    if (!res.ok) {
+      toast.error(res.data.error ?? "Could not save");
+      return false;
+    }
     toast.success(`${what} saved`);
     setPending(`${what} changed.`);
     const a = await load();
@@ -235,6 +239,7 @@ export default function AppPage({ params }: { params: Promise<{ id: string }> })
       setEnv(a.env);
       setSettings({ ...a, endpointId: a.endpoint.id });
     }
+    return true;
   };
 
   const reveal = async (key: string) => {
@@ -482,14 +487,24 @@ export default function AppPage({ params }: { params: Promise<{ id: string }> })
         <Card className="p-5">
           <p className="text-sm text-text-muted mb-4">
             {isCompose
-              ? "These values are available to the compose file as ${NAME}, or pass one through with `environment: [NAME]`."
+              ? "These values are available to the compose file as ${NAME}, and are written to .env next to it: load them all into a service with `env_file: .env`, or pass one through with `environment: [NAME]`."
               : "Passed to the container as environment variables."}{" "}
             Secrets are encrypted and never shown again; Vault values are read from Vault at each deploy. Both are masked in deploy logs.
           </p>
           {app.can.secrets ? (
             <>
-              <EnvEditor rows={env} onChange={setEnv} canReveal onReveal={reveal} />
-              <div className="flex justify-end mt-4">
+              <EnvEditor
+                rows={env}
+                onChange={setEnv}
+                canReveal
+                onReveal={reveal}
+                onImport={(rows) => {
+                  setEnv(rows);
+                  return save({ env: rows }, "Environment");
+                }}
+              />
+              <div className="flex items-center justify-end gap-3 mt-4">
+                {envDirty && <span className="text-xs text-warning">Unsaved changes</span>}
                 <Button onClick={() => save({ env }, "Environment")} loading={busy === "save"}>Save</Button>
               </div>
             </>

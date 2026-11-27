@@ -167,7 +167,7 @@ model Settings {
   githubToken         String    @default("") // AES-256-GCM encrypted at rest
   pollingInterval     Int       @default(60) // seconds, range 30–3600
   autoUpdateLatest    Boolean   @default(false)
-  require2faForAdmins Boolean   @default(true)
+  require2faForAdmins Boolean   @default(false)
   // Optional HashiCorp Vault: env vars of kind "vault" hold <mount>/<path>#<field>
   vaultAddr           String    @default("") // https://vault.example.com:8200
   vaultNamespace      String    @default("") // Vault Enterprise / HCP namespace
@@ -196,6 +196,9 @@ model Settings {
   latestReleaseNotes  String    @default("") // markdown, trimmed
   releaseCheckedAt    DateTime?
   releaseNotified     String    @default("") // the release last sent to notification channels
+  // Self-update (Settings → Updates): install new versions on their own, optionally only in one hour of the day
+  selfUpdateAuto      Boolean   @default(false)
+  selfUpdateHour      Int       @default(-1) // 0-23 in the server's time zone, -1 = any time
   // Public status page at /status with the uptime checks marked public
   statusPageEnabled   Boolean   @default(false)
   statusPageTitle     String    @default("")
