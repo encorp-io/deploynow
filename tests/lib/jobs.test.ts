@@ -95,8 +95,8 @@ describe("worker", () => {
     expect(runDeployment).toHaveBeenCalledWith(failing.id, expect.anything());
 
     expect(await cancelDeployment(slow.id)).toBe("stopping");
-    await until(async () => (await prisma.job.count({ where: { status: "failed", error: "Cancelled" } })) === 1);
-    expect(runningCount()).toBe(0);
+    // The job row is marked failed before the worker updates the deployment and frees its slot
+    await until(async () => runningCount() === 0 && (await prisma.job.count({ where: { status: "failed", error: "Cancelled" } })) === 1);
     expect((await prisma.deployment.findUniqueOrThrow({ where: { id: slow.id } })).status).toBe("cancelled");
     expect((await prisma.deployment.findUniqueOrThrow({ where: { id: failing.id } })).status).toBe("failed");
     void release;
