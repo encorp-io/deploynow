@@ -41,6 +41,15 @@ export default auth((req: NextRequest & { auth: unknown }) => {
       if (requestOrigin !== publicOrigin && requestOrigin !== req.nextUrl.origin) {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 });
       }
+    } else if (req.headers.get("cookie")) {
+      // No Origin (some older browsers, or a stripped header): a browser still says
+      // where the request came from. Apps deployed here often live on sibling
+      // subdomains, so "same-site" is as foreign as "cross-site". Scripts and the
+      // CLI send no Sec-Fetch-Site and use tokens, not cookies.
+      const site = req.headers.get("sec-fetch-site");
+      if (site && site !== "same-origin" && site !== "none") {
+        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      }
     }
   }
 

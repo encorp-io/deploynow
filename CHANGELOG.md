@@ -34,6 +34,23 @@ versions fix bugs. Every version upgrades the database by itself.
 - Rolling back a compose app starts the images that deployment ran (by digest), not
   whatever their tags point to now.
 
+### Security
+- **Microsoft sign-in for any work account** (tenant `organizations` or `common`) no longer
+  matches or creates accounts by email unless the token carries `xms_edov`, so another
+  Entra tenant can't sign in as one of your people by giving its user their address.
+  Add the `email` and `xms_edov` optional claims to the app registration, or use your
+  tenant id. Accounts already linked keep working.
+- A session is accepted only for the user it was created for, and expired sessions are
+  refused on API calls too.
+- Viewers no longer see pending invites, who has 2FA off, last sign-ins, other people's
+  endpoint grants, or the Vault role id and CA certificate.
+- The AI connection consent page shows request errors itself instead of redirecting to a
+  newly registered app's address.
+- The current password, step-up codes, turning 2FA off and new recovery codes share one
+  limit of 10 tries per 15 minutes.
+- Cookie requests that change something and carry no `Origin` are refused when the browser
+  marks them as coming from another site.
+
 ## [1.0.0] - 2026-11-27
 
 The first public release of DeployNow, a self-hosted replacement for Portainer and

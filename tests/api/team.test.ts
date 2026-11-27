@@ -35,14 +35,34 @@ beforeEach(() => {
 });
 
 describe("GET /api/team", () => {
-  it("returns users with normalised roles and a 2FA flag", async () => {
-    signInAs("viewer");
-    mockPrisma.user.findMany.mockResolvedValue([{ id: "u1", role: "member", totpEnabledAt: new Date(), roleBindings: [] }]);
-    mockPrisma.teamInvite.findMany.mockResolvedValue([]);
-    mockPrisma.endpoint.findMany.mockResolvedValue([]);
+  it("returns users with normalised roles and a 2FA flag to admins", async () => {
+    signInAs("admin");
+    mockPrisma.user.findMany.mockResolvedValue([{ id: "u1", role: "member", totpEnabledAt: new Date(), lastLoginAt: new Date(), roleBindings: [] }]);
+    mockPrisma.teamInvite.findMany.mockResolvedValue([{ id: "i1", email: "new@b.co" }]);
+    mockPrisma.endpoint.findMany.mockResolvedValue([{ id: "ep", name: "Prod" }]);
     const data = await (await GET()).json();
     expect(data.users[0]).toMatchObject({ role: "operator", totpEnabled: true });
     expect(data.users[0]).not.toHaveProperty("totpEnabledAt");
+    expect(data.invites).toHaveLength(1);
+    expect(data.endpoints).toHaveLength(1);
+  });
+
+  it("shows viewers who is on the team, but not invites, 2FA, sign-ins or others' grants", async () => {
+    const me = signInAs("viewer");
+    const grant = { id: "b", role: "operator", scopeType: "endpoint", scopeId: "ep" };
+    mockPrisma.user.findMany.mockResolvedValue([
+      { id: "u1", email: "a@b.co", name: "A", role: "admin", totpEnabledAt: null, lastLoginAt: new Date(), roleBindings: [grant] },
+      { id: me.id, email: me.email, name: "Me", role: "viewer", totpEnabledAt: null, lastLoginAt: new Date(), roleBindings: [] },
+    ]);
+    mockPrisma.teamInvite.findMany.mockResolvedValue([{ id: "i1", email: "new@b.co" }]);
+    mockPrisma.endpoint.findMany.mockResolvedValue([{ id: "ep", name: "Prod" }]);
+    const data = await (await GET()).json();
+    expect(data.invites).toEqual([]);
+    expect(mockPrisma.teamInvite.findMany).not.toHaveBeenCalled();
+    expect(data.users[0]).toMatchObject({ id: "u1", email: "a@b.co", role: "admin", roleBindings: [] });
+    expect(data.users[0]).not.toHaveProperty("totpEnabled");
+    expect(data.users[0]).not.toHaveProperty("lastLoginAt");
+    expect(data.endpoints).toEqual([]);
     expect(data.me.role).toBe("viewer");
   });
 });

@@ -3,7 +3,7 @@ import { publicOrigin } from "@/lib/publicOrigin";
 import crypto from "crypto";
 import { prisma } from "@/lib/prisma";
 import { requireUser, requireStepUp, readJson } from "@/lib/apiAuth";
-import { BINDABLE_ROLES, canAssignRole, isRole, normalizeRole, roleAtLeast, type Role } from "@/lib/rbac";
+import { BINDABLE_ROLES, can, canAssignRole, isRole, normalizeRole, roleAtLeast, type Role } from "@/lib/rbac";
 import { hashPassword, validatePasswordStrength } from "@/lib/password";
 import { revokeAllSessions } from "@/lib/sessions";
 import { audit, clientIp } from "@/lib/audit";
@@ -13,6 +13,11 @@ const ID_RE = /^c[a-z0-9]{24}$/;
 export async function GET() {
   const gate = await requireUser();
   if (!gate.ok) return gate.response;
+  const me = gate.user;
+  // Everyone may see who is on the team and their role. Who still has a live invite,
+  // who has 2FA off, when people last signed in and everyone's endpoint grants are
+  // for the people who manage users.
+  const manager = can(me, "users.manage");
 
   const [users, invites, endpoints] = await Promise.all([
     prisma.user.findMany({
@@ -29,19 +34,26 @@ export async function GET() {
       },
       orderBy: { createdAt: "asc" },
     }),
-    prisma.teamInvite.findMany({
-      where: { used: false, expiresAt: { gt: new Date() } },
-      select: { id: true, email: true, role: true, expiresAt: true, createdAt: true },
-      orderBy: { createdAt: "desc" },
-    }),
+    manager
+      ? prisma.teamInvite.findMany({
+          where: { used: false, expiresAt: { gt: new Date() } },
+          select: { id: true, email: true, role: true, expiresAt: true, createdAt: true },
+          orderBy: { createdAt: "desc" },
+        })
+      : Promise.resolve([]),
     prisma.endpoint.findMany({ select: { id: true, name: true }, orderBy: { name: "asc" } }),
   ]);
 
+  const ownEndpointIds = new Set(me.bindings.filter((b) => b.scopeType === "endpoint").map((b) => b.scopeId));
   return NextResponse.json({
-    users: users.map(({ totpEnabledAt, ...u }) => ({ ...u, role: normalizeRole(u.role), totpEnabled: !!totpEnabledAt })),
+    users: users.map(({ totpEnabledAt, lastLoginAt, roleBindings, ...u }) => {
+      const role = normalizeRole(u.role);
+      if (manager) return { ...u, role, lastLoginAt, roleBindings, totpEnabled: !!totpEnabledAt };
+      return { id: u.id, email: u.email, name: u.name, role, createdAt: u.createdAt, disabledAt: u.disabledAt, roleBindings: u.id === me.id ? roleBindings : [] };
+    }),
     invites,
-    endpoints,
-    me: { id: gate.user.id, role: gate.user.role },
+    endpoints: manager ? endpoints : endpoints.filter((e) => ownEndpointIds.has(e.id)),
+    me: { id: me.id, role: me.role },
   });
 }
 
