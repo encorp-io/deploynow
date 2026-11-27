@@ -3,7 +3,7 @@ import { readJson, requireUser } from "@/lib/apiAuth";
 import { audit, clientIp } from "@/lib/audit";
 import { OAuthError } from "@/lib/oauth/clients";
 import { issuerUrl, mcpEnabled, mcpResourceUrl, scopeForRole } from "@/lib/oauth/config";
-import { approve, checkAuthorizeRequest, errorRedirect } from "@/lib/oauth/server";
+import { approve, checkAuthorizeRequest, errorRedirect, errorsMayRedirect } from "@/lib/oauth/server";
 
 /**
  * The consent screen's answer. Body: { query: the /oauth/authorize query string,
@@ -20,7 +20,11 @@ export async function POST(request: Request) {
   const body = await readJson(request);
   const ctx = { issuer: issuerUrl(request), mcpResource: mcpResourceUrl(request) };
   const check = await checkAuthorizeRequest(new URLSearchParams(String(body.query ?? "")), ctx);
-  if (!check.ok) return "fatal" in check ? NextResponse.json({ error: check.fatal }, { status: 400 }) : NextResponse.json({ redirect: check.redirect });
+  if (!check.ok) {
+    if ("fatal" in check) return NextResponse.json({ error: check.fatal }, { status: 400 });
+    if (!(await errorsMayRedirect(user.id, check.clientId))) return NextResponse.json({ error: check.description }, { status: 400 });
+    return NextResponse.json({ redirect: check.redirect });
+  }
   const { req } = check;
   const actor = { id: user.id, email: user.email };
   const ip = clientIp(request);

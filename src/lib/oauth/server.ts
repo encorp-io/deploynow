@@ -50,7 +50,21 @@ export interface AuthorizeRequest {
  * Errors before the redirect URI is trusted are shown on our page (fatal);
  * later ones go back to the client as ?error=…, as RFC 6749 §4.1.2.1 asks.
  */
-export type AuthorizeCheck = { ok: true; req: AuthorizeRequest } | { ok: false; fatal: string } | { ok: false; redirect: string };
+export type AuthorizeCheck =
+  | { ok: true; req: AuthorizeRequest }
+  | { ok: false; fatal: string }
+  /** An error the app may be told about at its redirect URI (see errorsMayRedirect) */
+  | { ok: false; redirect: string; clientId: string; description: string };
+
+/**
+ * Anyone can register a client (dynamic registration is open), so an error
+ * redirect would let a stranger's "app" use DeployNow as an open redirector.
+ * Errors go back to the app only if this person already connected it; otherwise
+ * they are shown on our own page.
+ */
+export async function errorsMayRedirect(userId: string, clientId: string): Promise<boolean> {
+  return (await prisma.oAuthGrant.count({ where: { userId, clientId, revokedAt: null } })) > 0;
+}
 
 export function errorRedirect(redirectUri: string, error: string, description: string, state: string, issuer: string): string {
   const u = new URL(redirectUri);
@@ -68,7 +82,7 @@ export async function checkAuthorizeRequest(params: URLSearchParams, ctx: { issu
   const redirectUri = params.get("redirect_uri") ?? (list.length === 1 ? list[0] : "");
   if (!redirectUri || !redirectAllowed(client, redirectUri)) return { ok: false, fatal: "The app sent a return address it didn't register, so DeployNow won't send it anything." };
   const state = (params.get("state") ?? "").slice(0, 1000);
-  const fail = (error: string, d: string): AuthorizeCheck => ({ ok: false, redirect: errorRedirect(redirectUri, error, d, state, ctx.issuer) });
+  const fail = (error: string, d: string): AuthorizeCheck => ({ ok: false, redirect: errorRedirect(redirectUri, error, d, state, ctx.issuer), clientId: client.id, description: d });
 
   if (params.get("response_type") !== "code") return fail("unsupported_response_type", "Only response_type=code is supported");
   const challenge = params.get("code_challenge") ?? "";
