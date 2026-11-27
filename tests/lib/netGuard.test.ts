@@ -7,14 +7,14 @@ afterEach(() => vi.restoreAllMocks());
 
 describe("blockedReason", () => {
   it("always refuses metadata, link-local and unspecified addresses", () => {
-    for (const ip of ["169.254.169.254", "169.254.1.1", "0.0.0.0", "100.100.100.200", "192.0.0.192", "fe80::1", "fd00:ec2::254", "::", "::ffff:169.254.169.254", "224.0.0.1"]) {
+    for (const ip of ["169.254.169.254", "169.254.1.1", "0.0.0.0", "100.100.100.200", "192.0.0.192", "fe80::1", "fd00:ec2::254", "::", "::ffff:169.254.169.254", "::ffff:a9fe:a9fe", "224.0.0.1"]) {
       expect(blockedReason(ip), ip).toBe("metadata");
       expect(blockedReason(ip, { allowPrivate: true }), ip).toBe("metadata");
     }
   });
 
   it("refuses loopback and private ranges unless allowed", () => {
-    for (const ip of ["127.0.0.1", "10.1.2.3", "172.17.0.2", "172.31.255.255", "192.168.1.10", "100.64.0.1", "::1", "fd12:3456::1", "::ffff:127.0.0.1", "::ffff:10.0.0.1", "64:ff9b::a00:1"]) {
+    for (const ip of ["127.0.0.1", "10.1.2.3", "172.17.0.2", "172.31.255.255", "192.168.1.10", "100.64.0.1", "::1", "fd12:3456::1", "::ffff:127.0.0.1", "::ffff:10.0.0.1", "::ffff:7f00:1", "[::ffff:7f00:1]", "0:0:0:0:0:ffff:a00:1", "::7f00:1", "::ffff:0a00:0001", "64:ff9b::a00:1"]) {
       expect(blockedReason(ip), ip).toBe("private");
       expect(blockedReason(ip, { allowPrivate: true }), ip).toBeNull();
     }
@@ -74,8 +74,22 @@ describe("guardedGet", () => {
     await expect(guardedGet("https://169.254.169.254/latest/meta-data/")).rejects.toBeInstanceOf(BlockedAddressError);
     await expect(guardedGet("https://127.0.0.1:5000/v2/")).rejects.toBeInstanceOf(BlockedAddressError);
     await expect(guardedGet("https://[::1]/v2/")).rejects.toBeInstanceOf(BlockedAddressError);
+    // new URL() turns ::ffff:127.0.0.1 into the hex form ::ffff:7f00:1
+    await expect(guardedGet("https://[::ffff:127.0.0.1]:5000/")).rejects.toBeInstanceOf(BlockedAddressError);
+    await expect(guardedGet("https://[::ffff:a9fe:a9fe]/", { allowPrivate: true })).rejects.toBeInstanceOf(BlockedAddressError);
     await expect(guardedGet("https://[fd00:ec2::254]/", { allowPrivate: true })).rejects.toBeInstanceOf(BlockedAddressError);
     expect(spy).not.toHaveBeenCalled();
+  });
+
+  it("gives up after the deadline even if the server keeps trickling bytes", async () => {
+    vi.useFakeTimers();
+    const fake = Object.assign(new (require("events").EventEmitter)(), { end: vi.fn(), destroy: vi.fn(function (this: any, e: Error) { this.emit("error", e); }) });
+    vi.spyOn(https, "request").mockReturnValue(fake as never);
+    vi.spyOn(dns, "lookup");
+    const p = guardedGet("https://140.82.112.33/v2/", { timeoutMs: 50 });
+    vi.advanceTimersByTime(60);
+    await expect(p).rejects.toThrow(/timed out/);
+    vi.useRealTimers();
   });
 
   it("refuses a name that resolves to loopback", async () => {

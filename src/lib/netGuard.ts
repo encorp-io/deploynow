@@ -57,11 +57,39 @@ const PRIVATE = list([
   ["2002::", 16, "ipv6"], // 6to4 likewise
 ]);
 
-/** "::ffff:10.0.0.1" → "10.0.0.1"; zone ids dropped. */
+/** The 8 groups of an IPv6 address as numbers, or null. */
+function v6Groups(a: string): number[] | null {
+  let head = a;
+  let tail: number[] = [];
+  const v4 = /(\d+\.\d+\.\d+\.\d+)$/.exec(a);
+  if (v4) {
+    const o = v4[1].split(".").map(Number);
+    tail = [(o[0] << 8) | o[1], (o[2] << 8) | o[3]];
+    head = a.slice(0, -v4[1].length).replace(/:$/, a.endsWith("::" + v4[1]) ? ":" : "");
+  }
+  const parse = (part: string) => (part ? part.split(":").map((g) => parseInt(g, 16)) : []);
+  const halves = head.split("::");
+  if (halves.length > 2) return null;
+  const left = parse(halves[0]);
+  const right = halves.length === 2 ? parse(halves[1]) : [];
+  const fill = 8 - left.length - right.length - tail.length;
+  if (fill < 0 || (halves.length === 1 && fill !== 0)) return null;
+  const groups = [...left, ...Array(halves.length === 2 ? fill : 0).fill(0), ...right, ...tail];
+  return groups.length === 8 && groups.every((g) => Number.isInteger(g) && g >= 0 && g <= 0xffff) ? groups : null;
+}
+
+/**
+ * Lower-case, zone id dropped, and IPv4 embedded in IPv6 unwrapped: IPv4-mapped
+ * (::ffff:7f00:1 and ::ffff:127.0.0.1, both reach 127.0.0.1 on Linux) and the
+ * old IPv4-compatible form (::7f00:1).
+ */
 function normalize(ip: string): string {
-  const bare = ip.replace(/^\[|\]$/g, "").replace(/%.*$/, "");
-  const mapped = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/i.exec(bare);
-  return mapped ? mapped[1] : bare.toLowerCase();
+  const bare = ip.replace(/^\[|\]$/g, "").replace(/%.*$/, "").toLowerCase();
+  if (net.isIP(bare) !== 6) return bare;
+  const g = v6Groups(bare);
+  if (!g) return bare;
+  const embedsV4 = g.slice(0, 5).every((x) => x === 0) && (g[5] === 0xffff || (g[5] === 0 && (g[6] !== 0 || g[7] > 1)));
+  return embedsV4 ? [g[6] >> 8, g[6] & 255, g[7] >> 8, g[7] & 255].join(".") : bare;
 }
 
 /** Why `ip` is refused, or null if it may be reached. */
@@ -129,7 +157,15 @@ export function guardedGet(rawUrl: string | URL, req: GuardedRequest = {}): Prom
   // An IP literal skips the lookup, so check it here
   if (net.isIP(host) && isBlockedAddress(host, req)) return Promise.reject(new BlockedAddressError(`${host} isn't an allowed address`));
 
+  const timeoutMs = req.timeoutMs ?? 10_000;
   return new Promise((resolve, reject) => {
+    // An absolute deadline: the socket timeout below only fires on inactivity, so a
+    // server trickling bytes could otherwise hold the request open forever
+    const deadline = setTimeout(() => r.destroy(new Error("timed out")), timeoutMs);
+    const done = <T,>(fn: (v: T) => void) => (v: T) => {
+      clearTimeout(deadline);
+      fn(v);
+    };
     const r = https.request(
       url,
       {
@@ -137,12 +173,12 @@ export function guardedGet(rawUrl: string | URL, req: GuardedRequest = {}): Prom
         headers: req.headers,
         agent: false, // a fresh socket, always to the address just checked
         lookup: guardedLookup(req) as unknown as typeof dns.lookup,
-        timeout: req.timeoutMs ?? 10_000,
+        timeout: timeoutMs,
       },
       (res) => {
         res.resume(); // drain and drop the body
         const status = res.statusCode ?? 0;
-        resolve({
+        done(resolve)({
           status,
           ok: status >= 200 && status < 300,
           headers: {
@@ -155,7 +191,7 @@ export function guardedGet(rawUrl: string | URL, req: GuardedRequest = {}): Prom
       },
     );
     r.on("timeout", () => r.destroy(new Error("timed out")));
-    r.on("error", reject);
+    r.on("error", done(reject));
     r.end();
   });
 }
