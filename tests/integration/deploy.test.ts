@@ -293,6 +293,17 @@ describe.skipIf(!up)("deploy pipeline (real Docker)", () => {
     expect(envs.flat()).toContain("DB_PASSWORD=compose-secret-789");
   }, 180_000);
 
+  it("refuses host access that only shows after ${VAR} interpolation, before anything starts", async () => {
+    const env = JSON.stringify(parseEnvInput([{ key: "PRIV", value: "true", kind: "plain" }]));
+    const compose = ["services:", "  box:", `    image: ${BUSYBOX}`, "    command: sleep 600", "    privileged: ${PRIV}", ""].join("\n");
+    const app = await createApp({ name: "sneaky", slug: `${tag}-sneaky`, sourceType: "compose", composeInline: compose, env });
+    const done = await runDeployment((await newDeployment(app.id)).id, { healthTimeoutMs: 30_000 });
+    expect(done.status).toBe("failed");
+    expect(done.error).toMatch(/privileged/);
+    const started = await docker.listContainers({ all: true, filters: { label: [`com.docker.compose.project=${tag}-sneaky`] } });
+    expect(started).toHaveLength(0);
+  }, 120_000);
+
   it.skipIf(!traefikUp)("routes a domain through the managed Traefik", async () => {
     try {
       await installProxy(docker, { email: "ops@example.com", network: "deploynow" });
