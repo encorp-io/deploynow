@@ -112,11 +112,17 @@ export default function DashboardPage() {
   async function handleUpdate(serviceId: string) {
     setUpdatingService(serviceId);
     try {
-      await fetch("/api/services/update", {
+      const res = await fetch("/api/services/update", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ serviceId }),
       });
+      // DeployNow's own container: the updater takes over and the Updates page follows it
+      const data = await res.json().catch(() => ({}));
+      if (data?.selfUpdate) {
+        window.location.href = "/settings?section=updates";
+        return;
+      }
       await fetchData();
     } finally {
       setUpdatingService(null);

@@ -17,6 +17,7 @@ import { recreateContainer } from "./docker/recreate";
 import { withTimeout, dockerErrorMessage } from "./docker/client";
 import { registryAuthFor } from "./registryAuth";
 import { audit, type AuditActor } from "./audit";
+import { isSelfContainer } from "./selfUpdate";
 
 /** Never auto-update the control plane itself or a Portainer that may still be in use. */
 export function isProtectedContainer(image: string, containerId: string, labels: Record<string, string> = {}): boolean {
@@ -164,6 +165,10 @@ export async function performUpdate(serviceId: string, actor?: AuditActor | null
   const service = await prisma.service.findUnique({ where: { id: serviceId }, include: { endpoint: true } });
   if (!service) throw new Error("Service not found");
   if (!service.endpoint) throw new Error("Service has no endpoint");
+  // Recreating our own container from in here stops this process halfway (the old bug); see lib/selfUpdate
+  if (isProtectedContainer(service.image, service.containerId) && isSelfContainer(service.containerId)) {
+    throw new Error("DeployNow can't recreate its own container from inside. Use Settings → Updates → Update now.");
+  }
 
   await prisma.service.update({ where: { id: serviceId }, data: { status: "updating" } });
 

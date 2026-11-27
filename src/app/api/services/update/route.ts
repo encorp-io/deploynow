@@ -4,6 +4,7 @@ import { performUpdate } from "@/lib/polling";
 import { requireUser, readJson } from "@/lib/apiAuth";
 import { can } from "@/lib/rbac";
 import { clientIp } from "@/lib/audit";
+import { isSelfContainer, startSelfUpdate } from "@/lib/selfUpdate";
 
 // cuid v1 pattern: all Prisma-generated IDs match this
 const CUID_PATTERN = /^c[a-z0-9]{24}$/;
@@ -21,6 +22,17 @@ export async function POST(request: Request) {
   if (!service) return NextResponse.json({ error: "Service not found" }, { status: 404 });
   if (!can(gate.user, "service.update", { endpointId: service.endpointId ?? undefined })) {
     return NextResponse.json({ error: "You don't have permission to do that" }, { status: 403 });
+  }
+
+  // DeployNow's own container: a container can't replace itself, so the updater container does it
+  if (isSelfContainer(service.containerId)) {
+    if (!can(gate.user, "settings.manage")) return NextResponse.json({ error: "Only admins can update DeployNow itself" }, { status: 403 });
+    try {
+      await startSelfUpdate({ actor: { id: gate.user.id, email: gate.user.email }, ip: clientIp(request) });
+      return NextResponse.json({ success: true, selfUpdate: true });
+    } catch (error) {
+      return NextResponse.json({ error: error instanceof Error ? error.message : "Update failed" }, { status: 409 });
+    }
   }
 
   try {

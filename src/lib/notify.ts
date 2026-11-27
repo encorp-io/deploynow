@@ -20,6 +20,7 @@ export const EVENTS = [
   "alert.firing",
   "alert.resolved",
   "update.available",
+  "update.installed",
   "uptime.down",
   "uptime.up",
   "uptime.cert",
