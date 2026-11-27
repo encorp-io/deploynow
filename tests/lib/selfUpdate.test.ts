@@ -29,6 +29,8 @@ vi.mock("@/lib/version", () => ({ VERSION: "2.0.0" }));
 vi.mock("@/lib/notify", () => ({ notify: vi.fn(async () => {}) }));
 vi.mock("@/lib/audit", () => ({ audit: vi.fn(async () => {}) }));
 vi.mock("@/lib/registryAuth", () => ({ registryAuthFor: vi.fn(async () => undefined) }));
+const remote = vi.hoisted(() => ({ digest: "sha256:edge1" as string | null }));
+vi.mock("@/lib/ghcr", () => ({ getRemoteDigests: vi.fn(async () => (remote.digest ? { config: "sha256:cfg", manifest: remote.digest } : null)) }));
 vi.mock("@/lib/platformDomain", () => ({
   findLocalTarget: vi.fn(async () => target.value),
   selfContainerCandidates: () => ["aaaaaaaaaaaa"],
@@ -293,6 +295,22 @@ describe("startSelfUpdate", () => {
     target.value = t.value;
     expect(await autoUpdateTick()).toBe("started");
     const file = path.join(path.dirname(process.env.SELF_UPDATE_TEST_DB!), "self-update", "status.json");
-    expect(readStatus(file)).toMatchObject({ autoKey: "tag:edge", targetRef: "ghcr.io/encorp-io/deploynow:edge" });
+    expect(readStatus(file)).toMatchObject({ autoKey: "tag:edge@sha256:edge1", targetRef: "ghcr.io/encorp-io/deploynow:edge" });
+
+    // That edge build rolled back: it isn't tried again, but the next build is
+    writeStatus(file, { ...readStatus(file)!, state: "rolled_back" });
+    expect(await autoUpdateTick()).toBe("failed before");
+    remote.digest = "sha256:edge2";
+    expect(await autoUpdateTick()).toBe("started");
+    expect(readStatus(file)?.autoKey).toBe("tag:edge@sha256:edge2");
+    remote.digest = "sha256:edge1";
+  });
+
+  it("switches channel even when the new tag is the same image", async () => {
+    store.s = { ...store.s, selfUpdateChannel: "stable" };
+    const t = fakeTarget({ Config: { Image: "ghcr.io/encorp-io/deploynow:latest", Labels: { "com.docker.compose.project.working_dir": "/opt/deploynow" } }, Image: "sha256:new" });
+    target.value = t.value;
+    expect(await startSelfUpdate()).toMatchObject({ targetRef: "ghcr.io/encorp-io/deploynow:2.1.0" });
+    expect(t.helper.start).toHaveBeenCalled();
   });
 });

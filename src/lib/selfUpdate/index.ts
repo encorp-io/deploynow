@@ -27,6 +27,8 @@ import { pullImage } from "../docker/recreate";
 import { dockerErrorMessage } from "../docker/client";
 import { findLocalTarget, selfContainerCandidates, type LocalTarget } from "../platformDomain";
 import { compareVersions, parseVersion } from "../updates";
+import { getRemoteDigests } from "../ghcr";
+import { parseImageRef } from "../imageRef";
 import {
   FINAL_STATES,
   UPDATER_LABEL,
@@ -205,7 +207,9 @@ export async function startSelfUpdate(opts: StartOptions = {}): Promise<SelfUpda
     throw new SelfUpdateError(`Couldn't pull ${next.ref}: ${dockerErrorMessage(err)}`, "pull");
   }
   const pulled = await docker.getImage(next.ref).inspect();
-  if (pulled.Id === target.self.Image) throw new SelfUpdateError(`${next.ref} is the image DeployNow already runs.`, "current");
+  // Same image under a new tag (latest → 1.0.0 on the stable channel) still goes ahead, so the
+  // container and the compose .env name the tag the channel follows from now on
+  if (pulled.Id === target.self.Image && !next.changed) throw new SelfUpdateError(`${next.ref} is the image DeployNow already runs.`, "current");
 
   if (existing) await docker.getContainer(existing.Id).remove({ force: true }).catch(() => {});
 
@@ -394,7 +398,16 @@ export async function autoUpdateTick(now = new Date()): Promise<string> {
     const t = await findLocalTarget().catch(() => null);
     const next = t ? nextImageRef(t.self.Config.Image, s.latestRelease, channel) : null;
     const runningTag = t ? splitRef(t.self.Config.Image)?.tag ?? "" : "";
-    if (next?.changed && !(next.pinned && isPinnedTag(runningTag) && compareVersions(next.tag, runningTag) <= 0)) key = `tag:${next.tag}`;
+    if (next?.changed && !(next.pinned && isPinnedTag(runningTag) && compareVersions(next.tag, runningTag) <= 0)) {
+      // A moving tag (edge) gets the build behind it in the key, so a build that rolled back
+      // doesn't block the next one; without the registry, one try a day
+      key = `tag:${next.tag}`;
+      if (!next.pinned) {
+        const p = parseImageRef(next.ref);
+        const remote = await getRemoteDigests(p.registry, p.repository, p.tag).catch(() => null);
+        key += remote?.manifest || remote?.config ? `@${remote.manifest || remote.config}` : `@${now.toISOString().slice(0, 10)}`;
+      }
+    }
   }
   if (!key && channel !== "edge" && s.latestRelease && parseVersion(VERSION) && compareVersions(s.latestRelease, VERSION) > 0) key = `release:${s.latestRelease}`;
   if (!key) {
