@@ -79,6 +79,18 @@ describe("newerTagsFor", () => {
     expect(f.info).toHaveBeenCalledWith("ghcr.io/encorp-io/delory:main", { arch: "amd64", auth: undefined });
   });
 
+  it("tries main when latest is stale", async () => {
+    const f: TagFinder = {
+      tags: vi.fn(async () => ["sha-82e99af", "latest", "main"]),
+      info: vi.fn(async (image: string) =>
+        image.endsWith(":latest")
+          ? { config: "sha256:x", manifest: "sha256:oldidx", created: "2026-11-01T00:00:00Z", revision: "" }
+          : { config: "sha256:new", manifest: "sha256:newidx", created: "2026-11-27T20:00:00Z", revision: "" },
+      ),
+    };
+    expect((await newerTagsFor("ghcr.io/encorp-io/delory:sha-82e99af", local, undefined, f))[0]).toMatchObject({ to: "main", via: "main" });
+  });
+
   it("suggests the moving tag when there is no matching commit tag", async () => {
     const f = finder(["sha-82e99af", "latest"], { config: "sha256:new", manifest: "sha256:newidx", created: "2026-11-27T20:00:00Z", revision: "" });
     expect((await newerTagsFor("ghcr.io/encorp-io/delory:sha-82e99af", local, undefined, f))[0]).toMatchObject({ to: "latest", via: "latest" });
@@ -179,7 +191,17 @@ describe("checkAppUpdates", () => {
     const r = await checkAppUpdates("a1", { finder: failing, tagFinder: { tags: async () => Promise.reject(new Error("registry down")), info: async () => null } });
     expect(r.error).toBe("registry down");
     expect(r.info.tags).toHaveLength(1);
-    expect(mockPrisma.application.update.mock.calls[0][0].data).toEqual({ updateCheckedAt: expect.any(Date), updateError: "registry down" });
+    expect(mockPrisma.application.update.mock.calls[0][0].data).toEqual({ updateCheckedAt: expect.any(Date), updateInfo: stored, updateError: "registry down" });
+  });
+
+  it("clears the part that was checked again, keeps the part that failed", async () => {
+    const stored = JSON.stringify({ changes: [{ kind: "image", name: "app", from: "a", to: "b" }], tags: [{ service: "s3", image: "x:1.0", from: "1.0", to: "1.1", kind: "minor" }] });
+    mockPrisma.application.findUnique.mockResolvedValue({ ...app, updateInfo: stored });
+    const current = { branchHead: async () => "", digests: async (image: string) => ({ config: image.includes("delory") ? "sha256:app" : "sha256:s3", manifest: "" }) };
+    const r = await checkAppUpdates("a1", { finder: current, tagFinder: { tags: async () => Promise.reject(new Error("no tag list")), info: async () => null } });
+    expect(r.info.changes).toEqual([]);
+    expect(r.info.tags).toHaveLength(1);
+    expect(r.error).toBe("no tag list");
   });
 
   it("is due once an hour", () => {

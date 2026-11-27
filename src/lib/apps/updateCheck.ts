@@ -143,19 +143,22 @@ export async function newerTagsFor(
       ...(major ? [{ image, from: tag, to: major, kind: "major" as const }] : []),
     ];
   }
-  const moving = MOVING_TAGS.find((t) => tags.includes(t));
-  if (!moving || !commit) return [];
-  const remote = await finder.info(withTag(image, moving), { arch: local.arch, auth });
-  if (!remote || isCurrent(local, remote)) return [];
-  // Only a build that is newer than the running one: a moving tag can also point back
-  const remoteAt = Date.parse(remote.created);
-  const localAt = Date.parse(local.created);
-  if (!Number.isFinite(remoteAt) || (Number.isFinite(localAt) && remoteAt <= localAt)) return [];
-  const rev = /^[0-9a-f]{7,40}$/i.test(remote.revision) ? remote.revision.toLowerCase() : "";
-  const named = rev ? `${commit.prefix}${rev.slice(0, commit.hex.length)}` : "";
-  if (named && named.toLowerCase() === tag.toLowerCase()) return [];
-  const to = named && tags.includes(named) ? named : moving;
-  return [{ image, from: tag, to, kind: "build", via: moving }];
+  if (!commit) return [];
+  // Try each moving tag: a stale `latest` mustn't hide an actively updated `main`
+  for (const moving of MOVING_TAGS.filter((t) => tags.includes(t))) {
+    const remote = await finder.info(withTag(image, moving), { arch: local.arch, auth });
+    if (!remote || isCurrent(local, remote)) continue;
+    // Only a build that is newer than the running one: a moving tag can also point back
+    const remoteAt = Date.parse(remote.created);
+    const localAt = Date.parse(local.created);
+    if (!Number.isFinite(remoteAt) || (Number.isFinite(localAt) && remoteAt <= localAt)) continue;
+    const rev = /^[0-9a-f]{7,40}$/i.test(remote.revision) ? remote.revision.toLowerCase() : "";
+    const named = rev ? `${commit.prefix}${rev.slice(0, commit.hex.length)}` : "";
+    if (named && named.toLowerCase() === tag.toLowerCase()) continue;
+    const to = named && tags.includes(named) ? named : moving;
+    return [{ image, from: tag, to, kind: "build", via: moving }];
+  }
+  return [];
 }
 
 // ─── Checking an app ─────────────────────────────────────────────────────────
@@ -266,25 +269,20 @@ export async function checkAppUpdates(appId: string, opts: { now?: Date; finder?
 
   // Both checks run; one failing (say, a tag list the registry won't give out) doesn't hide the other
   const errors: string[] = [];
+  const before = parseUpdateInfo(app.updateInfo);
+  // A sub-check that fails keeps what it found last time; one that succeeds replaces it
   const changes = await findChanges(app, current, opts.finder).catch((err) => {
     errors.push(err instanceof Error ? err.message : "check failed");
-    return [] as Change[];
+    return before.changes;
   });
   const tags = await findTagUpdates(app, current, opts.tagFinder).catch((err) => {
     errors.push(err instanceof Error ? err.message : "tag check failed");
-    return [] as TagUpdate[];
+    return before.tags;
   });
   const info: UpdateInfo = { changes, tags };
   const error = [...new Set(errors)].join("; ").slice(0, 500);
   const summary = describeUpdates(info);
-
-  const before = parseUpdateInfo(app.updateInfo);
   const found = changes.length || tags.length;
-  // Keep what an earlier check found when this one only failed
-  if (!found && error && (before.changes.length || before.tags.length)) {
-    await record({ updateError: error });
-    return { info: before, summary: describeUpdates(before), error };
-  }
   await record({ updateInfo: found ? JSON.stringify(info) : "", updateError: error });
 
   if (found && fingerprint(info) !== fingerprint(before)) {
