@@ -8,6 +8,12 @@ versions fix bugs. Every version upgrades the database by itself.
 
 ## [Unreleased]
 
+### Security
+- Putting an app on an endpoint (new app, template, build server, environment default)
+  now needs operator rights on that endpoint, not just admin on the project.
+- Apps can no longer route DeployNow's own domain (on any path), or a host or preview
+  domain that another project already uses.
+
 ### Added
 - **Update channel** (Settings → Updates): updates follow *stable* (the newest release,
   pinned, e.g. `1.0.0`), *edge* (every build from `main`) or the tag DeployNow was started
