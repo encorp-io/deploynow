@@ -8,6 +8,14 @@ versions fix bugs. Every version upgrades the database by itself.
 
 ## [Unreleased]
 
+### Added
+- **Overview dashboard:** a new home page with machines, apps, CPU, memory and backups at a
+  glance, the latest deploy log, each machine's load over 24 hours, the busiest apps and alerts.
+- **Usage per service:** on a project page, every app lists its services (containers) with
+  their CPU, memory and network, and the app total.
+- **Monitoring:** CPU and memory lines per machine, and an apps and services view (now, or the
+  average over 1 hour to 30 days) with a filter, sorting and containers DeployNow did not deploy.
+
 ### Fixed
 - **Updating DeployNow from its own UI:** the Update button on DeployNow's own container
   stopped DeployNow and never brought it back, because the process doing the recreate
