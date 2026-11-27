@@ -3,11 +3,12 @@ import { prisma } from "@/lib/prisma";
 import { readJson, requireUser } from "@/lib/apiAuth";
 import { audit, clientIp } from "@/lib/audit";
 import { checkEnabledByEnv, checkForUpdate, updateStatus } from "@/lib/updates";
-import { SelfUpdateError, selfUpdateEnabledByEnv, selfUpdateInfo, startSelfUpdate } from "@/lib/selfUpdate";
+import { SelfUpdateError, clearSelfUpdateCache, selfUpdateEnabledByEnv, selfUpdateInfo, startSelfUpdate } from "@/lib/selfUpdate";
+import { isChannel } from "@/lib/selfUpdate/shared";
 
 async function full() {
   const status = await updateStatus();
-  const self = await selfUpdateInfo(status.latest).catch((err) => ({ supported: false, reason: (err as Error).message, image: "", pinned: false, auto: false, hour: -1, status: null }));
+  const self = await selfUpdateInfo(status.latest).catch((err) => ({ supported: false, reason: (err as Error).message, image: "", pinned: false, target: "", installable: false, channel: "", auto: false, hour: -1, status: null }));
   return { ...status, envDisabled: !checkEnabledByEnv(), selfUpdate: { ...self, envDisabled: !selfUpdateEnabledByEnv() } };
 }
 
@@ -26,6 +27,7 @@ export async function GET() {
  *   { enabled }                   release checks on or off
  *   { install: true }             update DeployNow now (pull, then hand over to the updater container)
  *   { auto, hour }                auto-update on or off, and the hour of day it may run in (-1 = any)
+ *   { channel }                   what updates follow: "" (the running tag), "stable" (newest release) or "edge" (main)
  */
 export async function POST(request: Request) {
   const gate = await requireUser("settings.manage");
@@ -53,6 +55,13 @@ export async function POST(request: Request) {
       message: `${gate.user.email} turned auto-update ${s.selfUpdateAuto ? "on" : "off"}${s.selfUpdateAuto && s.selfUpdateHour >= 0 ? ` (${String(s.selfUpdateHour).padStart(2, "0")}:00–${String(s.selfUpdateHour).padStart(2, "0")}:59)` : ""}`,
     });
   }
+  if (body.channel !== undefined) {
+    if (!isChannel(body.channel)) return NextResponse.json({ error: "Pick stable, edge, or the tag DeployNow runs now" }, { status: 400 });
+    await prisma.settings.upsert({ where: { id: "singleton" }, update: { selfUpdateChannel: body.channel }, create: { id: "singleton", selfUpdateChannel: body.channel } });
+    clearSelfUpdateCache();
+    const label = { "": "the running tag", stable: "stable releases", edge: "edge builds from main" }[body.channel];
+    await audit({ actor, ip, action: "settings.update", message: `${gate.user.email} set DeployNow updates to follow ${label}` });
+  }
   if (body.check === true) {
     if (!checkEnabledByEnv()) return NextResponse.json({ error: "Release checks are off (DEPLOYNOW_UPDATE_CHECK=off)" }, { status: 400 });
     try {
@@ -61,6 +70,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: `Couldn't reach GitHub: ${(err as Error).message}` }, { status: 502 });
     }
   }
+  if (body.check === true) clearSelfUpdateCache();
   if (body.install === true) {
     try {
       await startSelfUpdate({ actor, ip });

@@ -27,11 +27,16 @@ import { pullImage } from "../docker/recreate";
 import { dockerErrorMessage } from "../docker/client";
 import { findLocalTarget, selfContainerCandidates, type LocalTarget } from "../platformDomain";
 import { compareVersions, parseVersion } from "../updates";
+import { getRemoteDigests } from "../ghcr";
+import { parseImageRef } from "../imageRef";
 import {
   FINAL_STATES,
   UPDATER_LABEL,
   UPDATER_NAME,
+  isPinnedTag,
   nextImageRef,
+  type Channel,
+  type NextImage,
   readStatus,
   splitRef,
   statusFileFor,
@@ -102,7 +107,7 @@ export function bindFor(m: Mount, target = m.Destination): string | null {
 export interface SelfUpdateSetup {
   target: LocalTarget;
   image: string;
-  next: { ref: string; pinned: boolean; tag: string };
+  next: NextImage;
   socketBind: string;
   dataBind: string;
   envBind: string; // host dir of the compose .env, mounted at /compose-env ("" when not needed)
@@ -111,7 +116,7 @@ export interface SelfUpdateSetup {
 }
 
 /** Everything a self-update needs, or why it can't run here. */
-export async function prepare(latestRelease: string): Promise<SelfUpdateSetup> {
+export async function prepare(latestRelease: string, channel: Channel = ""): Promise<SelfUpdateSetup> {
   if (!selfUpdateEnabledByEnv()) throw new SelfUpdateError("Self-update is turned off with DEPLOYNOW_SELF_UPDATE=off.", "disabled");
   const target = await findLocalTarget();
   if (!target) {
@@ -121,15 +126,18 @@ export async function prepare(latestRelease: string): Promise<SelfUpdateSetup> {
   }
   const self = target.self;
   const image = self.Config.Image;
-  const next = nextImageRef(image, latestRelease);
+  const next = nextImageRef(image, latestRelease, channel);
   if (!next) {
     throw new SelfUpdateError(
       splitRef(image) ? "No newer release is known yet. Check for releases first." : `DeployNow runs from ${image.slice(0, 24)}, not a tag, so there's nothing to pull.`,
       splitRef(image) ? "current" : "unsupported",
     );
   }
-  if (next.pinned && !(parseVersion(VERSION) && compareVersions(latestRelease, VERSION) > 0)) {
-    throw new SelfUpdateError(`You already run the newest release (${VERSION}).`, "current");
+  // A release counts as newer only against a release; from latest or edge, the stable channel always moves
+  const runningTag = splitRef(image)?.tag ?? "";
+  if (next.pinned && isPinnedTag(runningTag)) {
+    const running = runningTag; // the exact release the container was started from
+    if (compareVersions(latestRelease, running) <= 0) throw new SelfUpdateError(`You already run the newest release (${running.replace(/^v/, "")}).`, "current");
   }
 
   const mounts = (self.Mounts ?? []) as Mount[];
@@ -139,13 +147,13 @@ export async function prepare(latestRelease: string): Promise<SelfUpdateSetup> {
   const dataBind = data ? bindFor(data) : null;
   if (!dataBind) throw new SelfUpdateError(`${dataDir()} isn't on a volume, so an update would lose DeployNow's data.`);
 
-  // A pinned tag in a compose .env (DEPLOYNOW_TAG=1.0.0) moves along, so `docker compose up` later keeps the new version
+  // A new tag (2.0.0 → 2.1.0, or a channel switch) moves along in the compose .env (DEPLOYNOW_TAG), so `docker compose up` later keeps it
   let envBind = "";
   let envFile = "";
   let envFileHost = "";
   const labels = self.Config.Labels ?? {};
   const workDir = labels["com.docker.compose.project.working_dir"];
-  if (next.pinned && workDir) {
+  if (next.changed && workDir) {
     envFileHost = (labels["com.docker.compose.project.environment_file"] || "").split(",")[0] || path.posix.join(workDir, ".env");
     envBind = `${path.posix.dirname(envFileHost)}:/compose-env`;
     envFile = `/compose-env/${path.posix.basename(envFileHost)}`;
@@ -159,6 +167,11 @@ async function updaterContainer(docker: Docker): Promise<Docker.ContainerInspect
   } catch {
     return null;
   }
+}
+
+export function channelOf(s: { selfUpdateChannel?: string | null } | null | undefined): Channel {
+  const c = s?.selfUpdateChannel ?? "";
+  return c === "stable" || c === "edge" ? c : "";
 }
 
 export function isRunning(status: SelfUpdateStatus | null): boolean {
@@ -180,7 +193,7 @@ export interface StartOptions {
 export async function startSelfUpdate(opts: StartOptions = {}): Promise<SelfUpdateStatus> {
   const prior = currentStatus();
   const s = await prisma.settings.findUnique({ where: { id: "singleton" } });
-  const setup = await prepare(s?.latestRelease ?? "");
+  const setup = await prepare(s?.latestRelease ?? "", channelOf(s));
   const { target, next } = setup;
   const docker = target.docker;
 
@@ -194,7 +207,9 @@ export async function startSelfUpdate(opts: StartOptions = {}): Promise<SelfUpda
     throw new SelfUpdateError(`Couldn't pull ${next.ref}: ${dockerErrorMessage(err)}`, "pull");
   }
   const pulled = await docker.getImage(next.ref).inspect();
-  if (pulled.Id === target.self.Image) throw new SelfUpdateError(`${next.ref} is the image DeployNow already runs.`, "current");
+  // Same image under a new tag (latest → 1.0.0 on the stable channel) still goes ahead, so the
+  // container and the compose .env name the tag the channel follows from now on
+  if (pulled.Id === target.self.Image && !next.changed) throw new SelfUpdateError(`${next.ref} is the image DeployNow already runs.`, "current");
 
   if (existing) await docker.getContainer(existing.Id).remove({ force: true }).catch(() => {});
 
@@ -221,7 +236,7 @@ export async function startSelfUpdate(opts: StartOptions = {}): Promise<SelfUpda
     dbFile: dbFile(),
     envFile: setup.envFile,
     envFileHost: setup.envFileHost,
-    envTag: next.pinned ? next.tag : "",
+    envTag: next.changed ? next.tag : "",
     healthTimeoutMs: opts.healthTimeoutMs ?? 300_000,
     delayMs: 3000,
   };
@@ -253,7 +268,7 @@ export async function startSelfUpdate(opts: StartOptions = {}): Promise<SelfUpda
     actor: opts.actor,
     ip: opts.ip,
     action: "deploynow.update",
-    message: `${opts.auto ? "Auto-update" : opts.actor?.email ?? "Someone"} started updating DeployNow ${VERSION} to ${next.pinned ? next.tag : next.ref}`,
+    message: `${opts.auto ? "Auto-update" : opts.actor?.email ?? "Someone"} started updating DeployNow ${VERSION} to ${next.pinned || next.changed ? next.tag : next.ref}`,
     details: `Image: ${next.ref} (${pulled.Id.slice(0, 19)}…)`,
   });
   return status;
@@ -264,36 +279,46 @@ export async function startSelfUpdate(opts: StartOptions = {}): Promise<SelfUpda
 export interface SelfUpdateInfo {
   supported: boolean;
   reason: string; // why not, when unsupported
-  image: string;
-  pinned: boolean;
+  image: string; // what runs now
+  pinned: boolean; // the target is one exact release
+  target: string; // the image Update now would move to ("" when there's nothing newer)
+  installable: boolean;
+  channel: Channel;
   auto: boolean;
   hour: number;
   status: SelfUpdateStatus | null;
 }
 
-let cache: { at: number; key: string; value: { supported: boolean; reason: string; image: string; pinned: boolean } } | null = null;
+type Support = Pick<SelfUpdateInfo, "supported" | "reason" | "image" | "pinned" | "target" | "installable">;
+let cache: { at: number; key: string; value: Support } | null = null;
+
+export function clearSelfUpdateCache() {
+  cache = null;
+}
 
 export async function selfUpdateInfo(latestRelease: string): Promise<SelfUpdateInfo> {
   const s = await prisma.settings.findUnique({ where: { id: "singleton" } });
-  let support = cache && cache.key === latestRelease && Date.now() - cache.at < 60_000 ? cache.value : null;
+  const channel = channelOf(s);
+  const key = `${latestRelease}|${channel}`;
+  let support = cache && cache.key === key && Date.now() - cache.at < 60_000 ? cache.value : null;
   if (!support) {
     try {
-      const setup = await prepare(latestRelease || "0.0.0");
-      support = { supported: true, reason: "", image: setup.image, pinned: setup.next.pinned };
+      const setup = await prepare(latestRelease, channel);
+      support = { supported: true, reason: "", image: setup.image, pinned: setup.next.pinned, target: setup.next.ref, installable: true };
     } catch (err) {
       const e = err as SelfUpdateError;
       // "You already run the newest release" still means it works here
-      support = { supported: e.code === "current", reason: e.code === "current" ? "" : e.message, image: "", pinned: false };
-      if (e.code === "current") {
+      const current = e.code === "current";
+      support = { supported: current, reason: current ? "" : e.message, image: "", pinned: false, target: "", installable: false };
+      if (current) {
         const t = await findLocalTarget().catch(() => null);
-        const img = t?.self.Config.Image ?? "";
-        support.image = img;
-        support.pinned = !!nextImageRef(img, "0.0.0")?.pinned;
+        support.image = t?.self.Config.Image ?? "";
+        support.pinned = channel === "stable" || (channel === "" && isPinnedTag(splitRef(support.image)?.tag ?? ""));
       }
     }
-    cache = { at: Date.now(), key: latestRelease, value: support };
+    cache = { at: Date.now(), key, value: support };
   }
-  return { ...support, auto: !!s?.selfUpdateAuto, hour: s?.selfUpdateHour ?? -1, status: currentStatus() };
+  return { ...support, channel, auto: !!s?.selfUpdateAuto, hour: s?.selfUpdateHour ?? -1, status: currentStatus() };
 }
 
 // ── After an update: report it; auto-update ──────────────────────────────────
@@ -366,9 +391,25 @@ export async function autoUpdateTick(now = new Date()): Promise<string> {
   const status = currentStatus();
   if (isRunning(status)) return "running";
 
-  // A newer release, or (edge and other moving tags) a new image behind our tag
+  // The channel asks for another tag, a newer release, or (edge and other moving tags) a new image behind our tag
+  const channel = channelOf(s);
   let key = "";
-  if (s.latestRelease && parseVersion(VERSION) && compareVersions(s.latestRelease, VERSION) > 0) key = `release:${s.latestRelease}`;
+  if (channel) {
+    const t = await findLocalTarget().catch(() => null);
+    const next = t ? nextImageRef(t.self.Config.Image, s.latestRelease, channel) : null;
+    const runningTag = t ? splitRef(t.self.Config.Image)?.tag ?? "" : "";
+    if (next?.changed && !(next.pinned && isPinnedTag(runningTag) && compareVersions(next.tag, runningTag) <= 0)) {
+      // A moving tag (edge) gets the build behind it in the key, so a build that rolled back
+      // doesn't block the next one; without the registry, one try a day
+      key = `tag:${next.tag}`;
+      if (!next.pinned) {
+        const p = parseImageRef(next.ref);
+        const remote = await getRemoteDigests(p.registry, p.repository, p.tag).catch(() => null);
+        key += remote?.manifest || remote?.config ? `@${remote.manifest || remote.config}` : `@${now.toISOString().slice(0, 10)}`;
+      }
+    }
+  }
+  if (!key && channel !== "edge" && s.latestRelease && parseVersion(VERSION) && compareVersions(s.latestRelease, VERSION) > 0) key = `release:${s.latestRelease}`;
   if (!key) {
     const svc = await prisma.service.findMany({ where: { updateAvailable: true }, select: { containerId: true, remoteDigest: true } });
     const mine = svc.find((x) => isSelfContainer(x.containerId));

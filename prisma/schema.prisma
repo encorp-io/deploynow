@@ -199,6 +199,7 @@ model Settings {
   // Self-update (Settings → Updates): install new versions on their own, optionally only in one hour of the day
   selfUpdateAuto      Boolean   @default(false)
   selfUpdateHour      Int       @default(-1) // 0-23 in the server's time zone, -1 = any time
+  selfUpdateChannel   String    @default("") // "" = keep the running tag, "stable" = newest release, "edge" = builds from main
   // Public status page at /status with the uptime checks marked public
   statusPageEnabled   Boolean   @default(false)
   statusPageTitle     String    @default("")

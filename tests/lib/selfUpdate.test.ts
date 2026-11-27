@@ -29,6 +29,8 @@ vi.mock("@/lib/version", () => ({ VERSION: "2.0.0" }));
 vi.mock("@/lib/notify", () => ({ notify: vi.fn(async () => {}) }));
 vi.mock("@/lib/audit", () => ({ audit: vi.fn(async () => {}) }));
 vi.mock("@/lib/registryAuth", () => ({ registryAuthFor: vi.fn(async () => undefined) }));
+const remote = vi.hoisted(() => ({ digest: "sha256:edge1" as string | null }));
+vi.mock("@/lib/ghcr", () => ({ getRemoteDigests: vi.fn(async () => (remote.digest ? { config: "sha256:cfg", manifest: remote.digest } : null)) }));
 vi.mock("@/lib/platformDomain", () => ({
   findLocalTarget: vi.fn(async () => target.value),
   selfContainerCandidates: () => ["aaaaaaaaaaaa"],
@@ -53,10 +55,24 @@ describe("picking the image", () => {
   });
 
   it("moves a pinned tag to the newest release and pulls a moving tag again", () => {
-    expect(nextImageRef("ghcr.io/encorp-io/deploynow:2.0.0", "2.1.0")).toEqual({ ref: "ghcr.io/encorp-io/deploynow:2.1.0", pinned: true, tag: "2.1.0" });
+    expect(nextImageRef("ghcr.io/encorp-io/deploynow:2.0.0", "2.1.0")).toEqual({ ref: "ghcr.io/encorp-io/deploynow:2.1.0", pinned: true, tag: "2.1.0", changed: true });
     expect(nextImageRef("ghcr.io/encorp-io/deploynow:v2.0.0", "2.1.0")?.ref).toBe("ghcr.io/encorp-io/deploynow:v2.1.0");
-    expect(nextImageRef("ghcr.io/encorp-io/deploynow:latest", "")).toEqual({ ref: "ghcr.io/encorp-io/deploynow:latest", pinned: false, tag: "latest" });
+    expect(nextImageRef("ghcr.io/encorp-io/deploynow:latest", "")).toEqual({ ref: "ghcr.io/encorp-io/deploynow:latest", pinned: false, tag: "latest", changed: false });
     expect(nextImageRef("ghcr.io/encorp-io/deploynow:2.0.0", "")).toBeNull();
+  });
+});
+
+describe("update channels", () => {
+  const R = "ghcr.io/encorp-io/deploynow";
+  it("stable pins the newest release, whatever runs now", () => {
+    expect(nextImageRef(`${R}:edge`, "1.0.0", "stable")).toEqual({ ref: `${R}:1.0.0`, pinned: true, tag: "1.0.0", changed: true });
+    expect(nextImageRef(`${R}:latest`, "1.0.0", "stable")?.ref).toBe(`${R}:1.0.0`);
+    expect(nextImageRef(`${R}:1.0.0`, "1.0.0", "stable")).toMatchObject({ changed: false, pinned: true });
+    expect(nextImageRef(`${R}:edge`, "", "stable")).toBeNull();
+  });
+  it("edge follows builds from main", () => {
+    expect(nextImageRef(`${R}:1.0.0`, "1.0.0", "edge")).toEqual({ ref: `${R}:edge`, pinned: false, tag: "edge", changed: true });
+    expect(nextImageRef(`${R}:edge`, "1.0.0", "edge")).toMatchObject({ changed: false, pinned: false });
   });
 });
 
@@ -220,6 +236,28 @@ describe("startSelfUpdate", () => {
     expect(t.helper.start).toHaveBeenCalled();
   });
 
+  it("follows the channel: stable from latest pins the release, edge from a release moves DEPLOYNOW_TAG to edge", async () => {
+    store.s = { ...store.s, selfUpdateChannel: "stable" };
+    let t = fakeTarget({ Config: { Image: "ghcr.io/encorp-io/deploynow:latest", Labels: { "com.docker.compose.project.working_dir": "/opt/deploynow" } } });
+    target.value = t.value;
+    expect(await startSelfUpdate()).toMatchObject({ targetRef: "ghcr.io/encorp-io/deploynow:2.1.0", targetVersion: "2.1.0" });
+    let plan = JSON.parse(((t.docker.createContainer.mock.calls[0] as unknown[])[0] as { Env: string[] }).Env[0].replace(/^SELF_UPDATE_PLAN=/, ""));
+    expect(plan.envTag).toBe("2.1.0");
+
+    store.s = { ...store.s, selfUpdateChannel: "edge" };
+    t = fakeTarget();
+    target.value = t.value;
+    expect(await startSelfUpdate()).toMatchObject({ targetRef: "ghcr.io/encorp-io/deploynow:edge", targetVersion: "" });
+    plan = JSON.parse(((t.docker.createContainer.mock.calls[0] as unknown[])[0] as { Env: string[] }).Env[0].replace(/^SELF_UPDATE_PLAN=/, ""));
+    expect(plan).toMatchObject({ envTag: "edge", envFile: "/compose-env/.env" });
+  });
+
+  it("stable on the newest release has nothing to do", async () => {
+    target.value = fakeTarget({ Config: { Image: "ghcr.io/encorp-io/deploynow:2.1.0", Labels: {} } }).value;
+    await expect(prepare("2.1.0", "stable")).rejects.toMatchObject({ code: "current" });
+    await expect(prepare("2.1.0", "edge")).resolves.toMatchObject({ next: { tag: "edge", changed: true } });
+  });
+
   it("refuses without the socket, when current, or when turned off", async () => {
     target.value = null;
     await expect(prepare("2.1.0")).rejects.toThrow(/local Docker socket/);
@@ -249,5 +287,30 @@ describe("startSelfUpdate", () => {
     expect(await autoUpdateTick()).toBe("failed before");
     store.s = { ...store.s, selfUpdateAuto: false };
     expect(await autoUpdateTick()).toBe("off");
+  });
+
+  it("auto-update switches to the chosen channel", async () => {
+    store.s = { latestRelease: "2.0.0", selfUpdateAuto: true, selfUpdateHour: -1, selfUpdateChannel: "edge" };
+    const t = fakeTarget();
+    target.value = t.value;
+    expect(await autoUpdateTick()).toBe("started");
+    const file = path.join(path.dirname(process.env.SELF_UPDATE_TEST_DB!), "self-update", "status.json");
+    expect(readStatus(file)).toMatchObject({ autoKey: "tag:edge@sha256:edge1", targetRef: "ghcr.io/encorp-io/deploynow:edge" });
+
+    // That edge build rolled back: it isn't tried again, but the next build is
+    writeStatus(file, { ...readStatus(file)!, state: "rolled_back" });
+    expect(await autoUpdateTick()).toBe("failed before");
+    remote.digest = "sha256:edge2";
+    expect(await autoUpdateTick()).toBe("started");
+    expect(readStatus(file)?.autoKey).toBe("tag:edge@sha256:edge2");
+    remote.digest = "sha256:edge1";
+  });
+
+  it("switches channel even when the new tag is the same image", async () => {
+    store.s = { ...store.s, selfUpdateChannel: "stable" };
+    const t = fakeTarget({ Config: { Image: "ghcr.io/encorp-io/deploynow:latest", Labels: { "com.docker.compose.project.working_dir": "/opt/deploynow" } }, Image: "sha256:new" });
+    target.value = t.value;
+    expect(await startSelfUpdate()).toMatchObject({ targetRef: "ghcr.io/encorp-io/deploynow:2.1.0" });
+    expect(t.helper.start).toHaveBeenCalled();
   });
 });
