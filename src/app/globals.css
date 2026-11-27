@@ -559,13 +559,14 @@ h1, h2, h3 {
     cursor: not-allowed;
   }
 
-  /* Switch */
+  /* Switch: a 38x22 pill with an 16px knob placed absolutely, so the
+   * centring rules above (place-content) never move it. */
   input[type="checkbox"][role="switch"] {
-    display: inline-flex;
-    align-items: center;
-    width: 2.25rem;
-    height: 1.3rem;
-    padding: 2px;
+    display: inline-block;
+    width: 38px;
+    height: 22px;
+    padding: 0;
+    vertical-align: middle;
     border: 1px solid var(--dn-field-border);
     border-radius: 999px;
     background-color: var(--dn-switch-off);
@@ -575,8 +576,11 @@ h1, h2, h3 {
   input[type="checkbox"][role="switch"]::before {
     -webkit-mask: none;
     mask: none;
-    width: calc(1.3rem - 6px);
-    height: calc(1.3rem - 6px);
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 16px;
+    height: 16px;
     border-radius: 999px;
     background: #fff;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3), 0 0 0 0.5px rgba(0, 0, 0, 0.06);
@@ -590,8 +594,9 @@ h1, h2, h3 {
     background-image: linear-gradient(135deg, var(--dn-accent-soft) -30%, var(--dn-accent) 45%, var(--dn-accent-deep) 130%);
   }
 
+  /* 38 - 2 (border) - 2 * 2 (gap) - 16 (knob) = 16 */
   input[type="checkbox"][role="switch"]:checked::before {
-    transform: translateX(calc(2.25rem - 1.3rem));
+    transform: translateX(16px);
   }
 
   /* The knob stretches a little while pressed */
@@ -600,11 +605,11 @@ h1, h2, h3 {
   }
 
   input[type="checkbox"][role="switch"]:active:not(:disabled)::before {
-    width: calc(1.3rem + 1px);
+    width: 20px;
   }
 
   input[type="checkbox"][role="switch"]:checked:active:not(:disabled)::before {
-    transform: translateX(calc(2.25rem - 1.3rem - 7px));
+    transform: translateX(12px);
   }
 
   label:has(> input[type="checkbox"]:not(:disabled)),
