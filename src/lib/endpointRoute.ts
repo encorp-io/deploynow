@@ -7,6 +7,7 @@ import { prisma } from "./prisma";
 import { dockerFor } from "./endpoints";
 import { dockerErrorMessage, dockerStatusCode } from "./docker/client";
 import type { Permission } from "./rbac";
+import { containerKind, protectionAllows, protectionMessage, type ContainerAction, type ContainerKind, type ContainerLike } from "./containerProtection";
 
 export const ENDPOINT_ID_RE = /^c[a-z0-9]{24}$/;
 // Container, image, volume and network ids/names Docker accepts
@@ -37,4 +38,20 @@ export function dockerError(err: unknown): NextResponse {
   const status = dockerStatusCode(err);
   const code = status && status >= 400 && status < 500 ? status : 502;
   return NextResponse.json({ error: dockerErrorMessage(err) }, { status: code });
+}
+
+/**
+ * Extra rules for DeployNow's own, updater, helper and proxy containers
+ * (see containerProtection.ts). Returns a 403 response when the action is not
+ * allowed, otherwise null. Call it after endpointGate, with the inspect result.
+ */
+export function containerGuard(
+  user: CurrentUser,
+  endpointId: string,
+  container: ContainerLike,
+  action: ContainerAction,
+): { kind: ContainerKind; response: NextResponse | null } {
+  const kind = containerKind(container);
+  if (protectionAllows(user, endpointId, kind, action)) return { kind, response: null };
+  return { kind, response: NextResponse.json({ error: protectionMessage(kind, action), protected: true }, { status: 403 }) };
 }

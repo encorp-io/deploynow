@@ -15,7 +15,9 @@ describe("rbac", () => {
   it("follows the role ladder", () => {
     expect(can({ role: "viewer" }, "endpoint.view")).toBe(true);
     expect(can({ role: "viewer" }, "container.logs")).toBe(false);
+    expect(can({ role: "operator" }, "container.control")).toBe(true);
     expect(can({ role: "operator" }, "container.exec")).toBe(true);
+    expect(can({ role: "operator" }, "container.env")).toBe(false);
     expect(can({ role: "operator" }, "container.remove")).toBe(false);
     expect(can({ role: "admin" }, "users.manage")).toBe(true);
     expect(can({ role: "owner" }, "docker.prune")).toBe(true);

@@ -87,8 +87,12 @@ describe.skipIf(!up)("against a real Docker daemon", () => {
 
     signInAs("operator");
     const asOperator = await (await GET(req(), params())).json();
-    expect(asOperator.env.find((e: { key: string }) => e.key === "APP_SECRET").value).toBe("s3cret");
-    expect(asOperator.restartPolicy).toBe("unless-stopped");
+    expect(asOperator.env.find((e: { key: string }) => e.key === "APP_SECRET").value).toBeNull();
+
+    signInAs("admin");
+    const asAdmin = await (await GET(req(), params())).json();
+    expect(asAdmin.env.find((e: { key: string }) => e.key === "APP_SECRET").value).toBe("s3cret");
+    expect(asAdmin.restartPolicy).toBe("unless-stopped");
   });
 
   it("reads logs with stdout and stderr separated", async () => {
@@ -151,6 +155,8 @@ describe.skipIf(!up)("against a real Docker daemon", () => {
   it("issues a console ticket and runs a shell over the WebSocket", async () => {
     const { POST } = await import("@/app/api/endpoints/[id]/containers/[cid]/exec/route");
     const { startWsServer } = await import("@/lib/wsServer");
+    signInAs("viewer");
+    expect((await POST(req("POST", { shell: "/bin/sh" }), params())).status).toBe(403);
     const user = signInAs("operator");
     expect((await POST(req("POST", { shell: "/usr/bin/python" }), params())).status).toBe(400);
     const { ticket } = await (await POST(req("POST", { shell: "/bin/sh" }), params())).json();

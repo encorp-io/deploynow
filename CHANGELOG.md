@@ -59,6 +59,12 @@ versions fix bugs. Every version upgrades the database by itself.
   `X-Forwarded-Proto` on the Traefik port only with a per-install secret that the domain
   route adds (kept in `/data/proxy-secret`). Port 9444 sends HSTS when it has a real
   certificate.
+- **Secrets inside containers:** container env values are now admin only, and an app
+  container's env values need access to that app's secrets. DeployNow's own container,
+  the updater and backup/task helpers never show env values or open a console; their
+  logs are admin only and only owners can stop or remove them. Credential-like label
+  values (such as the domain route's proxy secret or Traefik basic-auth users) are
+  masked in container details. See docs/security.md.
 
 ## [1.0.0] - 2026-11-27
 

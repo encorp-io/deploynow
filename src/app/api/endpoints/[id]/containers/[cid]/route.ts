@@ -1,13 +1,25 @@
 import { NextResponse } from "next/server";
-import { endpointGate, dockerError, validRef } from "@/lib/endpointRoute";
-import { readJson, requireStepUp } from "@/lib/apiAuth";
+import { endpointGate, dockerError, validRef, containerGuard } from "@/lib/endpointRoute";
+import { readJson, requireStepUp, type CurrentUser } from "@/lib/apiAuth";
 import { can } from "@/lib/rbac";
+import { appSecretsAllowed, protectionAllows, redactLabels, type ContainerKind } from "@/lib/containerProtection";
 import { audit, clientIp } from "@/lib/audit";
 
 type Params = { params: Promise<{ id: string; cid: string }> };
 
 const ACTIONS = ["start", "stop", "restart", "pause", "unpause", "kill"] as const;
 type Action = (typeof ACTIONS)[number];
+
+/**
+ * Env values are shown only to admins on the endpoint, never for DeployNow's
+ * own and helper containers, and for an app's containers only to people who
+ * may read that app's secrets (they are the decrypted secret values).
+ */
+async function envVisible(user: CurrentUser, endpointId: string, kind: ContainerKind, labels: Record<string, string>): Promise<boolean> {
+  if (!can(user, "container.env", { endpointId })) return false;
+  if (!protectionAllows(user, endpointId, kind, "env")) return false;
+  return appSecretsAllowed(user, labels);
+}
 
 export async function GET(_req: Request, { params }: Params) {
   const { id, cid } = await params;
@@ -18,7 +30,9 @@ export async function GET(_req: Request, { params }: Params) {
 
   try {
     const i = await docker.getContainer(cid).inspect();
-    const showEnv = can(user, "container.env", { endpointId: id });
+    const { kind } = containerGuard(user, id, i, "env");
+    const labels = i.Config.Labels ?? {};
+    const showEnv = await envVisible(user, id, kind, labels);
     return NextResponse.json({
       id: i.Id,
       name: i.Name.replace(/^\//, ""),
@@ -44,6 +58,14 @@ export async function GET(_req: Request, { params }: Params) {
         return { key, value: showEnv ? e.slice(idx + 1) : null };
       }),
       envHidden: !showEnv,
+      // What this person may do here, after the extra rules for DeployNow's own containers
+      kind,
+      allowed: {
+        logs: can(user, "container.logs", { endpointId: id }) && protectionAllows(user, id, kind, "logs"),
+        console: can(user, "container.exec", { endpointId: id }) && protectionAllows(user, id, kind, "exec"),
+        control: can(user, "container.control", { endpointId: id }) && protectionAllows(user, id, kind, "control"),
+        remove: can(user, "container.remove", { endpointId: id }) && protectionAllows(user, id, kind, "remove"),
+      },
       ports: Object.entries(i.NetworkSettings?.Ports ?? {}).map(([port, bindings]) => ({
         container: port,
         host: (bindings ?? []).map((b) => `${b.HostIp || "0.0.0.0"}:${b.HostPort}`),
@@ -59,7 +81,7 @@ export async function GET(_req: Request, { params }: Params) {
         ip: n.IPAddress,
         aliases: n.Aliases ?? [],
       })),
-      labels: i.Config.Labels ?? {},
+      labels: redactLabels(labels),
     });
   } catch (err) {
     return dockerError(err);
@@ -80,7 +102,10 @@ export async function POST(request: Request, { params }: Params) {
 
   const c = docker.getContainer(cid);
   try {
-    const name = (await c.inspect()).Name.replace(/^\//, "");
+    const info = await c.inspect();
+    const guard = containerGuard(user, id, info, "control");
+    if (guard.response) return guard.response;
+    const name = info.Name.replace(/^\//, "");
     switch (action as Action) {
       case "start": await c.start(); break;
       case "stop": await c.stop({ t: 10 }); break;
@@ -118,7 +143,10 @@ export async function DELETE(request: Request, { params }: Params) {
   const removeVolumes = url.searchParams.get("volumes") === "1";
   try {
     const c = docker.getContainer(cid);
-    const name = (await c.inspect()).Name.replace(/^\//, "");
+    const info = await c.inspect();
+    const guard = containerGuard(user, id, info, "remove");
+    if (guard.response) return guard.response;
+    const name = info.Name.replace(/^\//, "");
     await c.remove({ force: true, v: removeVolumes });
     await audit({
       actor: { id: user.id, email: user.email },
