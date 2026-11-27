@@ -249,6 +249,7 @@ export function DeployNowUpdates() {
             {busy !== "install" && <ArrowUpCircle className="w-4 h-4" />} {su.pinned || switching ? "Update now" : "Pull and update"}
           </Button>
         )}
+        {su?.supported && !su.envDisabled && !su.installable && su.reason && <span className="text-xs text-success">{su.reason}</span>}
         <Button type="button" variant="secondary" onClick={() => post({ check: true }, "check")} loading={busy === "check"} disabled={info.envDisabled || !info.enabled || waiting}>
           {busy !== "check" && <RefreshCw className="w-4 h-4" />} Check now
         </Button>

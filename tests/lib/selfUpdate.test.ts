@@ -301,6 +301,29 @@ describe("startSelfUpdate", () => {
     expect(t.docker.createContainer).not.toHaveBeenCalled();
   });
 
+  it("on edge, doesn't pull when the registry still serves the running build", async () => {
+    store.s = { ...store.s, selfUpdateChannel: "edge" };
+    // Running edge, and the registry's edge manifest is the RepoDigest of the running image
+    const t = fakeTarget({ Config: { Image: "ghcr.io/encorp-io/deploynow:edge", Labels: {} }, Image: "sha256:run" });
+    t.docker.getImage.mockImplementation(((name: string) => ({
+      inspect: async () => (name === "sha256:run" ? { Id: "sha256:run", RepoDigests: ["ghcr.io/encorp-io/deploynow@sha256:edge1"] } : { Id: "sha256:new" }),
+    })) as never);
+    target.value = t.value;
+    await expect(startSelfUpdate()).rejects.toMatchObject({ code: "current", message: expect.stringMatching(/newest edge build/) });
+    expect(t.docker.pull).not.toHaveBeenCalled();
+    const { selfUpdateInfo, clearSelfUpdateCache } = await import("@/lib/selfUpdate");
+    clearSelfUpdateCache();
+    expect(await selfUpdateInfo("2.1.0")).toMatchObject({ supported: true, installable: false, reason: expect.stringMatching(/newest edge build/) });
+
+    // A new edge build is out: Update now is offered and pulls it
+    remote.digest = "sha256:edge2";
+    clearSelfUpdateCache();
+    expect(await selfUpdateInfo("2.1.0")).toMatchObject({ supported: true, installable: true });
+    expect(await startSelfUpdate()).toMatchObject({ targetRef: "ghcr.io/encorp-io/deploynow:edge" });
+    expect(t.docker.pull).toHaveBeenCalled();
+    remote.digest = "sha256:edge1";
+  });
+
   it("auto-update goes for a new release once, and not again after it failed", async () => {
     const t = fakeTarget();
     target.value = t.value;
