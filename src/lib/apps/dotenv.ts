@@ -168,7 +168,8 @@ export function planImport(rows: EnvRowLike[], entries: DotenvEntry[], mode: Imp
   const current = new Map(rows.filter((r) => r.key.trim()).map((r) => [r.key.trim(), r]));
   const items: ImportItem[] = entries.map((e) => {
     const ex = current.get(e.key);
-    const kind = kinds[e.key] ?? importKind(e.key, ex);
+    // A secret can't be empty (an empty secret means "keep the stored value"), so empty values stay plain
+    const kind = e.value === "" ? "plain" : kinds[e.key] ?? importKind(e.key, ex);
     let status: ImportStatus;
     if (!ex) status = "new";
     else if (mode === "keep") status = "skip";

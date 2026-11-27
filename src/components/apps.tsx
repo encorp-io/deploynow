@@ -479,7 +479,7 @@ export function EnvImportDialog({ rows, saves, onClose, onApply }: { rows: EnvRo
                         size="sm"
                         aria-label={`Kind of ${item.key}`}
                         value={item.kind}
-                        disabled={off || item.status === "skip"}
+                        disabled={off || item.status === "skip" || item.value === ""}
                         onChange={(e) => setKinds((k) => ({ ...k, [item.key]: e.target.value as "plain" | "secret" }))}
                         className="w-[6.5rem]"
                       >

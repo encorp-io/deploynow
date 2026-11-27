@@ -115,3 +115,12 @@ describe("serializeDotenv", () => {
     expect(Object.fromEntries(parseDotenv(text).entries.map((e) => [e.key, e.value]))).toEqual(Object.fromEntries(vars.map((v) => [v.key, v.value])));
   });
 });
+
+describe("empty values", () => {
+  it("import as plain so an existing secret is cleared and a new one isn't rejected", () => {
+    const rows: EnvRowLike[] = [{ key: "DB_PASSWORD", kind: "secret", value: null, hasValue: true }];
+    const plan = planImport(rows, parseDotenv("DB_PASSWORD=\nAPI_TOKEN=").entries, "merge", { API_TOKEN: "secret" });
+    expect(plan.items.map((i) => [i.key, i.kind, i.status])).toEqual([["DB_PASSWORD", "plain", "update"], ["API_TOKEN", "plain", "new"]]);
+    expect(applyImport(rows, plan)[0]).toEqual({ key: "DB_PASSWORD", kind: "plain", value: "" });
+  });
+});
