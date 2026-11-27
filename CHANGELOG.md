@@ -9,10 +9,24 @@ versions fix bugs. Every version upgrades the database by itself.
 ## [Unreleased]
 
 ### Added
+- **Auto-update for compose and Git apps** (app → Settings → Auto-update): compose apps
+  follow new digests of the images in their compose file, Git apps poll their branch for
+  new commits (no webhook needed), and image apps keep following their tag. Checks run on
+  a schedule, optionally only in a maintenance window (days, hours, time zone). A failed
+  or unhealthy update is rolled back to the previous deployment, with compose images pinned
+  to the digests that ran before, and isn't retried. New notification events and audit
+  entries. Digest checks now work with any v2 registry, not only GHCR and Docker Hub.
+  See [docs/auto-update.md](docs/auto-update.md).
 - **Update channel** (Settings → Updates): updates follow *stable* (the newest release,
   pinned, e.g. `1.0.0`), *edge* (every build from `main`) or the tag DeployNow was started
   with. Update now and auto-update both use it, and a channel switch moves `DEPLOYNOW_TAG`
   in the compose `.env` too.
+
+### Changed
+- Image apps with "Redeploy when the image tag gets a new digest" move to the new
+  auto-update setting by themselves, with the same pace (every minute).
+- Rolling back a compose app starts the images that deployment ran (by digest), not
+  whatever their tags point to now.
 
 ### Security
 - **Microsoft sign-in for any work account** (tenant `organizations` or `common`) no longer

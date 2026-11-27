@@ -12,6 +12,8 @@ export type ChannelType = (typeof CHANNEL_TYPES)[number];
 export const EVENTS = [
   "deploy.success",
   "deploy.failure",
+  "autoupdate.success",
+  "autoupdate.failure",
   "backup.success",
   "backup.failure",
   "restore.success",
