@@ -10,6 +10,7 @@
  *   record    digest, commit, env snapshot, containers; notify
  */
 import fs from "fs";
+import YAML from "yaml";
 import os from "os";
 import path from "path";
 import type Docker from "dockerode";
@@ -30,7 +31,8 @@ import { parsePorts, parseVolumes, splitCommand, traefikLabels } from "../apps/c
 import { checkout } from "./git";
 import { createLogger, type DeployLogger } from "./log";
 import { deployContainer, oldContainers } from "./container";
-import { renderCompose, stripBuild } from "./compose";
+import { renderCompose, rollbackSource } from "./compose";
+import { checkComposeFiles, checkComposeRuntime } from "./composePolicy";
 import { ensureNetwork } from "./proxy";
 
 type FullApp = Application & {
@@ -57,7 +59,22 @@ async function registryLogins(ctx: PullContext): Promise<RegistryLogin[]> {
 function insideDir(root: string, rel: string): string {
   const full = path.resolve(root, rel);
   if (full !== root && !full.startsWith(root + path.sep)) throw new Error(`${rel} points outside the repository`);
+  // The checkout refuses links out of the repository; check again in case this path is one
+  if (fs.existsSync(full)) {
+    const real = fs.realpathSync(full);
+    const realRoot = fs.realpathSync(root);
+    if (real !== realRoot && !real.startsWith(realRoot + path.sep)) throw new Error(`${rel} is a link to outside the repository`);
+  }
   return full;
+}
+
+/**
+ * The app's variables, minus the ones that steer the docker CLI or compose itself
+ * (COMPOSE_ENV_FILES, DOCKER_CONFIG, BUILDKIT_…, LD_PRELOAD…): they reach the
+ * services through .env and interpolation, never the CLI's own settings.
+ */
+export function cliSafeEnv(vars: Record<string, string | undefined>): Record<string, string | undefined> {
+  return Object.fromEntries(Object.entries(vars).filter(([k]) => !/^(COMPOSE_|DOCKER_|BUILDKIT_|BUILDX_|LD_|GIT_)/i.test(k) && !["PATH", "HOME", "TMPDIR"].includes(k.toUpperCase())));
 }
 
 /** Digest-pinned reference for the image the daemon now has, if it came from a registry. */
@@ -265,19 +282,18 @@ export async function runDeployment(deploymentId: string, ctx: RunContext = {}):
     } else {
       // ── Compose ────────────────────────────────────────────────────────────
       const composeDir = app.sourceType === "git-compose" ? path.dirname(insideDir(repoDir, app.composePath)) : workDir;
-      let rendered: string;
-      if (rollbackOf) {
-        rendered = stripBuild(rollbackOf.renderedCompose);
-      } else {
-        rendered = renderCompose({
-          compose: composeText,
-          appId: app.id,
-          slug: app.slug,
-          deploymentId: dep.id,
-          domains: app.domains,
-          proxyNetwork,
-        }).yaml;
-      }
+      // A rollback renders the earlier file again: its images, today's domains and today's rules
+      const render = renderCompose({
+        compose: rollbackOf ? rollbackSource(rollbackOf.renderedCompose) : composeText,
+        appId: app.id,
+        slug: app.slug,
+        deploymentId: dep.id,
+        domains: app.domains,
+        proxyNetwork,
+      });
+      const rendered = render.yaml;
+      // Files compose would read must be the app's own, not DeployNow's (see composePolicy.ts)
+      checkComposeFiles(YAML.parse(rendered), app.sourceType === "git-compose" ? repoDir : workDir, composeDir);
       result.renderedCompose = rendered;
       const file = path.join(composeDir, ".deploynow-compose.yml");
       fs.writeFileSync(file, rendered, { mode: 0o600 });
@@ -285,9 +301,10 @@ export async function runDeployment(deploymentId: string, ctx: RunContext = {}):
       const envFile = prepareComposeEnvFile(composeDir);
 
       const base = ["compose", "--progress", "plain", "-p", app.slug, "-f", file];
+      const cliEnv = cliSafeEnv(envMap);
       await withDockerCli(toConnection(app.endpoint), await registryLogins(pullCtx), async (cli) => {
         const run = (args: string[], timeoutMs = 30 * 60_000) =>
-          runCommand("docker", [...base, ...args], { cwd: composeDir, env: { ...envMap, ...cli.env }, onOutput: log, signal: ctx.signal, timeoutMs });
+          runCommand("docker", [...base, ...args], { cwd: composeDir, env: { ...cliEnv, ...cli.env }, onOutput: log, signal: ctx.signal, timeoutMs });
         if (!rollbackOf) {
           log("Pulling images");
           await run(["pull", "--ignore-buildable", "--ignore-pull-failures", "--quiet"]);
@@ -296,6 +313,15 @@ export async function runDeployment(deploymentId: string, ctx: RunContext = {}):
         }
         envFile.write(env.vars);
         if (env.vars.length) log("Wrote the variables to .env (load them in a service with env_file: .env)");
+        // Check the file as compose will run it, after ${VAR} interpolation
+        const resolved = path.join(cli.dir, "resolved.json");
+        await run(["config", "--format", "json", "-o", resolved], 2 * 60_000);
+        checkComposeRuntime(JSON.parse(fs.readFileSync(resolved, "utf8")), {
+          slug: app.slug,
+          proxyNetwork,
+          ownLabels: (svc) => render.ownLabels.get(svc) ?? new Set(),
+        });
+        fs.rmSync(resolved, { force: true });
         log("Starting services");
         await run(["up", "-d", "--remove-orphans", "--no-build", "--wait", "--wait-timeout", String(Math.round((ctx.healthTimeoutMs ?? 300_000) / 1000))], 15 * 60_000);
       });

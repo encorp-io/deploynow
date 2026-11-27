@@ -14,6 +14,21 @@ versions fix bugs. Every version upgrades the database by itself.
   with. Update now and auto-update both use it, and a channel switch moves `DEPLOYNOW_TAG`
   in the compose `.env` too.
 
+### Security
+- **Compose sandbox:** compose apps (inline, Git and templates) can no longer reach the
+  host. Deploys refuse `privileged`, extra capabilities, devices, host namespaces
+  (`pid`/`ipc`/`network_mode: host`), bind mounts, foreign or external volumes and
+  networks, `include`/`extends` and `env_file`/`secrets`/build paths outside the app,
+  and `traefik.*` labels the app did not get from its domains. The check runs on the
+  fully interpolated config, so `${VAR}` tricks do not get around it. Git checkouts with
+  symlinks that point outside the repository are refused.
+
+### Upgrading
+- Apps that relied on host access (bind mounts such as `/var/run/docker.sock`, privileged
+  containers) now fail to deploy with a message naming the setting. Move the data to a
+  named volume, or, on a single-tenant install where every project admin is trusted, set
+  `DEPLOYNOW_COMPOSE_POLICY=trusted` on the DeployNow container to lift the runtime rules.
+
 ## [1.0.0] - 2026-11-27
 
 The first public release of DeployNow, a self-hosted replacement for Portainer and

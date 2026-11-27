@@ -10,6 +10,7 @@
  */
 import YAML from "yaml";
 import { traefikLabels, type RoutedDomain } from "../apps/config";
+import { checkComposeRuntime, ComposePolicyError } from "./composePolicy";
 
 export class ComposeError extends Error {}
 
@@ -26,6 +27,8 @@ export interface RenderResult {
   yaml: string;
   services: string[];
   builtServices: string[];
+  /** Per service, the Traefik label keys DeployNow added (the only Traefik labels the policy lets through) */
+  ownLabels: Map<string, Set<string>>;
 }
 
 type Obj = Record<string, unknown>;
@@ -61,6 +64,13 @@ export function renderCompose(input: RenderInput): RenderResult {
   if (!isObj(doc) || !isObj(doc.services) || !Object.keys(doc.services).length) {
     throw new ComposeError("The compose file has no services");
   }
+  // Host access, other apps' volumes and networks, Traefik labels: see composePolicy.ts
+  try {
+    checkComposeRuntime(doc, { slug: input.slug, proxyNetwork: input.proxyNetwork });
+  } catch (err) {
+    if (err instanceof ComposePolicyError) throw new ComposeError(err.message);
+    throw err;
+  }
   const services = doc.services as Record<string, Obj>;
   const names = Object.keys(services);
   const depTag = input.deploymentId.slice(-10);
@@ -78,6 +88,7 @@ export function renderCompose(input: RenderInput): RenderResult {
     domainsBySvc.set(svc, [...(domainsBySvc.get(svc) ?? []), d]);
   }
   let usesProxyNetwork = false;
+  const ownLabels = new Map<string, Set<string>>();
 
   for (const name of names) {
     const svc = services[name];
@@ -98,7 +109,9 @@ export function renderCompose(input: RenderInput): RenderResult {
       if (!input.proxyNetwork) throw new ComposeError("Set up the edge proxy on this endpoint before adding domains");
       if (svc.network_mode !== undefined) throw new ComposeError(`Service "${name}" sets network_mode, so it can't join the proxy network`);
       // Compose interpolates $VAR in labels: escape the $ in bcrypt hashes and redirect patterns
-      for (const [k, v] of Object.entries(traefikLabels(input.slug, domains, input.proxyNetwork))) labels[k] = v.replace(/\$/g, "$$$$");
+      const routes = traefikLabels(input.slug, domains, input.proxyNetwork);
+      for (const [k, v] of Object.entries(routes)) labels[k] = v.replace(/\$/g, "$$$$");
+      ownLabels.set(name, new Set(Object.keys(routes)));
       if (svc.networks === undefined) {
         svc.networks = ["default", input.proxyNetwork];
       } else if (Array.isArray(svc.networks)) {
@@ -120,7 +133,7 @@ export function renderCompose(input: RenderInput): RenderResult {
   // Compose ignores the top-level "name" when -p is given; drop it to avoid confusion
   delete (doc as Obj).name;
 
-  return { yaml: YAML.stringify(doc, { lineWidth: 0 }), services: names, builtServices: built };
+  return { yaml: YAML.stringify(doc, { lineWidth: 0 }), services: names, builtServices: built, ownLabels };
 }
 
 /**
@@ -130,5 +143,21 @@ export function renderCompose(input: RenderInput): RenderResult {
 export function stripBuild(renderedYaml: string): string {
   const doc = YAML.parse(renderedYaml) as Obj;
   for (const svc of Object.values((doc.services ?? {}) as Record<string, Obj>)) delete svc.build;
+  return YAML.stringify(doc, { lineWidth: 0 });
+}
+
+/**
+ * The file an earlier deployment ran, ready to render again for a rollback: no build
+ * sections (the per-deployment images exist) and none of the Traefik labels it had,
+ * so the app's current domains are routed and the policy checks it like a new file.
+ */
+export function rollbackSource(renderedYaml: string): string {
+  const doc = YAML.parse(stripBuild(renderedYaml)) as Obj;
+  for (const svc of Object.values((doc.services ?? {}) as Record<string, Obj>)) {
+    if (!isObj(svc)) continue;
+    const labels = toMap(svc.labels, "labels");
+    for (const k of Object.keys(labels)) if (k.startsWith("traefik.")) delete labels[k];
+    svc.labels = labels;
+  }
   return YAML.stringify(doc, { lineWidth: 0 });
 }

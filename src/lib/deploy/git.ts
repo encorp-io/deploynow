@@ -3,6 +3,8 @@
  * The GitHub token travels in git's environment (GIT_CONFIG_*), never on the
  * command line or in the remote URL, so it can't show up in ps or logs.
  */
+import fs from "fs";
+import path from "path";
 import { runCommand } from "../docker/cliBridge";
 
 export const BRANCH_RE = /^(?!-)(?!.*\.\.)[\w./-]{1,200}$/;
@@ -95,6 +97,7 @@ export async function checkout(
   if (await hasSubmodules(dir)) {
     await run(["submodule", "update", "--init", "--recursive", "--depth", "1"]);
   }
+  assertNoEscapingLinks(dir);
 
   let sha = "";
   let message = "";
@@ -106,8 +109,41 @@ export async function checkout(
   return { sha, message: message.slice(0, 300) };
 }
 
+/**
+ * Refuse a checkout with symlinks that lead out of the repository. Compose and the
+ * docker CLI run inside the DeployNow container and follow links, so a committed
+ * `docker-compose.yml -> /proc/1/environ` or `env_file: ./x` with `x -> /data/…`
+ * would read DeployNow's own secrets.
+ */
+export function assertNoEscapingLinks(root: string, maxEntries = 200_000): void {
+  const realRoot = fs.realpathSync(root);
+  const inside = (p: string) => p === realRoot || p.startsWith(realRoot + path.sep);
+  const stack = [realRoot];
+  let seen = 0;
+  while (stack.length) {
+    const dir = stack.pop()!;
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      if (++seen > maxEntries) throw new Error(`The repository has more than ${maxEntries} files`);
+      const full = path.join(dir, entry.name);
+      if (dir === realRoot && entry.name === ".git") continue;
+      if (entry.isSymbolicLink()) {
+        const target = path.resolve(dir, fs.readlinkSync(full));
+        let real = target;
+        try {
+          real = fs.realpathSync(full);
+        } catch {
+          // dangling: judge the link by where it points
+        }
+        if (!inside(target) || !inside(real)) {
+          throw new Error(`${path.relative(realRoot, full)} is a link to outside the repository; DeployNow won't deploy it`);
+        }
+      } else if (entry.isDirectory()) {
+        stack.push(full);
+      }
+    }
+  }
+}
+
 async function hasSubmodules(dir: string): Promise<boolean> {
-  const fs = await import("fs");
-  const path = await import("path");
   return fs.existsSync(path.join(dir, ".gitmodules"));
 }
