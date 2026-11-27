@@ -90,6 +90,13 @@ export async function applySetupDomain(env: NodeJS.ProcessEnv = process.env): Pr
   }
   const { domain } = plan;
 
+  // Take the trial route down, but keep the route of a domain someone activated in
+  // Settings meanwhile (the probe below can take minutes)
+  const restoreRoute = async () => {
+    const now = await prisma.settings.findUnique({ where: { id: "singleton" }, select: { platformDomain: true } }).catch(() => null);
+    await ensurePlatformRoute(now?.platformDomain ? [now.platformDomain] : []).catch(() => {});
+  };
+
   const fail = (message: string) => {
     console.error(`[deployer] Couldn't set up https://${domain} yet: ${message} The UI stays on port 9444; it's tried again at the next start, or finish it under Settings → Domain.`);
     writeMarker({ domain, done: false, message });
@@ -116,15 +123,22 @@ export async function applySetupDomain(env: NodeJS.ProcessEnv = process.env): Pr
     await ensurePlatformRoute([domain], target);
   } catch (err) {
     if (!(err instanceof DomainError)) console.error("[deployer] Domain setup failed:", err);
-    await ensurePlatformRoute([]).catch(() => {});
+    await restoreRoute();
     return fail((err as Error).message);
   }
 
   // Let's Encrypt usually issues within a minute; allow for slow DNS
   const probe = await probeDomain(domain, 180_000);
   if (!probe.reachable || !probe.certificateValid) {
-    await ensurePlatformRoute([]).catch(() => {});
+    await restoreRoute();
     return fail(probe.message);
+  }
+  // Settings won the race: leave its domain in place
+  const latest = await prisma.settings.findUnique({ where: { id: "singleton" }, select: { platformDomain: true } });
+  if (latest?.platformDomain && latest.platformDomain !== domain) {
+    await restoreRoute();
+    writeMarker({ domain, done: true });
+    return;
   }
   await saveActiveDomain(domain);
   writeMarker({ domain, done: true });
