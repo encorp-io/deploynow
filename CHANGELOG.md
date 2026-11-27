@@ -8,33 +8,11 @@ versions fix bugs. Every version upgrades the database by itself.
 
 ## [Unreleased]
 
-### Security
-- Putting an app on an endpoint (new app, template, build server, environment default)
-  now needs operator rights on that endpoint, not just admin on the project.
-- Apps can no longer route DeployNow's own domain (on any path), or a host or preview
-  domain that another project already uses.
-- **Microsoft sign-in for any work account** (tenant `organizations` or `common`) no longer
-  matches or creates accounts by email unless the token carries `xms_edov`, so another
-  Entra tenant can't sign in as one of your people by giving its user their address.
-  Add the `email` and `xms_edov` optional claims to the app registration, or use your
-  tenant id. Accounts already linked keep working.
-- A session is accepted only for the user it was created for, and expired sessions are
-  refused on API calls too.
-- Viewers no longer see pending invites, who has 2FA off, last sign-ins, other people's
-  endpoint grants, or the Vault role id and CA certificate.
-- The AI connection consent page shows request errors itself instead of redirecting to a
-  newly registered app's address.
-- The current password, step-up codes, turning 2FA off and new recovery codes share one
-  limit of 10 tries per 15 minutes.
-- Cookie requests that change something and carry no `Origin` are refused when the browser
-  marks them as coming from another site.
-- **Compose sandbox:** compose apps (inline, Git and templates) can no longer reach the
-  host. Deploys refuse `privileged`, extra capabilities, devices, host namespaces
-  (`pid`/`ipc`/`network_mode: host`), bind mounts, foreign or external volumes and
-  networks, `include`/`extends` and `env_file`/`secrets`/build paths outside the app,
-  and `traefik.*` labels the app did not get from its domains. The check runs on the
-  fully interpolated config, so `${VAR}` tricks do not get around it. Git checkouts with
-  symlinks that point outside the repository are refused.
+## [1.1.0] - 2026-11-28
+
+Auto-update for every kind of app, a choice of update channel, and a round of security
+hardening. **Read Upgrading below before you update:** a few setups that 1.0.0 allowed
+are now refused.
 
 ### Added
 - **Auto-update for compose and Git apps** (app → Settings → Auto-update): compose apps
@@ -46,27 +24,43 @@ versions fix bugs. Every version upgrades the database by itself.
   entries. Digest checks now work with any v2 registry, not only GHCR and Docker Hub.
   See [docs/auto-update.md](docs/auto-update.md).
 - **Update channel** (Settings → Updates): updates follow *stable* (the newest release,
-  pinned, e.g. `1.0.0`), *edge* (every build from `main`) or the tag DeployNow was started
+  pinned, e.g. `1.1.0`), *edge* (every build from `main`) or the tag DeployNow was started
   with. Update now and auto-update both use it, and a channel switch moves `DEPLOYNOW_TAG`
   in the compose `.env` too.
+- **Signed images:** images are signed with cosign (keyless) and published with SLSA
+  provenance and an SBOM; each release lists its image digests in `image-digests.txt`.
+  Self-update and auto-update check the new image's signature (and, for a release, its
+  digest) before switching, and the updater starts only the image that was checked.
+  `DEPLOYNOW_VERIFY_IMAGES=off` skips the check.
 
 ### Changed
 - Image apps with "Redeploy when the image tag gets a new digest" move to the new
   auto-update setting by themselves, with the same pace (every minute).
 - Rolling back a compose app starts the images that deployment ran (by digest), not
   whatever their tags point to now.
+- The image is built on Node.js 26 (was 22).
+- `setup.sh` takes `docker-compose.yml` from the release it installs.
 
-### Upgrading
-- Apps that relied on host access (bind mounts such as `/var/run/docker.sock`, privileged
-  containers) now fail to deploy with a message naming the setting. Move the data to a
-  named volume, or, on a single-tenant install where every project admin is trusted, set
-  `DEPLOYNOW_COMPOSE_POLICY=trusted` on the DeployNow container to lift the runtime rules.
+### Fixed
+- The knob of toggle switches sits in the right place again.
+
 ### Security
+- **Compose sandbox:** compose apps (inline, Git and templates) can no longer reach the
+  host. Deploys refuse `privileged`, extra capabilities, devices, host namespaces
+  (`pid`/`ipc`/`network_mode: host`), `use_api_socket`, privileged builds, bind mounts,
+  foreign or external volumes and networks, `include`/`extends` and
+  `env_file`/`secrets`/build paths outside the app, and `traefik.*` labels the app did
+  not get from its domains. The check runs on the fully interpolated config, so `${VAR}`
+  tricks do not get around it. Git checkouts with symlinks that point outside the
+  repository are refused.
+- Putting an app on an endpoint (new app, template, build server, environment default)
+  now needs operator rights on that endpoint, not just admin on the project.
+- Apps can no longer route DeployNow's own domain (on any path), or a host or preview
+  domain that another project already uses.
 - **Microsoft sign-in for any work account** (tenant `organizations` or `common`) no longer
   matches or creates accounts by email unless the token carries `xms_edov`, so another
   Entra tenant can't sign in as one of your people by giving its user their address.
-  Add the `email` and `xms_edov` optional claims to the app registration, or use your
-  tenant id. Accounts already linked keep working.
+  Accounts already linked keep working.
 - A session is accepted only for the user it was created for, and expired sessions are
   refused on API calls too.
 - Viewers no longer see pending invites, who has 2FA off, last sign-ins, other people's
@@ -77,12 +71,12 @@ versions fix bugs. Every version upgrades the database by itself.
   limit of 10 tries per 15 minutes.
 - Cookie requests that change something and carry no `Origin` are refused when the browser
   marks them as coming from another site.
-- **Registry test can't reach internal addresses**: testing a registry login resolves the
+- **Registry test can't reach internal addresses:** testing a registry login resolves the
   host first and refuses metadata and link-local addresses for everyone, and loopback and
   private ranges for non-admins. The token realm must be https, redirects aren't followed,
   and errors no longer echo the remote answer. Auto-update digest checks go through the
   same guard (metadata and link-local refused, redirects checked hop by hop).
-- **Client IP behind the domain can't be spoofed**: nginx trusts `X-Real-IP` and
+- **Client IP behind the domain can't be spoofed:** nginx trusts `X-Real-IP` and
   `X-Forwarded-Proto` on the Traefik port only with a per-install secret that the domain
   route adds (kept in `/data/proxy-secret`). Port 9444 sends HSTS when it has a real
   certificate.
@@ -91,17 +85,40 @@ versions fix bugs. Every version upgrades the database by itself.
   the updater and backup/task helpers never show env values or open a console; their
   logs are admin only and only owners can stop or remove them. Credential-like label
   values (such as the domain route's proxy secret or Traefik basic-auth users) are
-  masked in container details. See docs/security.md.
-- Images are signed with cosign (keyless) and published with SLSA provenance and an
-  SBOM; each release lists its image digests in `image-digests.txt`.
-- Self-update and auto-update check the new image's signature (and, for a release, its
-  digest) before switching, and the updater starts only the image that was checked.
-  `DEPLOYNOW_VERIFY_IMAGES=off` skips the check.
+  masked in container details. See [docs/security.md](docs/security.md).
 - GitHub Actions are pinned to commit SHAs.
 - `setup.sh` removes `ADMIN_PASSWORD` from `.env` after the first start and recreates
   the container, so `docker inspect` no longer shows it; DeployNow warns while it is
-  still set. `setup.sh` takes `docker-compose.yml` from the release it installs.
+  still set.
 - The app's files in the image belong to root, so the `nextjs` user can't change them.
+
+### Upgrading
+From 1.0.0, **Settings → Updates → Update now** works as before (or set
+`DEPLOYNOW_TAG=1.1.0` and run `docker compose pull && docker compose up -d`). The
+database upgrades itself. Before you update, check these:
+
+- **Compose apps that use the host** (bind mounts such as `/var/run/docker.sock` or
+  `/srv/data`, `privileged`, `network_mode: host`, devices, external volumes) fail their
+  next deploy with a message naming the setting. Running containers keep running. Move
+  the data to a named volume, or, on a single-tenant install where every project admin
+  is trusted, set `DEPLOYNOW_COMPOSE_POLICY=trusted` on the DeployNow container to lift
+  these rules.
+- **Microsoft sign-in with `organizations` or `common`:** add the `email` and `xms_edov`
+  optional claims to the ID token in the app registration (Token configuration), or
+  switch to your tenant id. Otherwise people who haven't signed in with Microsoft before
+  can't be matched to their account. People already linked keep signing in.
+- **Project admins who create apps** now need operator rights on the endpoint (an
+  instance-wide operator role or an endpoint grant under Settings → Users). Existing apps
+  keep running and deploying.
+- **Container env values** are admin only. Give people who need them access to the app's
+  secrets, or the admin role.
+- **Self-update checks signatures** from now on, so DeployNow needs to reach ghcr.io,
+  `rekor.sigstore.dev` and `tuf-repo-cdn.sigstore.dev`. Behind a registry mirror or
+  without internet access, set `DEPLOYNOW_VERIFY_IMAGES=off`.
+- **`ADMIN_PASSWORD`:** installs from 1.0.0 still have it in `.env`, and DeployNow now logs a
+  warning about it. Remove it once the first account exists:
+  `sed -i '/^ADMIN_PASSWORD=/d' .env && docker compose up -d`.
+- Registry logins on loopback or private addresses can only be tested by admins.
 
 ## [1.0.0] - 2026-11-27
 
@@ -193,5 +210,6 @@ Dokploy. It is the successor of Encorp Deployer, rebuilt as a standalone product
 - From Encorp Deployer 1.x: see [docs/upgrading.md](docs/upgrading.md#from-encorp-deployer-1x).
 - Image tags changed: `latest` is now the newest stable release and `edge` follows `main`.
 
-[Unreleased]: https://github.com/encorp-io/deploynow/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/encorp-io/deploynow/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/encorp-io/deploynow/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/encorp-io/deploynow/releases/tag/v1.0.0

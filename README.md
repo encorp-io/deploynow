@@ -166,7 +166,7 @@ docker compose pull
 docker compose up -d
 ```
 
-Pin a release with `DEPLOYNOW_TAG=1.0.0` in `.env` for predictable upgrades. Database migrations run on start, after a copy of the database is saved to `/data/db-backups/`. Details, image tags and rolling back: [docs/upgrading.md](docs/upgrading.md).
+Pin a release with `DEPLOYNOW_TAG=1.1.0` in `.env` for predictable upgrades. Database migrations run on start, after a copy of the database is saved to `/data/db-backups/`. Details, image tags and rolling back: [docs/upgrading.md](docs/upgrading.md).
 
 ## Landing page
 

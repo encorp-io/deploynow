@@ -58,14 +58,14 @@ curl -fsSL https://raw.githubusercontent.com/encorp-io/deploynow/main/setup.sh \
 
 ```bash
 mkdir -p /opt/deploynow && cd /opt/deploynow
-curl -fsSLO https://raw.githubusercontent.com/encorp-io/deploynow/v1.0.0/docker-compose.yml   # the release you install
+curl -fsSLO https://raw.githubusercontent.com/encorp-io/deploynow/v1.1.0/docker-compose.yml   # the release you install
 cat > .env <<END
 AUTH_SECRET=$(openssl rand -base64 32)
 ADMIN_EMAIL=you@example.com
 ADMIN_PASSWORD=choose-a-long-password
 NEXTAUTH_URL=https://your-server:9444
 DOCKER_GID=$(stat -c %g /var/run/docker.sock)
-DEPLOYNOW_TAG=1.0.0
+DEPLOYNOW_TAG=1.1.0
 END
 chmod 600 .env
 docker compose up -d

@@ -8,8 +8,8 @@ manual step, which the [changelog](../CHANGELOG.md) lists under **Upgrading**.
 
 | Tag | Moves when | Use it for |
 |---|---|---|
-| `1.0.0` | never | Production: you choose when to upgrade |
-| `1.0` | each 1.0.x patch | Production with automatic bug fixes |
+| `1.1.0` | never | Production: you choose when to upgrade |
+| `1.1` | each 1.1.x patch | Production with automatic bug fixes |
 | `latest` | each stable release | Trying DeployNow, small setups |
 | `edge` | each commit on `main` | Testing what's next; may break |
 | `sha-abc1234` | never | One exact build |
@@ -43,9 +43,9 @@ The page reconnects on its own and shows the outcome, with what the new version 
 when it failed. It is also in the audit log, and channels that subscribe to "DeployNow
 updated itself (or rolled back)" get it.
 
-Which image: a pinned tag (`1.0.0`) moves to the newest release, and when DeployNow was
+Which image: a pinned tag (`1.1.0`) moves to the newest release, and when DeployNow was
 started with Docker Compose, `DEPLOYNOW_TAG` in the project's `.env` is moved too, so a
-later `docker compose up -d` keeps the new version. A tag that moves (`latest`, `1.0`,
+later `docker compose up -d` keeps the new version. A tag that moves (`latest`, `1.1`,
 `edge`) is pulled again. If your `docker-compose.yml` names a version itself instead of
 `${DEPLOYNOW_TAG}`, change it there after updating.
 
@@ -53,7 +53,7 @@ later `docker compose up -d` keeps the new version. A tag that moves (`latest`, 
 
 | Channel | Update now and auto-update move to |
 |---|---|
-| Stable | the newest release, pinned (`1.0.0`), even from `latest` or `edge` |
+| Stable | the newest release, pinned (`1.1.0`), even from `latest` or `edge` |
 | Edge | the `edge` image, built from every commit on `main` |
 | Keep the running tag (default) | the newest release for a pinned tag, the same tag again for `latest`, `2.0` or `edge` |
 
