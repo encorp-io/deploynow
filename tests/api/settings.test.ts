@@ -39,7 +39,7 @@ describe("GET /api/settings", () => {
     const data = await (await GET()).json();
     expect(data.pollingInterval).toBe(60);
     expect(data.githubToken).toBe("");
-    expect(data.require2faForAdmins).toBe(true);
+    expect(data.require2faForAdmins).toBe(false);
   });
 });
 

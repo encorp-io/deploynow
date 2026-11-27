@@ -59,7 +59,7 @@ export async function POST(request: Request) {
   if (body.action === "disable") {
     if (!row.totpEnabledAt) return NextResponse.json({ error: "2FA is not on" }, { status: 409 });
     const settings = await prisma.settings.findUnique({ where: { id: "singleton" } });
-    if (mustEnrolTwoFactor(user.role, false, settings?.require2faForAdmins ?? true)) {
+    if (mustEnrolTwoFactor(user.role, false, settings?.require2faForAdmins ?? false)) {
       return NextResponse.json({ error: "2FA is required for your role" }, { status: 403 });
     }
     if (!(await verifyPassword(String(body.password ?? ""), row.password))) {
