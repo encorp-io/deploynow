@@ -112,6 +112,16 @@ export function withAnonymousVolumes(info: Pick<Inspect, "HostConfig" | "Mounts"
   return host;
 }
 
+/** The recreate failed, and starting the old container again failed too. */
+export class RollbackError extends Error {
+  constructor(
+    public cause: unknown,
+    public rollbackCause: unknown,
+  ) {
+    super(`${(cause as Error)?.message ?? cause}; starting the old container again also failed: ${(rollbackCause as Error)?.message ?? rollbackCause}`);
+  }
+}
+
 export interface RecreateOptions {
   /** Image to run; defaults to the container's current image reference */
   image?: string;
@@ -192,7 +202,12 @@ export async function stagedRecreate(docker: Docker, containerId: string, opts: 
     }
     await old.rename({ name }).catch(() => {});
     if (beforeStart) await beforeStart();
-    if (wasRunning) await old.start().catch(() => {});
+    // A failed start must surface: the caller would otherwise report the old container as running
+    if (wasRunning) {
+      await old.start().catch((e: { statusCode?: number }) => {
+        if (e?.statusCode !== 304) throw e; // 304 = already running
+      });
+    }
   };
 
   try {
@@ -213,7 +228,11 @@ export async function stagedRecreate(docker: Docker, containerId: string, opts: 
     if (wasRunning) await created.start();
   } catch (err) {
     // Roll back to the old container
-    await restoreOld();
+    try {
+      await restoreOld();
+    } catch (rollbackErr) {
+      throw new RollbackError(err, rollbackErr);
+    }
     throw err;
   }
 

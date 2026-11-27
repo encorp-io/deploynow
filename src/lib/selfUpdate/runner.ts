@@ -17,15 +17,31 @@
 import fs from "fs";
 import path from "path";
 import Docker from "dockerode";
-import { stagedRecreate } from "../docker/recreate";
-import { chownLike, demuxLogs, readStatus, restoreDb, setEnvValue, snapshotDb, waitHealthy, writeStatus, type SelfUpdatePlan, type SelfUpdateStatus } from "./shared";
+import { RollbackError, stagedRecreate } from "../docker/recreate";
+import {
+  chownLike,
+  demuxLogs,
+  readStatus,
+  restoreDb,
+  setEnvValue,
+  snapshotDb,
+  waitHealthy,
+  writeStatus,
+  type SelfUpdatePlan,
+  type SelfUpdateStatus,
+} from "./shared";
 
 const log = (m: string) => console.log(`[deploynow-updater] ${m}`);
 
 async function main() {
-  const plan = JSON.parse(process.env.SELF_UPDATE_PLAN || "{}") as SelfUpdatePlan;
-  if (!plan.selfId || !plan.targetRef || !plan.statusFile) throw new Error("SELF_UPDATE_PLAN is missing or incomplete");
-  const docker = new Docker({ socketPath: process.env.DOCKER_SOCKET || "/var/run/docker.sock" });
+  const plan = JSON.parse(
+    process.env.SELF_UPDATE_PLAN || "{}",
+  ) as SelfUpdatePlan;
+  if (!plan.selfId || !plan.targetRef || !plan.statusFile)
+    throw new Error("SELF_UPDATE_PLAN is missing or incomplete");
+  const docker = new Docker({
+    socketPath: process.env.DOCKER_SOCKET || "/var/run/docker.sock",
+  });
 
   const base: SelfUpdateStatus = readStatus(plan.statusFile) ?? {
     id: plan.id,
@@ -45,7 +61,11 @@ async function main() {
       log(`Couldn't write the status file: ${(err as Error).message}`);
     }
   };
-  const finish = (state: SelfUpdateStatus["state"], message: string, extra: Partial<SelfUpdateStatus> = {}) => {
+  const finish = (
+    state: SelfUpdateStatus["state"],
+    message: string,
+    extra: Partial<SelfUpdateStatus> = {},
+  ) => {
     log(message);
     save({ state, message, finishedAt: new Date().toISOString(), ...extra });
   };
@@ -70,13 +90,25 @@ async function main() {
       },
     });
   } catch (err) {
+    if (err instanceof RollbackError)
+      return finish(
+        "failed",
+        `${err.message}. DeployNow is stopped: start it with docker compose up -d.`,
+      );
     // stagedRecreate already put the old container back
-    return finish("failed", `Couldn't start the new container, so the old one runs again: ${(err as Error).message}`);
+    return finish(
+      "failed",
+      `Couldn't start the new container, so the old one runs again: ${(err as Error).message}`,
+    );
   }
 
   save({ state: "checking" });
-  log(`New container ${staged.newId.slice(0, 12)} started; waiting for its health check`);
-  const health = await waitHealthy(docker, staged.newId, { timeoutMs: plan.healthTimeoutMs || 300_000 });
+  log(
+    `New container ${staged.newId.slice(0, 12)} started; waiting for its health check`,
+  );
+  const health = await waitHealthy(docker, staged.newId, {
+    timeoutMs: plan.healthTimeoutMs || 300_000,
+  });
 
   if (health.ok) {
     await staged.commit();
@@ -95,29 +127,47 @@ async function main() {
       }
     }
     fs.rmSync(snapDir, { recursive: true, force: true });
-    return finish("succeeded", `Updated to ${plan.targetRef}`, envFile ? { envFile: plan.envFileHost || envFile } : {});
+    return finish(
+      "succeeded",
+      `Updated to ${plan.targetRef}`,
+      envFile ? { envFile: plan.envFileHost || envFile } : {},
+    );
   }
 
   // Not healthy: keep what it printed, then go back
   let logs = "";
   try {
-    const buf = (await docker.getContainer(staged.newId).logs({ stdout: true, stderr: true, tail: 60 })) as unknown as Buffer;
-    logs = demuxLogs(Buffer.isBuffer(buf) ? buf : Buffer.from(String(buf))).slice(-6000);
+    const buf = (await docker
+      .getContainer(staged.newId)
+      .logs({ stdout: true, stderr: true, tail: 60 })) as unknown as Buffer;
+    logs = demuxLogs(
+      Buffer.isBuffer(buf) ? buf : Buffer.from(String(buf)),
+    ).slice(-6000);
   } catch {
     /* gone already */
   }
   log(`${health.reason}; rolling back`);
   let restored = false;
-  await staged.rollback(() => {
-    if (!snapshotted || !plan.dbFile) return;
-    try {
-      restoreDb(plan.dbFile, snapDir);
-      for (const s of ["", "-wal", "-shm"]) if (fs.existsSync(plan.dbFile + s)) chownLike(path.dirname(plan.dbFile), plan.dbFile + s);
-      restored = true;
-    } catch (err) {
-      log(`Couldn't restore the database copy: ${(err as Error).message}`);
-    }
-  });
+  try {
+    await staged.rollback(() => {
+      if (!snapshotted || !plan.dbFile) return;
+      try {
+        restoreDb(plan.dbFile, snapDir);
+        for (const s of ["", "-wal", "-shm"])
+          if (fs.existsSync(plan.dbFile + s))
+            chownLike(path.dirname(plan.dbFile), plan.dbFile + s);
+        restored = true;
+      } catch (err) {
+        log(`Couldn't restore the database copy: ${(err as Error).message}`);
+      }
+    });
+  } catch (err) {
+    return finish(
+      "failed",
+      `${health.reason}, and starting the previous version again failed: ${(err as Error).message}. DeployNow is stopped: start it with docker compose up -d${snapshotted ? " (the database copy from before the update is in self-update/pre-update-db on the data volume)" : ""}.`,
+      { logs },
+    );
+  }
   return finish(
     "rolled_back",
     `${health.reason}. The previous version runs again${restored ? " with the database as it was before the update" : ""}.`,
@@ -128,9 +178,17 @@ async function main() {
 main().catch((err) => {
   console.error(`[deploynow-updater] ${(err as Error).message}`);
   try {
-    const plan = JSON.parse(process.env.SELF_UPDATE_PLAN || "{}") as SelfUpdatePlan;
+    const plan = JSON.parse(
+      process.env.SELF_UPDATE_PLAN || "{}",
+    ) as SelfUpdatePlan;
     const s = plan.statusFile ? readStatus(plan.statusFile) : null;
-    if (s && plan.statusFile) writeStatus(plan.statusFile, { ...s, state: "failed", message: `The updater stopped: ${(err as Error).message}`, finishedAt: new Date().toISOString() });
+    if (s && plan.statusFile)
+      writeStatus(plan.statusFile, {
+        ...s,
+        state: "failed",
+        message: `The updater stopped: ${(err as Error).message}`,
+        finishedAt: new Date().toISOString(),
+      });
   } catch {
     /* nothing more to do */
   }

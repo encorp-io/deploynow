@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { containerOnlyConfig, networkEndpointConfig, recreateContainer, stagedRecreate, withAnonymousVolumes } from "@/lib/docker/recreate";
+import { containerOnlyConfig, networkEndpointConfig, recreateContainer, RollbackError, stagedRecreate, withAnonymousVolumes } from "@/lib/docker/recreate";
 
 const OLD_ID = "abcdef123456" + "0".repeat(52);
 
@@ -134,5 +134,20 @@ describe("recreateContainer", () => {
     expect(old.rename).toHaveBeenLastCalledWith({ name: "web" });
     expect(order.at(-1)).toBe("beforeStart");
     expect(old.start).toHaveBeenCalled();
+  });
+
+  it("says so when the old container won't start again either", async () => {
+    const { docker, old } = fakeDocker(true);
+    old.start.mockRejectedValue(new Error("no space left"));
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const err = await recreateContainer(docker as any, OLD_ID).catch((e) => e);
+    expect(err).toBeInstanceOf(RollbackError);
+    expect(err.message).toMatch(/port in use; starting the old container again also failed: no space left/);
+
+    const ok = fakeDocker();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const staged = await stagedRecreate(ok.docker as any, OLD_ID);
+    ok.old.start.mockRejectedValue(new Error("no space left"));
+    await expect(staged.rollback()).rejects.toThrow("no space left");
   });
 });
