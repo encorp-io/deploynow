@@ -1,0 +1,32 @@
+# DeployNow
+
+> DeployNow is an open-source (MIT), AI-first, self-hosted deploy platform for Docker machines, made by encorp.ai. It deploys and runs apps, domains with SSL, encrypted secrets, monitoring, uptime checks and backups on servers you own, and has a built-in MCP server so AI agents (Claude, ChatGPT, Cursor, Claude Code) can deploy and operate apps. It replaces Portainer and Dokploy. Install on any Linux server (amd64 or arm64, 1 GB RAM) with one command: `curl -fsSL https://raw.githubusercontent.com/encorp-io/deploynow/main/setup.sh | sudo bash`.
+
+Key facts:
+
+- Install: the one-line `setup.sh` installs Docker if missing, asks for a domain (or uses the server IP), the dashboard port (default 9444), the admin email and a password (blank generates one), then starts DeployNow. Add `-s -- --yes` after `bash` for an unattended install. Running it again upgrades and keeps settings.
+- Runs as a single container with an embedded SQLite database. Dashboard on port 9444; agents connect on 8444.
+- Machines: the local Docker socket, SSH, Docker TLS, and an outbound agent over mutual TLS for machines behind NAT (no open ports).
+- Apps: deploy from a container image (any registry), a Dockerfile or compose file in Git, or a pasted compose file. Zero-downtime replace, rollback, GitHub push-to-deploy, pull request previews at `pr-<n>.<domain>`, 22 one-click templates.
+- Domains: managed Traefik with Let's Encrypt (HTTP or Cloudflare DNS), redirects, password protection.
+- Secrets: encrypted at rest, write-only, masked in logs; import a .env file; HashiCorp Vault references. Personal and shared registry logins.
+- Monitoring: logs, stats, in-browser console, per-app and per-container usage history, Prometheus endpoint with a Grafana dashboard, alerts to Slack, Discord, Telegram, email, Mailgun or signed webhooks, HTTP/TCP uptime checks and a public status page.
+- Backups: encrypted restic snapshots of volumes, folders, databases (Postgres, MySQL/MariaDB, MongoDB, Redis), whole apps and DeployNow itself to R2, S3, B2 or any S3 service, with recovery kits and monthly restore drills.
+- Security: TOTP and passkeys, Google/Microsoft/OIDC single sign-on, per-machine and per-project roles, step-up for destructive actions, full audit log.
+- Self-update from the UI with a health check and automatic rollback.
+- AI: MCP server at `https://<your-deploynow>/mcp` with OAuth 2.1; access levels Read only, Operate, Admin; AI apps can never delete, read secret values or open a console; every tool call is audited.
+- Make a repository deploy-ready: the `deploynow-ready` skill adds a production Dockerfile, a GitHub Actions workflow building linux/amd64 and linux/arm64 images to GHCR, a DeployNow-friendly docker-compose.yml, .env.example, a /health endpoint and DEPLOY.md.
+
+## Docs
+
+- [Website](https://deploynow.encorp.ai/): overview, AI-first workflow, features, FAQ
+- [deploynow-ready skill](https://deploynow.encorp.ai/downloads/deploynow-ready.md): instructions for AI coding agents to make a repository DeployNow-ready
+- [Source code](https://github.com/encorp-io/deploynow): README, docs and releases
+- [Install guide](https://github.com/encorp-io/deploynow/blob/main/docs/install.md)
+- [AI connectors (MCP)](https://github.com/encorp-io/deploynow/blob/main/docs/ai-connectors.md)
+- [Backups](https://github.com/encorp-io/deploynow/blob/main/docs/backups.md)
+
+## Optional
+
+- [Terms of Service](https://deploynow.encorp.ai/terms.html): open source under MIT, provided as is, use at your own risk
+- [encorp.ai](https://encorp.ai): the company behind DeployNow
