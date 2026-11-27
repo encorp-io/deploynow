@@ -25,6 +25,7 @@ import { audit } from "../audit";
 import { notify } from "../notify";
 import { publicBaseUrl } from "../publicOrigin";
 import { makeMasker, readStoredEnv, resolveEnv } from "../apps/env";
+import { writeComposeEnvFile } from "./envFile";
 import { parsePorts, parseVolumes, splitCommand, traefikLabels } from "../apps/config";
 import { checkout } from "./git";
 import { createLogger, type DeployLogger } from "./log";
@@ -280,6 +281,7 @@ export async function runDeployment(deploymentId: string, ctx: RunContext = {}):
       result.renderedCompose = rendered;
       const file = path.join(composeDir, ".deploynow-compose.yml");
       fs.writeFileSync(file, rendered, { mode: 0o600 });
+      if (writeComposeEnvFile(composeDir, env.vars)) log(`Wrote the variables to .env (load them in a service with env_file: .env)`);
 
       const base = ["compose", "--progress", "plain", "-p", app.slug, "-f", file];
       await withDockerCli(toConnection(app.endpoint), await registryLogins(pullCtx), async (cli) => {
