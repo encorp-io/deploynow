@@ -1,9 +1,9 @@
 "use client";
 
 import { Suspense, useCallback, useEffect, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { ShieldCheck, ShieldAlert, Monitor, KeyRound, Copy } from "lucide-react";
-import { useApi } from "@/components/AppShell";
+import { useApi, useRefreshAccount } from "@/components/AppShell";
 import { Badge, Button, Card, ErrorText, Field, Input, PageHeader, timeAgo, PageSkeleton } from "@/components/ui";
 import { ApiTokensCard, ConnectedAppsCard, PasskeysCard } from "@/components/AccountSecurity";
 import { PersonalRegistryLogins } from "@/components/RegistryLogins";
@@ -60,6 +60,8 @@ function RecoveryCodes({ codes, onDone }: { codes: string[]; onDone: () => void 
 function AccountPage() {
   const api = useApi();
   const params = useSearchParams();
+  const router = useRouter();
+  const refreshAccount = useRefreshAccount();
   const [account, setAccount] = useState<Account | null>(null);
   const [sessions, setSessions] = useState<SessionRow[]>([]);
 
@@ -80,6 +82,16 @@ function AccountPage() {
     if (a.ok) setAccount(a.data);
     if (s.ok) setSessions(s.data as unknown as SessionRow[]);
   }, [api]);
+
+  // After 2FA or a passkey changes, everything that read the old state has to
+  // read it again: this page, the sidebar's "Turn on two-factor" link, and the
+  // router cache, which still holds the redirects to /account?setup=2fa from
+  // while 2FA was required. Without this a full page reload was needed.
+  const secondFactorChanged = useCallback(async () => {
+    await load();
+    refreshAccount();
+    router.refresh();
+  }, [load, refreshAccount, router]);
 
   useEffect(() => {
     load();
@@ -103,6 +115,7 @@ function AccountPage() {
       setCodes(res.data.recoveryCodes);
       setSetup(null);
       setCode("");
+      secondFactorChanged();
     } else setTfaError(res.data.error ?? "Code didn't match");
   }
 
@@ -113,7 +126,7 @@ function AccountPage() {
     setBusy(false);
     if (res.ok) {
       setDisableForm({ open: false, password: "", code: "" });
-      load();
+      secondFactorChanged();
     } else setTfaError(res.data.error ?? "Could not turn off 2FA");
   }
 
@@ -174,7 +187,15 @@ function AccountPage() {
         </div>
 
         {codes ? (
-          <RecoveryCodes codes={codes} onDone={() => { setCodes(null); load(); }} />
+          <RecoveryCodes
+            codes={codes}
+            onDone={() => {
+              setCodes(null);
+              load();
+              // Arrived here because 2FA was required: carry on where they were going
+              if (params.get("setup") === "2fa") router.replace("/projects");
+            }}
+          />
         ) : account.totpEnabled ? (
           <div className="space-y-3">
             <p className="text-sm text-text-secondary">
@@ -215,7 +236,7 @@ function AccountPage() {
         <ErrorText>{tfaError}</ErrorText>
       </Card>
 
-      <PasskeysCard onChange={load} />
+      <PasskeysCard onChange={secondFactorChanged} />
 
       {!account.mfaSetupRequired && <ConnectedAppsCard />}
       {!account.mfaSetupRequired && <ApiTokensCard role={account.role} />}

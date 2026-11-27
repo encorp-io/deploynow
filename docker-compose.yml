@@ -7,7 +7,7 @@ services:
     container_name: deploynow
     restart: unless-stopped
     ports:
-      - "9444:9444"     # HTTPS — DeployNow dashboard
+      - "${DEPLOYNOW_PORT:-9444}:9444"     # HTTPS — DeployNow dashboard (DEPLOYNOW_PORT picks the host port)
       - "8444:8444"     # Agent hub — remote agents connect out to this (mutual TLS)
     # The image runs as a non-root user. To manage this machine through the socket,
     # give it the socket's group: DOCKER_GID=$(stat -c %g /var/run/docker.sock)
@@ -40,6 +40,17 @@ services:
       # Set this to your server's actual URL, e.g. https://164.90.232.75:9444
       # If unset, auth and redirects derive the URL from the incoming request headers.
       NEXTAUTH_URL: ${NEXTAUTH_URL:-}
+      # Serve the UI on a domain from the first start: DeployNow starts Traefik on ports
+      # 80/443, gets a Let's Encrypt certificate (sent to ACME_EMAIL) and switches to the
+      # domain once it answers. Same as Settings → Domain; setup.sh asks for it.
+      DEPLOYNOW_DOMAIN: ${DEPLOYNOW_DOMAIN:-}
+      ACME_EMAIL: ${ACME_EMAIL:-}
+      TLS_HOSTNAME: ${TLS_HOSTNAME:-}
+
+      # Two-factor sign-in is optional. "true" makes admins and owners set it up on a new
+      # install (only read on the first start; change it later under Settings → Security and sign-in).
+      REQUIRE_2FA: ${REQUIRE_2FA:-false}
+
       # A domain set under Settings → Domain (served through Traefik with Let's Encrypt)
       # takes precedence. Port 9444 keeps working either way. To bypass a stored
       # domain without the UI:
@@ -66,8 +77,7 @@ services:
       # CERT_FILE: /certs/cert.pem
       # KEY_FILE:  /certs/key.pem
 
-      # Custom hostname added to the self-signed cert's SAN (optional)
-      # TLS_HOSTNAME: deployer.yourcompany.com
+      # TLS_HOSTNAME (above): custom hostname added to the self-signed cert's SAN
 
 volumes:
   deployer_data:

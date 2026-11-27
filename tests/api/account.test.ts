@@ -57,7 +57,11 @@ describe("account", () => {
   it("reports when an admin must set up 2FA", async () => {
     signInAs("admin");
     mockPrisma.recoveryCode.count.mockResolvedValue(0);
+    // Optional by default
     mockPrisma.settings.findUnique.mockResolvedValue(null);
+    expect(await (await ACCOUNT()).json()).toMatchObject({ mfaSetupRequired: false, twoFactorRequiredForRole: false });
+    // Required once an owner turns it on
+    mockPrisma.settings.findUnique.mockResolvedValue({ require2faForAdmins: true });
     expect(await (await ACCOUNT()).json()).toMatchObject({ mfaSetupRequired: true, twoFactorRequiredForRole: true });
     signInAs("operator");
     expect((await (await ACCOUNT()).json()).mfaSetupRequired).toBe(false);

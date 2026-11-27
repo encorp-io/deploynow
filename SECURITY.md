@@ -34,7 +34,7 @@ action from us.
 - The DeployNow server and image (`ghcr.io/encorp-io/deploynow`)
 - The agent (`ghcr.io/encorp-io/deploynow-agent`) and its mutual TLS
 - The CLI in `cli/`, the API, the MCP endpoint and its OAuth server
-- `install.sh`
+- `setup.sh` (and `install.sh`, which runs it)
 
 Out of scope: the apps you deploy with DeployNow, third-party images, and issues
 that need an admin or owner account to do something admins are meant to be able

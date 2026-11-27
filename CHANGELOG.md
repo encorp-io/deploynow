@@ -8,7 +8,25 @@ versions fix bugs. Every version upgrades the database by itself.
 
 ## [Unreleased]
 
+### Added
+- **One-command setup:** `curl -fsSL https://raw.githubusercontent.com/encorp-io/deploynow/main/setup.sh | sudo bash`
+  asks for a domain, port, admin email and password (Enter keeps the defaults), installs
+  Docker if it's missing, writes `docker-compose.yml` and `.env` and starts DeployNow.
+  `--yes` runs it without questions; `install.sh` still works and runs `setup.sh --yes`.
+- **`DEPLOYNOW_DOMAIN`:** serve the UI on a domain from the first start. DeployNow turns on
+  the managed edge proxy, gets a Let's Encrypt certificate (to `ACME_EMAIL`) and switches to
+  the domain once it answers, the same as Settings → Domain. `DEPLOYNOW_PORT` picks the
+  dashboard's host port.
+
+### Changed
+- **2FA is optional on a new install.** Admins and owners are no longer made to set it up
+  before using DeployNow; owners can require it under Settings → Security and sign-in, or
+  with `REQUIRE_2FA=true` on the first start. Existing installs keep their setting.
+
 ### Fixed
+- **Turning on 2FA:** after enabling 2FA (or adding a passkey) on a new account, the app kept
+  sending you back to the Account page and the sidebar kept asking you to turn it on, until
+  you reloaded the page. The sidebar and the page router now pick up the change at once.
 - **Updating DeployNow from its own UI:** the Update button on DeployNow's own container
   stopped DeployNow and never brought it back, because the process doing the recreate
   ran inside the container it stopped. That button now uses the new self-update below.

@@ -15,6 +15,12 @@ type ApiResult<T> = { ok: boolean; status: number; data: T & { error?: string } 
 type ApiFn = <T = Record<string, unknown>>(url: string, init?: { method?: string; body?: unknown }) => Promise<ApiResult<T>>;
 
 const ApiContext = createContext<ApiFn | null>(null);
+const RefreshAccountContext = createContext<() => void>(() => {});
+
+/** Re-read /api/account for the shell (sidebar), e.g. after 2FA was turned on. */
+export function useRefreshAccount(): () => void {
+  return useContext(RefreshAccountContext);
+}
 
 /**
  * JSON fetch that handles the step-up prompt: when the server answers
@@ -32,12 +38,13 @@ export default function AppShell({ children }: { children: ReactNode }) {
   const [me, setMe] = useState<Me | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
 
-  useEffect(() => {
-    fetch("/api/account")
+  const loadMe = useCallback(() => {
+    fetch("/api/account", { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : null))
       .then(setMe)
       .catch(() => {});
   }, []);
+  useEffect(loadMe, [loadMe]);
 
   // Close the phone menu whenever the page changes
   useEffect(() => setMenuOpen(false), [pathname]);
@@ -114,6 +121,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
 
   return (
     <ApiContext.Provider value={api}>
+     <RefreshAccountContext.Provider value={loadMe}>
      <FeedbackProvider>
       <div className="min-h-screen">
         <a href="#main" className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-[70] focus:px-3 focus:py-2 focus:bg-accent focus:text-white focus:rounded-lg">
@@ -174,6 +182,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
         </Modal>
       )}
      </FeedbackProvider>
+     </RefreshAccountContext.Provider>
     </ApiContext.Provider>
   );
 }

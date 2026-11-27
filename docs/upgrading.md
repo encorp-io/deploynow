@@ -58,7 +58,7 @@ The updater ships with this version, so the upgrade *to* it is done by hand once
 
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/encorp-io/deploynow/main/install.sh | sudo DEPLOYNOW_TAG=2.1.0 bash
+curl -fsSL https://raw.githubusercontent.com/encorp-io/deploynow/main/setup.sh | sudo DEPLOYNOW_TAG=2.1.0 bash
 ```
 
 ### By hand
