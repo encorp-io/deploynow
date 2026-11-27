@@ -13,6 +13,28 @@ versions fix bugs. Every version upgrades the database by itself.
   now needs operator rights on that endpoint, not just admin on the project.
 - Apps can no longer route DeployNow's own domain (on any path), or a host or preview
   domain that another project already uses.
+- **Microsoft sign-in for any work account** (tenant `organizations` or `common`) no longer
+  matches or creates accounts by email unless the token carries `xms_edov`, so another
+  Entra tenant can't sign in as one of your people by giving its user their address.
+  Add the `email` and `xms_edov` optional claims to the app registration, or use your
+  tenant id. Accounts already linked keep working.
+- A session is accepted only for the user it was created for, and expired sessions are
+  refused on API calls too.
+- Viewers no longer see pending invites, who has 2FA off, last sign-ins, other people's
+  endpoint grants, or the Vault role id and CA certificate.
+- The AI connection consent page shows request errors itself instead of redirecting to a
+  newly registered app's address.
+- The current password, step-up codes, turning 2FA off and new recovery codes share one
+  limit of 10 tries per 15 minutes.
+- Cookie requests that change something and carry no `Origin` are refused when the browser
+  marks them as coming from another site.
+- **Compose sandbox:** compose apps (inline, Git and templates) can no longer reach the
+  host. Deploys refuse `privileged`, extra capabilities, devices, host namespaces
+  (`pid`/`ipc`/`network_mode: host`), bind mounts, foreign or external volumes and
+  networks, `include`/`extends` and `env_file`/`secrets`/build paths outside the app,
+  and `traefik.*` labels the app did not get from its domains. The check runs on the
+  fully interpolated config, so `${VAR}` tricks do not get around it. Git checkouts with
+  symlinks that point outside the repository are refused.
 
 ### Added
 - **Auto-update for compose and Git apps** (app → Settings → Auto-update): compose apps
@@ -34,6 +56,11 @@ versions fix bugs. Every version upgrades the database by itself.
 - Rolling back a compose app starts the images that deployment ran (by digest), not
   whatever their tags point to now.
 
+### Upgrading
+- Apps that relied on host access (bind mounts such as `/var/run/docker.sock`, privileged
+  containers) now fail to deploy with a message naming the setting. Move the data to a
+  named volume, or, on a single-tenant install where every project admin is trusted, set
+  `DEPLOYNOW_COMPOSE_POLICY=trusted` on the DeployNow container to lift the runtime rules.
 ### Security
 - **Microsoft sign-in for any work account** (tenant `organizations` or `common`) no longer
   matches or creates accounts by email unless the token carries `xms_edov`, so another

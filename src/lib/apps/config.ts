@@ -3,7 +3,9 @@
  * deploy pipeline.
  */
 import { validateRepoPath, validateRepoUrl, BRANCH_RE } from "../deploy/git";
+import YAML from "yaml";
 import { parseEnvInput } from "./env";
+import { checkComposeFiles, checkComposeRuntime, ComposePolicyError } from "../deploy/composePolicy";
 
 export const SOURCE_TYPES = ["image", "git-dockerfile", "git-compose", "compose"] as const;
 export type SourceType = (typeof SOURCE_TYPES)[number];
@@ -224,6 +226,20 @@ export function validateAppInput(body: Record<string, unknown>, existing?: Exist
     if (!out.composeInline.trim()) throw new ConfigError("Paste the docker-compose.yml");
     if (out.composeInline.length > 200_000) throw new ConfigError("The compose file is too large");
     if (out.updatePolicy === "on-push") throw new ConfigError("Compose file apps have no Git repository to push to; turn on auto-update to follow their images");
+    // Say so on save, not only on the next deploy: host access and Traefik labels (see deploy/composePolicy.ts)
+    let doc: unknown = null;
+    try {
+      doc = YAML.parse(out.composeInline, { maxAliasCount: 100 });
+    } catch {
+      // the deploy explains YAML errors
+    }
+    try {
+      checkComposeRuntime(doc, { slug, proxyNetwork: null });
+      checkComposeFiles(doc, "/nonexistent-deploynow-inline");
+    } catch (err) {
+      if (err instanceof ComposePolicyError) throw new ConfigError(err.message);
+      throw err;
+    }
   }
 
   // The old auto-digest policy is stored as auto-update (validateAutoUpdateInput turns it on)
