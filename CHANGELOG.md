@@ -8,6 +8,19 @@ versions fix bugs. Every version upgrades the database by itself.
 
 ## [Unreleased]
 
+### Added
+- **Update available for every app**: every deployed app is checked about once an hour,
+  auto-update on or not, and the app page shows what is new. Apps on a pinned tag
+  (`4.55`, `17-alpine`, `sha-82e99af`) now see newer tags too: the newest version of the
+  same shape, or the newer build `latest`/`main` points to. Image apps, and compose images
+  written as one variable, switch to the new tag from the banner. New notification event
+  *App update available*.
+
+### Fixed
+- Compose apps never showed that an update was available.
+- Image updates: containers from registries other than GHCR were looked up on Docker Hub,
+  and private images were checked without the registry login.
+
 ## [1.1.0] - 2026-11-28
 
 Auto-update for every kind of app, a choice of update channel, and a round of security
