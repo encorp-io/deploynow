@@ -79,24 +79,9 @@ describe("registry credentials", () => {
     expect(all.map((a) => a.serveraddress).sort()).toEqual(["ghcr.io", "https://index.docker.io/v1/", "registry.example.com:5000"]);
   });
 
-  it("tests credentials with the registry's token handshake", async () => {
+  // The token handshake itself (through netGuard) is covered in tests/lib/registryTest.test.ts
+  it("doesn't test a login whose password can't be decrypted", async () => {
     const r = await prisma.registry.create({ data: { name: "T", host: "reg.example.com", username: "u", password: encryptSecret("p") } });
-    const calls: string[] = [];
-    vi.stubGlobal("fetch", vi.fn(async (url: string | URL) => {
-      calls.push(String(url));
-      if (String(url).endsWith("/v2/")) return new Response("", { status: 401, headers: { "www-authenticate": 'Bearer realm="https://auth.example.com/token",service="reg"' } });
-      return new Response("{}", { status: 200 });
-    }));
-    expect(await testRegistry(r)).toEqual({ ok: true, message: "Signed in" });
-    expect(calls[1]).toBe("https://auth.example.com/token?service=reg");
-    vi.stubGlobal("fetch", vi.fn(async (url: string | URL) => (String(url).endsWith("/v2/") ? new Response("", { status: 401, headers: { "www-authenticate": 'Bearer realm="https://auth.example.com/token"' } }) : new Response("", { status: 403 }))));
-    expect((await testRegistry(r)).message).toMatch(/refused the credentials \(403\)/);
-    vi.stubGlobal("fetch", vi.fn(async () => new Response("", { status: 200 })));
-    expect((await testRegistry(r)).ok).toBe(true);
-    vi.stubGlobal("fetch", vi.fn(async () => new Response("", { status: 500 })));
-    expect((await testRegistry(r)).message).toMatch(/answered 500/);
-    vi.stubGlobal("fetch", vi.fn(async () => { throw new Error("ENOTFOUND"); }));
-    expect((await testRegistry(r)).message).toBe("ENOTFOUND");
-    expect((await testRegistry({ ...r, password: "garbage" })).ok).toBe(false);
+    expect(await testRegistry({ ...r, password: "garbage" })).toEqual({ ok: false, message: "The stored password can't be decrypted" });
   });
 });

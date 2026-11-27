@@ -40,7 +40,8 @@ export async function POST(_request: Request, { params }: Params) {
   if (!gate.ok) return gate.response;
   const found = await load(id, gate.user);
   if (found.error) return found.error;
-  const result = await testRegistry(found.r);
+  // Only admins may test a registry on a private address (their own LAN); metadata is refused for everyone
+  const result = await testRegistry(found.r, { allowPrivate: can(gate.user, "settings.manage") });
   await prisma.registry.update({ where: { id }, data: { lastTestAt: new Date(), lastTestOk: result.ok } });
   return NextResponse.json(result);
 }
