@@ -176,6 +176,39 @@ fi
 chmod 600 /data/certs/key.pem
 chmod 644 /data/certs/cert.pem
 
+# ── Settings nginx reads at start (/tmp/nginx-runtime.conf) ───────────────────
+#
+# Proxy secret: Traefik adds it as X-DeployNow-Proxy-Auth on the platform-domain
+# route (see src/lib/platformDomain.ts), and nginx trusts X-Real-IP and
+# X-Forwarded-Proto on :9080 only when it matches. Other containers on the proxy
+# network can reach :9080 too, but they don't know it. Kept in /data so it
+# survives restarts and self-updates; Next.js gets it from the environment.
+if [ ! -s /data/proxy-secret ]; then
+  (umask 077 && openssl rand -hex 32 > /data/proxy-secret)
+fi
+chmod 600 /data/proxy-secret
+DEPLOYNOW_PROXY_SECRET="$(tr -cd '0-9a-f' < /data/proxy-secret)"
+export DEPLOYNOW_PROXY_SECRET
+
+# HSTS on :9444 only with a real certificate. A self-signed one (issuer = subject)
+# would make the browser warning impossible to click past for a year.
+CERT_HSTS=""
+if [ "$(openssl x509 -in /data/certs/cert.pem -noout -issuer -nameopt RFC2253 | sed 's/^issuer=//')" != \
+     "$(openssl x509 -in /data/certs/cert.pem -noout -subject -nameopt RFC2253 | sed 's/^subject=//')" ]; then
+  CERT_HSTS="max-age=31536000"
+fi
+
+(umask 077 && cat > /tmp/nginx-runtime.conf << EOF
+map \$http_x_deploynow_proxy_auth \$dn_from_proxy {
+    default 0;
+    "${DEPLOYNOW_PROXY_SECRET}" 1;
+}
+map \$server_port \$dn_cert_hsts {
+    default "${CERT_HSTS}";
+}
+EOF
+)
+
 # ── Start nginx (SSL termination on :9444 → Next.js on :3001) ─────────────────
 echo "[deployer] Starting nginx (HTTPS :9444)..."
 nginx -c /app/nginx/nginx.conf &

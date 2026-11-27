@@ -122,3 +122,19 @@ describe("probe", () => {
     expect(r.message).toMatch(/ECONNREFUSED/);
   });
 });
+
+describe("platformRouteLabels proxy secret", () => {
+  const secret = "a".repeat(64);
+  it("adds the secret header on the HTTPS router so nginx trusts Traefik's forwarded headers", () => {
+    const l = platformRouteLabels(["deploy.example.com"], "deploynow", 9080, secret);
+    expect(l["traefik.http.routers.deploynow-ui.middlewares"]).toBe("deploynow-ui-trust");
+    expect(l["traefik.http.middlewares.deploynow-ui-trust.headers.customrequestheaders.X-DeployNow-Proxy-Auth"]).toBe(secret);
+    expect(l["traefik.http.routers.deploynow-ui-http.middlewares"]).toBe("deploynow-ui-https");
+  });
+
+  it("leaves it out without a usable secret", () => {
+    for (const s of ["", "short", "not hex at all but long enough to pass the length check!!"]) {
+      expect(platformRouteLabels(["d.example.com"], "n", 9080, s)["traefik.http.routers.deploynow-ui.middlewares"]).toBeUndefined();
+    }
+  });
+});
