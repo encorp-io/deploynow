@@ -6,7 +6,7 @@ DeployNow is a product **by encorp.ai**. Use these files for the app, the landin
 
 | File | Use |
 | --- | --- |
-| `deploynow-mark.svg` | The mark (Ascend: launch chevron on a gradient tile). App icon, favicon, avatars. |
+| `deploynow-mark.svg` | The mark (Boost: three rising chevrons in the brand gradient on a dark tile). App icon, favicon, avatars. |
 | `deploynow-logo-dark.svg` / `.png` | Full lockup "DeployNow by encorp.ai" for dark backgrounds. |
 | `deploynow-logo-light.svg` / `.png` | Same lockup for light backgrounds. |
 | `deploynow-wordmark-white.svg` / `-dark.svg` | Wordmark only, text outlined (no font needed). |
