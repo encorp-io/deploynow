@@ -43,7 +43,7 @@ jobs:
 
       - name: Extract Docker metadata (GHCR)
         id: meta-ghcr
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v6
         with:
           images: ${{ env.GHCR_IMAGE }}
           # latest = newest release; edge = newest commit on main
@@ -94,7 +94,7 @@ jobs:
 
       - name: Extract Docker metadata
         id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v6
         with:
           images: ghcr.io/${{ github.repository_owner }}/deploynow-agent
           tags: |
