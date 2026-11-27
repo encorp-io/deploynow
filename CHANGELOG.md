@@ -61,6 +61,37 @@ versions fix bugs. Every version upgrades the database by itself.
   containers) now fail to deploy with a message naming the setting. Move the data to a
   named volume, or, on a single-tenant install where every project admin is trusted, set
   `DEPLOYNOW_COMPOSE_POLICY=trusted` on the DeployNow container to lift the runtime rules.
+### Security
+- **Microsoft sign-in for any work account** (tenant `organizations` or `common`) no longer
+  matches or creates accounts by email unless the token carries `xms_edov`, so another
+  Entra tenant can't sign in as one of your people by giving its user their address.
+  Add the `email` and `xms_edov` optional claims to the app registration, or use your
+  tenant id. Accounts already linked keep working.
+- A session is accepted only for the user it was created for, and expired sessions are
+  refused on API calls too.
+- Viewers no longer see pending invites, who has 2FA off, last sign-ins, other people's
+  endpoint grants, or the Vault role id and CA certificate.
+- The AI connection consent page shows request errors itself instead of redirecting to a
+  newly registered app's address.
+- The current password, step-up codes, turning 2FA off and new recovery codes share one
+  limit of 10 tries per 15 minutes.
+- Cookie requests that change something and carry no `Origin` are refused when the browser
+  marks them as coming from another site.
+- **Registry test can't reach internal addresses**: testing a registry login resolves the
+  host first and refuses metadata and link-local addresses for everyone, and loopback and
+  private ranges for non-admins. The token realm must be https, redirects aren't followed,
+  and errors no longer echo the remote answer. Auto-update digest checks go through the
+  same guard (metadata and link-local refused, redirects checked hop by hop).
+- **Client IP behind the domain can't be spoofed**: nginx trusts `X-Real-IP` and
+  `X-Forwarded-Proto` on the Traefik port only with a per-install secret that the domain
+  route adds (kept in `/data/proxy-secret`). Port 9444 sends HSTS when it has a real
+  certificate.
+- **Secrets inside containers:** container env values are now admin only, and an app
+  container's env values need access to that app's secrets. DeployNow's own container,
+  the updater and backup/task helpers never show env values or open a console; their
+  logs are admin only and only owners can stop or remove them. Credential-like label
+  values (such as the domain route's proxy secret or Traefik basic-auth users) are
+  masked in container details. See docs/security.md.
 
 ## [1.0.0] - 2026-11-27
 

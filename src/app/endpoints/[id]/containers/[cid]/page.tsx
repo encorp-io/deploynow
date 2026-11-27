@@ -23,6 +23,8 @@ interface Detail {
   restartPolicy: string;
   env: { key: string; value: string | null }[];
   envHidden: boolean;
+  kind?: "deploynow" | "helper" | "platform" | "app" | "other";
+  allowed?: { logs: boolean; console: boolean; control: boolean; remove: boolean };
   ports: { container: string; host: string[] }[];
   mounts: { type: string; source: string; destination: string; readOnly: boolean }[];
   networks: { name: string; ip: string; aliases: string[] }[];
@@ -115,7 +117,7 @@ export default function ContainerPage({ params }: { params: Promise<{ id: string
         }
         actions={
           <>
-            {d.state.running ? (
+            {d.allowed?.control === false ? null : d.state.running ? (
               <>
                 <Button variant="secondary" loading={busy === "restart"} onClick={() => action("restart")}><RotateCw className="w-4 h-4" /> Restart</Button>
                 <IconButton label="Pause" variant="secondary" loading={busy === "pause"} onClick={() => action("pause")}><Pause className="w-4 h-4" /></IconButton>
@@ -126,15 +128,28 @@ export default function ContainerPage({ params }: { params: Promise<{ id: string
             ) : (
               <Button loading={busy === "start"} onClick={() => action("start")}><Play className="w-4 h-4" /> Start</Button>
             )}
-            <IconButton label="Remove container" variant="danger" onClick={remove}><Trash2 className="w-4 h-4" /></IconButton>
+            {d.allowed?.remove !== false && <IconButton label="Remove container" variant="danger" onClick={remove}><Trash2 className="w-4 h-4" /></IconButton>}
           </>
         }
       />
       <ErrorText>{error}</ErrorText>
 
       <div className="mb-4 mt-2">
-        <Tabs tabs={[{ value: "overview", label: "Overview" }, { value: "logs", label: "Logs" }, { value: "console", label: "Console" }]} value={tab} onChange={setTab} />
+        <Tabs
+          tabs={[
+            { value: "overview" as Tab, label: "Overview" },
+            ...(d.allowed?.logs === false ? [] : [{ value: "logs" as Tab, label: "Logs" }]),
+            ...(d.allowed?.console === false ? [] : [{ value: "console" as Tab, label: "Console" }]),
+          ]}
+          value={tab}
+          onChange={setTab}
+        />
       </div>
+      {(d.kind === "deploynow" || d.kind === "helper") && (
+        <p className="text-xs text-text-muted mb-4">
+          {d.kind === "deploynow" ? "This is DeployNow's own container." : "This is a DeployNow backup or task helper."} It holds DeployNow's secrets, so its environment values are never shown and consoles are turned off.
+        </p>
+      )}
 
       {tab === "overview" && (
         <div className="space-y-4">
@@ -185,7 +200,7 @@ export default function ContainerPage({ params }: { params: Promise<{ id: string
             </Card>
           </div>
           <Card className="p-5">
-            <h3 className="font-semibold text-sm mb-3">Environment {d.envHidden && <span className="text-xs text-text-muted font-normal">(values hidden for your role)</span>}</h3>
+            <h3 className="font-semibold text-sm mb-3">Environment {d.envHidden && <span className="text-xs text-text-muted font-normal">({d.kind === "deploynow" || d.kind === "helper" ? "values never shown" : "values hidden for your role"})</span>}</h3>
             <div className="grid grid-cols-[minmax(160px,auto)_1fr] gap-x-4 gap-y-1 text-xs font-mono">
               {d.env.map((e) => (
                 <EnvRow key={e.key} name={e.key} value={e.value} />
@@ -195,8 +210,8 @@ export default function ContainerPage({ params }: { params: Promise<{ id: string
         </div>
       )}
 
-      {tab === "logs" && <ContainerLogs endpointId={id} containerId={cid} />}
-      {tab === "console" && (d.state.running ? <ContainerConsole api={api} endpointId={id} containerId={cid} /> : <p className="text-sm text-text-muted">Start the container to open a console.</p>)}
+      {tab === "logs" && d.allowed?.logs !== false && <ContainerLogs endpointId={id} containerId={cid} />}
+      {tab === "console" && d.allowed?.console !== false && (d.state.running ? <ContainerConsole api={api} endpointId={id} containerId={cid} /> : <p className="text-sm text-text-muted">Start the container to open a console.</p>)}
     </div>
   );
 }

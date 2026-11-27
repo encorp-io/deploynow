@@ -10,7 +10,7 @@ const ROLES = ["viewer", "operator", "admin", "owner"] as const;
 const ROLE_HELP: Record<string, string> = {
   viewer: "See endpoints and containers. No logs, env values or actions.",
   operator: "Viewer + logs, console, start/stop/restart and image updates.",
-  admin: "Operator + remove resources, manage endpoints, users and settings.",
+  admin: "Operator + env values, remove resources, manage endpoints, users and settings.",
   owner: "Admin + manage owners and turn off required 2FA.",
 };
 

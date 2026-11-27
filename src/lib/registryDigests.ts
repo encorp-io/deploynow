@@ -7,6 +7,7 @@
 import { getRemoteDigests, type RemoteDigests } from "./ghcr";
 import { parseImageRef } from "./imageRef";
 import { normalizeRegistryHost } from "./registryAuth";
+import { BlockedAddressError, guardedGet, type GuardedResponse } from "./netGuard";
 
 const ACCEPT_ALL = [
   "application/vnd.docker.distribution.manifest.v2+json",
@@ -35,8 +36,32 @@ export function parseChallenge(header: string): { scheme: string; params: Record
   return { scheme: m[1].toLowerCase(), params };
 }
 
-async function get(url: string, headers: Record<string, string>): Promise<Response> {
-  return fetch(url, { headers, redirect: "follow", signal: AbortSignal.timeout(TIMEOUT_MS) });
+const MAX_REDIRECTS = 3;
+
+/**
+ * GET through netGuard: the image host and the token realm come from whoever
+ * configured the app, so cloud metadata and link-local addresses are refused.
+ * Private ranges stay allowed (a self-hosted registry on the LAN is normal, and
+ * operators can run containers there anyway). Redirects (lscr.io → ghcr.io) are
+ * followed by hand, each hop checked again, https only, and credentials are
+ * dropped when the host changes.
+ */
+async function get(url: string, headers: Record<string, string>): Promise<GuardedResponse> {
+  let current = new URL(url);
+  let h = headers;
+  for (let hop = 0; ; hop++) {
+    const res = await guardedGet(current, { headers: h, allowPrivate: true, timeoutMs: TIMEOUT_MS, maxBodyBytes: 4 * 1024 * 1024 });
+    const location = res.headers.get("location");
+    if (res.status < 300 || res.status >= 400 || !location) return res;
+    if (hop >= MAX_REDIRECTS) throw new Error("Too many redirects from the registry");
+    const next = new URL(location, current);
+    if (next.protocol !== "https:") throw new BlockedAddressError("The registry redirected to a non-https address");
+    if (next.host !== current.host) {
+      const { Authorization: _drop, ...rest } = h;
+      h = rest;
+    }
+    current = next;
+  }
 }
 
 /** A registry speaking the v2 API at https://<host>. */
@@ -44,7 +69,7 @@ async function genericDigests(host: string, repository: string, tag: string, arc
   const base = `https://${host}/v2/${repository}/manifests/`;
   let auth = "";
 
-  const fetchManifest = async (ref: string, accept: string): Promise<Response> => {
+  const fetchManifest = async (ref: string, accept: string): Promise<GuardedResponse> => {
     let res = await get(base + ref, { Accept: accept, ...(auth ? { Authorization: auth } : {}) });
     if (res.status !== 401 || auth) return res;
     const challenge = parseChallenge(res.headers.get("www-authenticate") ?? "");

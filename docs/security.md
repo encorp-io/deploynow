@@ -38,6 +38,30 @@ bastion. To report a vulnerability, see [SECURITY.md](../SECURITY.md).
 - **Update.** Watch the repository's releases, or pin `2.0` to get patch releases.
 - **API tokens:** give them the lowest scope and an expiry, and revoke the ones you no longer use (Account → API tokens shows when each was last used and from where).
 
+## Secrets inside containers
+
+Container env values are admin only, and an app's container shows them only to
+people who may read that app's secrets. Operators keep the console in ordinary
+containers, so an operator can still print an app's env from inside it: give the
+operator role only to people you'd trust with those secrets. DeployNow's own
+container (it holds `AUTH_SECRET`), the `deploynow-updater` and the backup, restore
+and task helpers (restic passwords, S3 keys, database
+passwords) get stricter rules for everyone, owners included:
+
+| | DeployNow, updater, helpers | Proxy and UI route |
+|---|---|---|
+| Env values | never shown | admin |
+| Console | never | admin |
+| Logs | admin | operator |
+| Start, stop, remove | owner | admin |
+
+Container details mask label values that look like credentials (header middlewares
+such as the domain route's proxy secret, Traefik basic and digest auth users, and keys
+named like passwords, secrets, tokens or API keys). Docker and Traefik still see them.
+
+DeployNow finds its own container by the `io.deploynow.self` label (set by the image
+and `docker-compose.yml`), by its image name and by its container id.
+
 ## The Docker socket
 
 Mounting `/var/run/docker.sock` lets DeployNow manage the machine it runs on. It's
