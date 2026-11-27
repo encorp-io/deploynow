@@ -16,8 +16,8 @@
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",
-    "@simplewebauthn/browser": "^13.3.0",
-    "@simplewebauthn/server": "^13.3.3",
+    "@simplewebauthn/browser": "^14.0.0",
+    "@simplewebauthn/server": "^14.1.0",
     "@tailwindcss/postcss": "^4.3.5",
     "@types/node": "^25.5.0",
     "@types/react": "^19.2.14",
@@ -55,8 +55,8 @@
     "@types/ssh2": "^1.15.6",
     "@types/ws": "^8.18.2",
     "@vitejs/plugin-react": "^6.3.0",
-    "@vitest/coverage-v8": "^4.1.2",
-    "vitest": "^4.1.2"
+    "@vitest/coverage-v8": "^5.1.2",
+    "vitest": "^5.1.2"
   },
   "prisma": {
     "seed": "node --experimental-strip-types --no-warnings prisma/seed.ts"
