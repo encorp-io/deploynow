@@ -11,7 +11,7 @@ const docker = vi.hoisted(() => ({
   getContainer: vi.fn(),
 }));
 vi.mock("@/lib/prisma", () => ({ prisma: mockPrisma }));
-vi.mock("@/lib/ghcr", () => ({ getRemoteDigests: vi.fn() }));
+vi.mock("@/lib/registryDigests", () => ({ registryDigests: vi.fn() }));
 vi.mock("@/lib/audit", () => ({ audit: vi.fn() }));
 vi.mock("@/lib/registryAuth", () => ({ registryAuthFor: vi.fn(async () => undefined) }));
 vi.mock("@/lib/docker/recreate", () => ({ recreateContainer: vi.fn() }));
@@ -20,7 +20,7 @@ vi.mock("@/lib/endpoints", () => ({
   refreshEndpoint: vi.fn(async (ep: { status?: string }) => ({ ...ep, status: ep.status ?? "online" })),
 }));
 
-import { getRemoteDigests } from "@/lib/ghcr";
+import { registryDigests } from "@/lib/registryDigests";
 import { audit } from "@/lib/audit";
 import { recreateContainer } from "@/lib/docker/recreate";
 import { syncServices, checkForUpdates, performUpdate, isProtectedContainer, isCurrent } from "@/lib/polling";
@@ -97,14 +97,14 @@ describe("checkForUpdates", () => {
 
   it("only touches lastChecked when the registry has no digest", async () => {
     mockPrisma.service.findMany.mockResolvedValue([svc]);
-    vi.mocked(getRemoteDigests).mockResolvedValue(null);
+    vi.mocked(registryDigests).mockResolvedValue(null);
     await checkForUpdates();
     expect(mockPrisma.service.update.mock.calls[0][0].data).toEqual({ lastChecked: expect.any(Date) });
   });
 
   it("records a new update once", async () => {
     mockPrisma.settings.findUnique.mockResolvedValue({ autoUpdateLatest: false });
-    vi.mocked(getRemoteDigests).mockResolvedValue({ config: "sha256:new", manifest: "sha256:newindex" });
+    vi.mocked(registryDigests).mockResolvedValue({ config: "sha256:new", manifest: "sha256:newindex" });
     mockPrisma.service.findMany.mockResolvedValue([svc]);
     await checkForUpdates();
     expect(mockPrisma.service.update.mock.calls[0][0].data).toMatchObject({ remoteDigest: "sha256:new", updateAvailable: true });
@@ -118,7 +118,7 @@ describe("checkForUpdates", () => {
 
   it("auto-updates floating tags when enabled", async () => {
     mockPrisma.settings.findUnique.mockResolvedValue({ autoUpdateLatest: true });
-    vi.mocked(getRemoteDigests).mockResolvedValue({ config: "sha256:new", manifest: "sha256:newindex" });
+    vi.mocked(registryDigests).mockResolvedValue({ config: "sha256:new", manifest: "sha256:newindex" });
     mockPrisma.service.findMany.mockResolvedValue([svc]);
     mockPrisma.service.findUnique.mockResolvedValue({ ...svc, endpoint: EP });
     vi.mocked(recreateContainer).mockResolvedValue("c9");
@@ -131,7 +131,7 @@ describe("checkForUpdates", () => {
     mockPrisma.settings.findUnique.mockResolvedValue(null);
     mockPrisma.service.findMany.mockResolvedValue([svc]);
     mockPrisma.service.update.mockResolvedValue({});
-    vi.mocked(getRemoteDigests).mockRejectedValue(new Error("registry down"));
+    vi.mocked(registryDigests).mockRejectedValue(new Error("registry down"));
     await checkForUpdates();
     expect(audit).toHaveBeenCalledWith(expect.objectContaining({ action: "service.check", outcome: "failure" }));
   });

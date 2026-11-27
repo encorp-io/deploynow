@@ -6,6 +6,7 @@ import { requireUser, type CurrentUser } from "../apiAuth";
 import { can, type Permission } from "../rbac";
 import { envForClient } from "./env";
 import { parsePorts, parseVolumes } from "./config";
+import { parseUpdateInfo } from "./updateCheck";
 
 export const ID_RE = /^c[a-z0-9]{24}$/;
 
@@ -95,6 +96,9 @@ export function serializeApp(app: AppWithRelations, request?: Request) {
     autoUpdateCheckedAt: app.autoUpdateCheckedAt,
     autoUpdatePending: app.autoUpdatePending,
     autoUpdateError: app.autoUpdateError,
+    updates: parseUpdateInfo(app.updateInfo),
+    updateError: app.updateError,
+    updateCheckedAt: app.updateCheckedAt,
     status: app.status,
     currentDeploymentId: app.currentDeploymentId,
     hasWebhookSecret: !!app.webhookSecret,

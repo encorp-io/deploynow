@@ -12,6 +12,7 @@ import { useConfirm, useToast } from "@/components/feedback";
 import { AppBuildSettings } from "@/components/AppBuildSettings";
 import { AppAutoUpdate, type AutoUpdateValue } from "@/components/AppAutoUpdate";
 import { AppRegistryLogin } from "@/components/RegistryLogins";
+import { AppUpdates, type AppUpdatesValue, type TagUpdate } from "@/components/AppUpdates";
 import ContainerLogs from "@/components/ContainerLogs";
 import ResourceHistory from "@/components/ResourceHistory";
 import { AppForm, appStatusTone, emptyApp, EnvEditor, SOURCE_LABELS, type AppFormValue, type EnvRow } from "@/components/apps";
@@ -33,7 +34,7 @@ interface Deployment {
   finishedAt: string | null;
 }
 interface DomainRow { id: string; host: string; path: string; containerPort: number; service: string; https: boolean; redirectTo: string; redirectCode: number; basicAuthUser: string }
-interface AppView extends Omit<AppFormValue, "endpointId">, AutoUpdateValue {
+interface AppView extends Omit<AppFormValue, "endpointId">, AutoUpdateValue, AppUpdatesValue {
   id: string;
   status: string;
   env: EnvRow[];
@@ -287,6 +288,20 @@ export default function AppPage({ params }: { params: Promise<{ id: string }> })
     else toast.error(res.data.error ?? "Could not load the webhook");
   };
 
+  // An update banner's "Use <tag>": an image app gets the new image, a compose app the variable its image comes from
+  const useTag = async (t: TagUpdate, image: string) => {
+    if (!app) return;
+    if (app.sourceType === "image") {
+      await save({ image }, "Image");
+      return;
+    }
+    if (!t.variable) return;
+    const rows: EnvRow[] = app.env.some((r) => r.key === t.variable)
+      ? app.env.map((r) => (r.key === t.variable ? { key: r.key, kind: "plain", value: image } : r))
+      : [...app.env, { key: t.variable, kind: "plain", value: image }];
+    await save({ env: rows }, "Environment");
+  };
+
   const remove = async (keepContainers: boolean) => {
     setBusy("delete");
     const res = await api(`/api/apps/${id}`, { method: "DELETE", body: { keepContainers } });
@@ -350,6 +365,19 @@ export default function AppPage({ params }: { params: Promise<{ id: string }> })
 
       <div className="space-y-3 mb-4">
         <ErrorText>{error}</ErrorText>
+        {!app.previewOfId && app.currentDeploymentId && (
+          <AppUpdates
+            appId={app.id}
+            sourceType={app.sourceType}
+            value={app}
+            canDeploy={app.can.deploy && !active}
+            canManage={app.can.manage}
+            deploying={busy === "deploy"}
+            onDeploy={deploy}
+            onUseTag={useTag}
+            onChecked={(v) => setApp((a) => (a ? { ...a, ...v } : a))}
+          />
+        )}
         {pending && app.can.deploy && !active && (
           <div className="flex flex-wrap items-center gap-3 rounded-lg border border-accent/30 bg-accent/10 px-4 py-2.5">
             <Info className="w-4 h-4 text-accent flex-shrink-0" />

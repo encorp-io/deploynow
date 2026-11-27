@@ -10,7 +10,7 @@ import os from "os";
 import type Docker from "dockerode";
 import type { Endpoint } from "@prisma/client";
 import { prisma } from "./prisma";
-import { getRemoteDigests } from "./ghcr";
+import { registryDigests } from "./registryDigests";
 import { isFloatingTag, parseImageRef } from "./imageRef";
 import { dockerFor, refreshEndpoint } from "./endpoints";
 import { recreateContainer } from "./docker/recreate";
@@ -110,8 +110,9 @@ export async function checkForUpdates(): Promise<void> {
 
   for (const service of services) {
     try {
-      const parsed = parseImageRef(service.image);
-      const remote = await getRemoteDigests(parsed.registry, parsed.repository, parsed.tag, service.arch);
+      // Any registry (not only GHCR and Docker Hub), with the shared registry logins for private images
+      const auth = await registryAuthFor(service.image);
+      const remote = await registryDigests(service.image, { arch: service.arch, auth: auth?.username ? { username: auth.username, password: auth.password ?? "" } : undefined });
 
       if (!remote) {
         await prisma.service.update({ where: { id: service.id }, data: { lastChecked: new Date() } });

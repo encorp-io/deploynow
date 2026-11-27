@@ -4,7 +4,7 @@
  * a self-hosted registry, ...) through the Docker Registry v2 API with the
  * standard token challenge.
  */
-import { getRemoteDigests, type RemoteDigests } from "./ghcr";
+import { getGithubCredentials, getRemoteDigests, type RemoteDigests } from "./ghcr";
 import { parseImageRef } from "./imageRef";
 import { normalizeRegistryHost } from "./registryAuth";
 import { BlockedAddressError, guardedGet, type GuardedResponse } from "./netGuard";
@@ -64,13 +64,15 @@ async function get(url: string, headers: Record<string, string>): Promise<Guarde
   }
 }
 
-/** A registry speaking the v2 API at https://<host>. */
-async function genericDigests(host: string, repository: string, tag: string, arch: string, creds?: Creds): Promise<RemoteDigests | null> {
-  const base = `https://${host}/v2/${repository}/manifests/`;
+/**
+ * A registry speaking the v2 API at https://<host>, for one repository. Handles
+ * the token challenge once and reuses the token for later requests.
+ */
+function registryClient(host: string, repository: string, creds?: Creds) {
   let auth = "";
-
-  const fetchManifest = async (ref: string, accept: string): Promise<GuardedResponse> => {
-    let res = await get(base + ref, { Accept: accept, ...(auth ? { Authorization: auth } : {}) });
+  const request = async (path: string, accept: string): Promise<GuardedResponse> => {
+    const url = `https://${host}/v2/${repository}/${path}`;
+    let res = await get(url, { Accept: accept, ...(auth ? { Authorization: auth } : {}) });
     if (res.status !== 401 || auth) return res;
     const challenge = parseChallenge(res.headers.get("www-authenticate") ?? "");
     if (challenge?.scheme === "basic") {
@@ -90,11 +92,16 @@ async function genericDigests(host: string, repository: string, tag: string, arc
     } else {
       return res;
     }
-    res = await get(base + ref, { Accept: accept, Authorization: auth });
-    return res;
+    return get(url, { Accept: accept, Authorization: auth });
   };
+  return { request };
+}
 
-  const res = await fetchManifest(tag, ACCEPT_ALL);
+type Client = ReturnType<typeof registryClient>;
+
+/** The platform manifest of `ref` (tag or digest) for `arch`: its digest (of the tag), and the config digest. */
+async function resolveManifest(client: Client, host: string, ref: string, arch: string): Promise<{ manifest: string; config: string } | null> {
+  const res = await client.request(`manifests/${ref}`, ACCEPT_ALL);
   if (res.status === 404) return null;
   if (!res.ok) throw new Error(`${host} manifest request failed (status ${res.status})`);
   const tagDigest = res.headers.get("docker-content-digest") ?? "";
@@ -104,12 +111,77 @@ async function genericDigests(host: string, repository: string, tag: string, arc
     const list = (body.manifests ?? []).filter((m) => m.platform?.os === "linux" || !m.platform?.os);
     const target = list.find((m) => m.platform?.architecture === arch) ?? list[0];
     if (!target) return null;
-    const pRes = await fetchManifest(target.digest, ACCEPT_SINGLE);
+    const pRes = await client.request(`manifests/${target.digest}`, ACCEPT_SINGLE);
     if (!pRes.ok) return null;
     const p = (await pRes.json()) as { config?: { digest?: string } };
     return p.config?.digest ? { config: p.config.digest, manifest: tagDigest } : null;
   }
   return body.config?.digest ? { config: body.config.digest, manifest: tagDigest } : null;
+}
+
+async function genericDigests(host: string, repository: string, tag: string, arch: string, creds?: Creds): Promise<RemoteDigests | null> {
+  return resolveManifest(registryClient(host, repository, creds), host, tag, arch);
+}
+
+/** Where the v2 API of a registry lives, and the repository name it expects (Docker Hub's official images are library/...). */
+async function apiTarget(image: string, creds?: Creds): Promise<{ host: string; repository: string; tag: string; creds?: Creds }> {
+  const ref = parseImageRef(image);
+  const host = normalizeRegistryHost(ref.registry);
+  if (host === "localhost" || /^localhost:/.test(host)) throw new Error(`${host} is a local registry; it can't be checked from DeployNow`);
+  if (host === "docker.io") return { host: "registry-1.docker.io", repository: ref.repository.includes("/") ? ref.repository : `library/${ref.repository}`, tag: ref.tag, creds };
+  if (host === "ghcr.io" && !creds) {
+    // Same fallback as image checks: the GitHub token from Settings reads private GHCR packages
+    const gh = await getGithubCredentials().catch(() => ({ user: "", token: "" }));
+    if (gh.token) return { host, repository: ref.repository, tag: ref.tag, creds: { username: gh.user || "token", password: gh.token } };
+  }
+  return { host, repository: ref.repository, tag: ref.tag, creds };
+}
+
+const MAX_TAGS = 5000;
+
+/** Every tag of the image's repository (up to 5,000), following the registry's pagination. */
+export async function registryTags(image: string, opts: { auth?: Creds } = {}): Promise<string[]> {
+  const t = await apiTarget(image, opts.auth?.username ? opts.auth : undefined);
+  const client = registryClient(t.host, t.repository, t.creds);
+  const tags: string[] = [];
+  let path = "tags/list?n=1000";
+  for (let page = 0; page < 10 && path; page++) {
+    const res = await client.request(path, "application/json");
+    if (res.status === 404) break;
+    if (!res.ok) throw new Error(`${t.host} tag list request failed (status ${res.status})`);
+    const body = (await res.json()) as { tags?: string[] | null };
+    tags.push(...(body.tags ?? []));
+    if (tags.length >= MAX_TAGS) break;
+    // Link: </v2/<repo>/tags/list?n=1000&last=xyz>; rel="next"
+    const next = /<([^>]+)>\s*;\s*rel="?next"?/.exec(res.headers.get("link") ?? "")?.[1];
+    const marker = next ? new URL(next, `https://${t.host}`) : null;
+    path = marker && marker.pathname === `/v2/${t.repository}/tags/list` ? `tags/list${marker.search}` : "";
+  }
+  return tags.slice(0, MAX_TAGS);
+}
+
+export interface RemoteImageInfo extends RemoteDigests {
+  /** When the image was built (the config's "created"), "" when unknown */
+  created: string;
+  /** The org.opencontainers.image.revision label: the commit it was built from, "" when not set */
+  revision: string;
+}
+
+/** Digests plus build date and source commit of what a tag points to now, or null when the registry doesn't have it. */
+export async function remoteImageInfo(image: string, opts: { arch?: string; auth?: Creds } = {}): Promise<RemoteImageInfo | null> {
+  const t = await apiTarget(image, opts.auth?.username ? opts.auth : undefined);
+  const client = registryClient(t.host, t.repository, t.creds);
+  const m = await resolveManifest(client, t.host, t.tag, normalizeArch(opts.arch));
+  if (!m) return null;
+  let created = "";
+  let revision = "";
+  const res = await client.request(`blobs/${m.config}`, "application/vnd.oci.image.config.v1+json, application/vnd.docker.container.image.v1+json, application/json");
+  if (res.ok) {
+    const cfg = (await res.json().catch(() => null)) as { created?: string; config?: { Labels?: Record<string, string> | null } } | null;
+    created = typeof cfg?.created === "string" ? cfg.created : "";
+    revision = cfg?.config?.Labels?.["org.opencontainers.image.revision"] ?? "";
+  }
+  return { ...m, created, revision };
 }
 
 /**

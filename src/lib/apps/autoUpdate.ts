@@ -150,6 +150,8 @@ export { interpolate } from "../deploy/compose";
 export interface ComposeImage {
   service: string;
   image: string;
+  /** Set when the whole image is one variable (`${APP_IMAGE:-...}`): changing it is how to pick another tag */
+  variable?: string;
 }
 
 /** Images of a compose file that come from a registry: built services and digest-pinned images are left out. */
@@ -167,7 +169,8 @@ export function composeImages(yaml: string, env: Record<string, string | undefin
     if (!svc || typeof svc !== "object" || svc.build !== undefined || typeof svc.image !== "string") continue;
     const image = svc.image.includes("$") ? interpolate(svc.image, env) : svc.image;
     if (!image || image.includes("@sha256:") || image.startsWith("dn/")) continue;
-    out.push({ service, image });
+    const whole = /^\$\{([A-Za-z_][A-Za-z0-9_]*)(?:[:?-][^}]*)?\}$/.exec(svc.image.trim());
+    out.push({ service, image, ...(whole ? { variable: whole[1] } : {}) });
   }
   return out;
 }
@@ -215,7 +218,7 @@ export async function remoteBranchHead(repo: string, branch: string, token = "")
   return hit[0];
 }
 
-type CheckApp = Application & { endpoint: Endpoint; environment: Environment & { project: Project } };
+export type CheckApp = Application & { endpoint: Endpoint; environment: Environment & { project: Project } };
 
 export interface Finder {
   branchHead: (repo: string, branch: string) => Promise<string>;
@@ -227,16 +230,24 @@ const defaultFinder: Finder = {
   digests: (image, opts) => registryDigests(image, opts),
 };
 
-/** Running image of each compose service: ImageID, RepoDigests and architecture. */
-async function runningServices(app: CheckApp): Promise<Map<string, { currentDigest: string; repoDigests: string; arch: string }>> {
+export interface RunningImage {
+  currentDigest: string;
+  repoDigests: string;
+  arch: string;
+  /** When the local image was built ("" when unknown) */
+  created: string;
+}
+
+/** Running image of each compose service: ImageID, RepoDigests, architecture and build date. */
+export async function runningServices(app: CheckApp): Promise<Map<string, RunningImage>> {
   const docker = dockerFor(app.endpoint);
   const list = await docker.listContainers({ all: true, filters: { label: [`com.docker.compose.project=${app.slug}`] } });
-  const out = new Map<string, { currentDigest: string; repoDigests: string; arch: string }>();
+  const out = new Map<string, RunningImage>();
   for (const c of list) {
     const svc = c.Labels?.["com.docker.compose.service"];
     if (!svc || out.has(svc)) continue;
     const info = await docker.getImage(c.ImageID).inspect().catch(() => null);
-    out.set(svc, { currentDigest: c.ImageID, repoDigests: (info?.RepoDigests ?? []).join(","), arch: info?.Architecture || "amd64" });
+    out.set(svc, { currentDigest: c.ImageID, repoDigests: (info?.RepoDigests ?? []).join(","), arch: info?.Architecture || "amd64", created: info?.Created ?? "" });
   }
   return out;
 }

@@ -20,7 +20,7 @@ interface ImageManifest {
   digest?: string;
 }
 
-async function getGithubCredentials(): Promise<{ user: string; token: string }> {
+export async function getGithubCredentials(): Promise<{ user: string; token: string }> {
   const settings = await prisma.settings.findUnique({ where: { id: "singleton" } });
   const token = settings?.githubToken ? decryptSecret(settings.githubToken) : "";
   const user = settings?.githubUser ?? "";
