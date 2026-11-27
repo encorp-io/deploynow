@@ -41,7 +41,7 @@ const blank = (type: string): ProviderForm => ({
 
 const SETUP_HELP: Record<string, string> = {
   google: "Google Cloud console → APIs & Services → Credentials → OAuth client ID (Web application).",
-  microsoft: "Entra ID → App registrations → New registration (Web). Use your tenant id to allow only your organisation.",
+  microsoft: "Entra ID → App registrations → New registration (Web). Use your tenant id to allow only your organisation. With organizations or common, add the email and xms_edov optional claims under Token configuration, or accounts won't be matched by email.",
   oidc: "Any OpenID Connect provider: Okta, Auth0, Keycloak, Authentik, GitLab…",
 };
 

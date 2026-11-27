@@ -7,6 +7,7 @@ import { generateTotpSecret, otpauthUri, verifyTotp } from "@/lib/totp";
 import { generateRecoveryCodes } from "@/lib/recoveryCodes";
 import { verifySecondFactor, mustEnrolTwoFactor } from "@/lib/twoFactor";
 import { verifyPassword } from "@/lib/password";
+import { isRateLimited, reauthKey, recordFailure, recordSuccess, TOO_MANY_REAUTH } from "@/lib/rateLimit";
 import { markStepUp } from "@/lib/sessions";
 import { audit, clientIp } from "@/lib/audit";
 
@@ -62,11 +63,18 @@ export async function POST(request: Request) {
     if (mustEnrolTwoFactor(user.role, false, settings?.require2faForAdmins ?? false)) {
       return NextResponse.json({ error: "2FA is required for your role" }, { status: 403 });
     }
+    const key = reauthKey(user.id);
+    if (await isRateLimited(key)) return NextResponse.json({ error: TOO_MANY_REAUTH }, { status: 429 });
     if (!(await verifyPassword(String(body.password ?? ""), row.password))) {
+      await recordFailure(key);
       return NextResponse.json({ error: "Password is wrong" }, { status: 400 });
     }
     const check = await verifySecondFactor(row, String(body.code ?? ""));
-    if (!check.ok) return NextResponse.json({ error: "Code is wrong" }, { status: 400 });
+    if (!check.ok) {
+      await recordFailure(key);
+      return NextResponse.json({ error: "Code is wrong" }, { status: 400 });
+    }
+    await recordSuccess(key);
 
     await prisma.$transaction([
       prisma.user.update({

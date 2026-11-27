@@ -7,6 +7,7 @@ import { prisma } from "../prisma";
 import { ConfigError, validateHost } from "./config";
 import { canUseRegistry, normalizeRegistryHost, type Actor } from "../registryAuth";
 import { parseImageRef } from "../imageRef";
+import { canPlaceOn, previewDomainError } from "./placement";
 
 type Existing = Pick<Application, "sourceType" | "endpointId" | "buildEndpointId" | "registryId" | "pullRegistryId" | "image" | "previewsEnabled" | "previewDomain" | "previewOfId"> | null | undefined;
 
@@ -14,6 +15,8 @@ type Existing = Pick<Application, "sourceType" | "endpointId" | "buildEndpointId
 export interface ExtrasContext {
   actor: Actor;
   projectId: string;
+  /** The app being edited, if any. */
+  appId?: string;
 }
 
 async function usableRegistry(raw: unknown, ctx: ExtrasContext, current: string | null | undefined) {
@@ -41,6 +44,8 @@ export async function validateAppExtras(body: Record<string, unknown>, sourceTyp
   if (has("buildEndpointId")) {
     const id = body.buildEndpointId && body.buildEndpointId !== endpointId ? String(body.buildEndpointId) : null;
     if (id && !(await prisma.endpoint.findUnique({ where: { id } }))) throw new ConfigError("That build server doesn't exist");
+    // Building runs containers on that server: the same right as running the app there. Unchanged is kept.
+    if (id && id !== existing?.buildEndpointId && !canPlaceOn(ctx.actor, id)) throw new ConfigError("You don't have permission to build on that server");
     out.buildEndpointId = id;
   }
   const buildEndpointId = has("buildEndpointId") ? out.buildEndpointId : existing?.buildEndpointId;
@@ -55,6 +60,10 @@ export async function validateAppExtras(body: Record<string, unknown>, sourceTyp
     const enabled = has("previewsEnabled") ? body.previewsEnabled === true : !!existing?.previewsEnabled;
     let domain = has("previewDomain") ? String(body.previewDomain ?? "").trim().toLowerCase() : (existing?.previewDomain ?? "");
     if (domain) domain = validateHost(domain);
+    if (domain && domain !== existing?.previewDomain) {
+      const why = await previewDomainError(domain, ctx.projectId, ctx.appId);
+      if (why) throw new ConfigError(why);
+    }
     if (enabled) {
       if (existing?.previewOfId) throw new ConfigError("A preview can't have previews of its own");
       if (sourceType !== "git-dockerfile" && sourceType !== "git-compose") throw new ConfigError("Pull request previews are for apps built from Git");

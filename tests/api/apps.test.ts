@@ -108,7 +108,7 @@ describe("projects", () => {
   it("lets a project binding raise a viewer's rights on that project only", async () => {
     const a = await newProject("Bound");
     const b = await newProject("Unbound");
-    signInAs("viewer", { bindings: [{ role: "admin", scopeType: "project", scopeId: a.id }] });
+    signInAs("viewer", { bindings: [{ role: "admin", scopeType: "project", scopeId: a.id }, { role: "operator", scopeType: "endpoint", scopeId: endpointId }] });
     expect((await project.PATCH(req("PATCH", { description: "mine" }), p({ id: a.id }))).status).toBe(200);
     expect((await project.PATCH(req("PATCH", { description: "theirs" }), p({ id: b.id }))).status).toBe(403);
     const envId = (await prisma.environment.findFirstOrThrow({ where: { projectId: a.id } })).id;

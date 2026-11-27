@@ -8,6 +8,7 @@ import { ID_RE, notFound, projectGate } from "@/lib/apps/access";
 import { ConfigError, slugify, validateAppInput, validateHost } from "@/lib/apps/config";
 import { EnvError } from "@/lib/apps/env";
 import { encryptSecret } from "@/lib/secretsCrypto";
+import { canPlaceOn, hostClaimError, PLACE_DENIED } from "@/lib/apps/placement";
 import { findTemplate, instantiate, TemplateError, TEMPLATES, templateForClient } from "@/lib/templates";
 import { savePolicy } from "@/lib/backup/service";
 import { BackupConfigError } from "@/lib/backup/config";
@@ -36,6 +37,7 @@ export async function POST(request: Request) {
   const endpointId = String(body.endpointId || env.defaultEndpointId || "");
   const endpoint = ID_RE.test(endpointId) ? await prisma.endpoint.findUnique({ where: { id: endpointId } }) : null;
   if (!endpoint) return bad("Choose the endpoint this app runs on");
+  if (!canPlaceOn(user, endpointId)) return bad(PLACE_DENIED, 403);
 
   const name = String(body.name ?? "").trim() || template.name;
   const slug = String(body.slug ?? "").trim() || slugify(name);
@@ -60,6 +62,8 @@ export async function POST(request: Request) {
   }
   if (made.domain) {
     if (endpoint.proxyMode === "none") return bad(`Set up the edge proxy on ${endpoint.name} first (Endpoints → ${endpoint.name}), or publish a host port instead`, 409);
+    const why = await hostClaimError(made.domain.host, project.id);
+    if (why) return bad(why, 409);
     if (await prisma.domain.findUnique({ where: { host_path: { host: made.domain.host, path: "/" } } })) return bad(`${made.domain.host} is already used by an app`, 409);
   }
   if (destinationId && !(await prisma.backupDestination.findUnique({ where: { id: destinationId } }))) return bad("That backup destination doesn't exist");
