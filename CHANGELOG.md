@@ -14,6 +14,13 @@ versions fix bugs. Every version upgrades the database by itself.
   with. Update now and auto-update both use it, and a channel switch moves `DEPLOYNOW_TAG`
   in the compose `.env` too.
 
+### Security
+- **Secrets inside containers:** container env values and consoles are now admin only
+  (operators lose them), and an app container's env values need access to that app's
+  secrets. DeployNow's own container, the updater and backup/task helpers never show
+  env values or open a console; their logs are admin only and only owners can stop or
+  remove them. See docs/security.md.
+
 ## [1.0.0] - 2026-11-27
 
 The first public release of DeployNow, a self-hosted replacement for Portainer and
