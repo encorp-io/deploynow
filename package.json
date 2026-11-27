@@ -55,8 +55,8 @@
     "@types/ssh2": "^1.15.6",
     "@types/ws": "^8.18.2",
     "@vitejs/plugin-react": "^6.3.0",
-    "@vitest/coverage-v8": "^4.1.2",
-    "vitest": "^4.1.2"
+    "@vitest/coverage-v8": "^5.1.2",
+    "vitest": "^5.1.2"
   },
   "prisma": {
     "seed": "node --experimental-strip-types --no-warnings prisma/seed.ts"
