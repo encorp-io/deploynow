@@ -56,7 +56,7 @@ describe("validateAppInput", () => {
     expect(a.sourceType).toBe("image");
     expect(JSON.parse(a.env)).toEqual([{ key: "A", kind: "plain", value: "1" }]);
     expect(() => validateAppInput({ name: "Web", image: "-bad" })).toThrow(/image/);
-    expect(() => validateAppInput({ name: "Web", image: "x", updatePolicy: "on-push" })).toThrow(/digest/);
+    expect(() => validateAppInput({ name: "Web", image: "x", updatePolicy: "on-push" })).toThrow(/Git push/);
   });
 
   it("keeps stored values on update", () => {
@@ -73,14 +73,15 @@ describe("validateAppInput", () => {
     expect(() => validateAppInput({ name: "Api", sourceType: "git-dockerfile", gitRepo: "http://x/y" })).toThrow(/https/);
     expect(() => validateAppInput({ name: "Api", sourceType: "git-compose", gitRepo: "https://github.com/o/r", gitBranch: "-x" })).toThrow(/branch/);
     expect(() => validateAppInput({ name: "Api", sourceType: "git-compose", gitRepo: "https://github.com/o/r", composePath: "../x" })).toThrow(/Invalid path/);
-    expect(() => validateAppInput({ name: "Api", sourceType: "git-compose", gitRepo: "https://github.com/o/r", updatePolicy: "auto-digest" })).toThrow(/push/);
+    // The old auto-digest policy is now the auto-update switch; the stored policy is manual
+    expect(validateAppInput({ name: "Api", sourceType: "git-compose", gitRepo: "https://github.com/o/r", updatePolicy: "auto-digest" }).updatePolicy).toBe("manual");
     expect(() => validateAppInput({ name: "Api", sourceType: "git-compose", gitRepo: "https://github.com/o/r", ports: [{ container: 80 }] })).toThrow(/compose file/);
   });
 
   it("validates inline compose", () => {
     expect(validateAppInput({ name: "C", sourceType: "compose", composeInline: "services: {}" }).composeInline).toBe("services: {}");
     expect(() => validateAppInput({ name: "C", sourceType: "compose" })).toThrow(/Paste/);
-    expect(() => validateAppInput({ name: "C", sourceType: "compose", composeInline: "x", updatePolicy: "on-push" })).toThrow(/by hand/);
+    expect(() => validateAppInput({ name: "C", sourceType: "compose", composeInline: "x", updatePolicy: "on-push" })).toThrow(/Git repository/);
   });
 
   it("rejects bad basics", () => {
