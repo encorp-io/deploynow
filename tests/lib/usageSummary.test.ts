@@ -181,6 +181,13 @@ describe("routes", () => {
     const op = await (await overview.GET()).json();
     expect(op.backups).toMatchObject({ last: null, ok7d: 0 });
     expect(op.log).toMatchObject({ lines: [] });
+
+    // A snapshot from a machine that stopped reporting is not current usage
+    await prisma.endpoint.update({ where: { id: endpointId }, data: { hostMetricsAt: new Date(Date.now() - HOUR) } });
+    const stale = await (await overview.GET()).json();
+    expect(stale.machines[0]).toMatchObject({ cpu: null, mem: null });
+    expect(stale.fleet).toMatchObject({ cpu: null, memTotal: 0 });
+    await prisma.endpoint.update({ where: { id: endpointId }, data: { hostMetricsAt: new Date() } });
   });
 
   it("adds 24-hour trends to the monitoring hosts", async () => {

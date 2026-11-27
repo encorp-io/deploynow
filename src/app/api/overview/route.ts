@@ -12,6 +12,8 @@ import { readLog } from "@/lib/deploy/log";
 const HOUR = 3600_000;
 const TREND_HOURS = 24;
 const LOG_LINES = 14;
+/** Host snapshots older than this (machine offline, probing stopped) are not current usage. */
+const HOST_FRESH = 10 * 60_000; // same window as /api/metrics
 
 /**
  * Everything the Overview page shows, limited to what the user may see:
@@ -35,8 +37,10 @@ export async function GET() {
       })
     : [];
   const trends = hostTrends(samples, from, HOUR, TREND_HOURS);
+  const current = (e: (typeof endpoints)[number]) =>
+    e.status === "online" && e.hostMetricsAt && now - e.hostMetricsAt.getTime() < HOST_FRESH ? parseMetrics(e.hostMetrics) : null;
   const machines = endpoints.map((e) => {
-    const m = parseMetrics(e.hostMetrics);
+    const m = current(e);
     const u = m ? usage(m) : null;
     return {
       id: e.id,
@@ -53,7 +57,7 @@ export async function GET() {
       trend: trends.endpoints.get(e.id)?.cpu ?? [],
     };
   });
-  const measured = endpoints.map((e) => parseMetrics(e.hostMetrics)).filter((m): m is NonNullable<typeof m> => !!m && m.memTotal > 0);
+  const measured = endpoints.map(current).filter((m): m is NonNullable<typeof m> => !!m && m.memTotal > 0);
   const sum = (f: (m: (typeof measured)[number]) => number) => measured.reduce((s, m) => s + f(m), 0);
   const fleet = {
     online: endpoints.filter((e) => e.status === "online").length,
