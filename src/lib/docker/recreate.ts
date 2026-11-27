@@ -117,9 +117,30 @@ export interface RecreateOptions {
   image?: string;
   pull?: boolean;
   authconfig?: AuthConfig;
+  /** Runs once the old container has stopped, before the new one is created (e.g. to snapshot its data) */
+  afterStop?: () => Promise<void> | void;
+}
+
+/**
+ * A recreate whose old container is kept (stopped, renamed) until commit(), so
+ * the caller can check the new one first and roll back to the old one.
+ */
+export interface StagedRecreate {
+  newId: string;
+  oldId: string;
+  /** Remove the old container */
+  commit(): Promise<void>;
+  /** Remove the new container and start the old one again under its name. beforeStart runs in between. */
+  rollback(beforeStart?: () => Promise<void> | void): Promise<void>;
 }
 
 export async function recreateContainer(docker: Docker, containerId: string, opts: RecreateOptions = {}): Promise<string> {
+  const staged = await stagedRecreate(docker, containerId, opts);
+  await staged.commit();
+  return staged.newId;
+}
+
+export async function stagedRecreate(docker: Docker, containerId: string, opts: RecreateOptions = {}): Promise<StagedRecreate> {
   const old = docker.getContainer(containerId);
   const info = await old.inspect();
   const image = opts.image ?? info.Config.Image;
@@ -160,7 +181,22 @@ export async function recreateContainer(docker: Docker, containerId: string, opt
 
   let created: Docker.Container | undefined;
   const released: string[] = [];
+  const restoreOld = async (beforeStart?: () => Promise<void> | void) => {
+    if (created) await created.stop({ t: 10 }).catch(() => {});
+    if (created) await created.remove({ force: true }).catch(() => {});
+    for (const [net, settings] of pinned.filter(([n]) => released.includes(n))) {
+      await docker
+        .getNetwork(net)
+        .connect({ Container: info.Id, EndpointConfig: networkEndpointConfig(settings as Record<string, unknown>, info.Id) })
+        .catch(() => {});
+    }
+    await old.rename({ name }).catch(() => {});
+    if (beforeStart) await beforeStart();
+    if (wasRunning) await old.start().catch(() => {});
+  };
+
   try {
+    if (opts.afterStop) await opts.afterStop();
     for (const [net] of pinned) {
       await docker.getNetwork(net).disconnect({ Container: info.Id, Force: true });
       released.push(net);
@@ -177,18 +213,17 @@ export async function recreateContainer(docker: Docker, containerId: string, opt
     if (wasRunning) await created.start();
   } catch (err) {
     // Roll back to the old container
-    if (created) await created.remove({ force: true }).catch(() => {});
-    for (const [net, settings] of pinned.filter(([n]) => released.includes(n))) {
-      await docker
-        .getNetwork(net)
-        .connect({ Container: info.Id, EndpointConfig: networkEndpointConfig(settings as Record<string, unknown>, info.Id) })
-        .catch(() => {});
-    }
-    await old.rename({ name }).catch(() => {});
-    if (wasRunning) await old.start().catch(() => {});
+    await restoreOld();
     throw err;
   }
 
-  await old.remove({ force: true }).catch(() => {});
-  return created.id;
+  const newContainer = created;
+  return {
+    newId: newContainer.id,
+    oldId: info.Id,
+    commit: async () => {
+      await old.remove({ force: true }).catch(() => {});
+    },
+    rollback: restoreOld,
+  };
 }

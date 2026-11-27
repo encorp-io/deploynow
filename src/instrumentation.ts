@@ -31,6 +31,9 @@ export async function register() {
 
     const { startUpdateChecker } = await import("./lib/updates");
     startUpdateChecker();
+    // Reports a finished self-update and runs auto-update (Settings → Updates)
+    const { startSelfUpdateWorker } = await import("./lib/selfUpdate");
+    startSelfUpdateWorker();
     const { startUptimeChecker } = await import("./lib/uptime");
     startUptimeChecker();
 

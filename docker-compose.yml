@@ -49,6 +49,10 @@ services:
       # AGENT_PUBLIC_URL: https://deploynow.example.com:8444
       # AGENT_PORT: "8444"   # "off" disables the agent hub
 
+      # Update DeployNow from Settings → Updates (a helper container swaps it, checks health
+      # and rolls back). Needs the Docker socket above. "off" hides it:
+      # DEPLOYNOW_SELF_UPDATE: "off"
+
       # ── GitHub Container Registry (optional — can also configure in web UI) ─
       # Your GitHub username + PAT with read:packages scope
       GITHUB_USER: ${GITHUB_USER:-}

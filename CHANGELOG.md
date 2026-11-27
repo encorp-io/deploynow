@@ -9,6 +9,9 @@ versions fix bugs. Every version upgrades the database by itself.
 ## [Unreleased]
 
 ### Fixed
+- **Updating DeployNow from its own UI:** the Update button on DeployNow's own container
+  stopped DeployNow and never brought it back, because the process doing the recreate
+  ran inside the container it stopped. That button now uses the new self-update below.
 - **Compose env vars:** an app's environment variables only filled `${NAME}` in the compose
   file, so a service with `env_file: .env` got none of them. They are now also written to
   `.env` next to the compose file at deploy time (a `.env` from the repository is kept, and
@@ -17,6 +20,17 @@ versions fix bugs. Every version upgrades the database by itself.
   verified". SimpleWebAuthn is upgraded to v13, which reads every valid signature.
 
 ### Added
+- **Self-update:** Settings → Updates → **Update now**. DeployNow pulls the new image,
+  then a short-lived `deploynow-updater` container (started from DeployNow's own image,
+  with the Docker socket and the data volume, no network) replaces DeployNow with the
+  same configuration, waits for its health check, and rolls back to the previous
+  container, with the database copied just before the switch, when the new version
+  doesn't come up healthy. A pinned tag (`2.0.0`) moves to the newest release and
+  `DEPLOYNOW_TAG` in the compose `.env` moves with it; `latest`, `edge` and `2.0` are
+  pulled again. Optional **auto-update**, any time or within one hour of the day; a
+  version that rolled back isn't tried again. The outcome lands in the audit log and
+  the new "DeployNow updated itself (or rolled back)" notification.
+  `DEPLOYNOW_SELF_UPDATE=off` turns it off.
 - **Import .env:** upload, drop or paste a .env file on an app's Environment tab. It reads
   comments, quotes, multi-line values and `export`, previews what changes, lets you merge
   (file wins), add new only or replace all, imports password and token names as secrets,
