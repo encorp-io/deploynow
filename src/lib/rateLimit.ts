@@ -39,3 +39,14 @@ export async function recordFailure(key: string, now = Date.now()): Promise<void
 export async function recordSuccess(key: string): Promise<void> {
   await prisma.loginThrottle.delete({ where: { key } }).catch(() => {});
 }
+
+/**
+ * One shared budget for a signed-in person re-proving who they are: the current
+ * password, a step-up code, turning 2FA off, new recovery codes. A stolen session
+ * then can't guess the password or a code by spreading tries over those routes.
+ */
+export function reauthKey(userId: string): string {
+  return `stepup:${userId}`;
+}
+
+export const TOO_MANY_REAUTH = "Too many attempts. Try again in 15 minutes.";

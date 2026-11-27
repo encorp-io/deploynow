@@ -21,9 +21,9 @@ interface UserRow {
   name: string;
   role: string;
   createdAt: string;
-  lastLoginAt: string | null;
+  lastLoginAt?: string | null; // only for people who manage users
   disabledAt: string | null;
-  totpEnabled: boolean;
+  totpEnabled?: boolean;
   roleBindings: Binding[];
 }
 interface Invite { id: string; email: string; role: string; expiresAt: string }
@@ -84,8 +84,8 @@ export default function TeamPage() {
               <th className="px-4 py-2.5 font-medium">Person</th>
               <th className="px-4 py-2.5 font-medium">Role</th>
               <th className="px-4 py-2.5 font-medium">Endpoint grants</th>
-              <th className="px-4 py-2.5 font-medium">2FA</th>
-              <th className="px-4 py-2.5 font-medium">Last sign-in</th>
+              {isAdmin && <th className="px-4 py-2.5 font-medium">2FA</th>}
+              {isAdmin && <th className="px-4 py-2.5 font-medium">Last sign-in</th>}
               <th className="px-4 py-2.5"></th>
             </tr>
           </thead>
@@ -131,8 +131,8 @@ export default function TeamPage() {
                       )}
                     </div>
                   </td>
-                  <td className="px-4 py-3">{u.totpEnabled ? <span title="2FA on" className="inline-flex items-center gap-1 text-xs text-success"><ShieldCheck className="w-4 h-4" /> On</span> : <span title="2FA off" className="inline-flex items-center gap-1 text-xs text-warning"><ShieldOff className="w-4 h-4" /> Off</span>}</td>
-                  <td className="px-4 py-3 text-xs text-text-muted">{timeAgo(u.lastLoginAt)}</td>
+                  {isAdmin && <td className="px-4 py-3">{u.totpEnabled ? <span title="2FA on" className="inline-flex items-center gap-1 text-xs text-success"><ShieldCheck className="w-4 h-4" /> On</span> : <span title="2FA off" className="inline-flex items-center gap-1 text-xs text-warning"><ShieldOff className="w-4 h-4" /> Off</span>}</td>}
+                  {isAdmin && <td className="px-4 py-3 text-xs text-text-muted">{timeAgo(u.lastLoginAt ?? null)}</td>}
                   <td className="px-4 py-3 text-right whitespace-nowrap">
                     {canEdit && (
                       <>

@@ -124,7 +124,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       }
       // Every request re-checks the server-side session, so revoking a session,
       // disabling a user or changing a role takes effect immediately.
-      const s = await loadActiveSession(token.sid as string | undefined);
+      const s = await loadActiveSession(token.sid as string | undefined, (token.id as string | undefined) ?? null);
       if (!s) return null;
       const role = normalizeRole(s.user.role);
       token.role = role;

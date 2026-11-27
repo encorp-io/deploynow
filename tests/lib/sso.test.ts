@@ -90,10 +90,17 @@ describe("provider settings", () => {
     expect(sso.trustedEmail(g, { email: "A@x.com", email_verified: true })).toBe("a@x.com");
     expect(sso.trustedEmail(g, { email: "a@x.com", email_verified: false })).toBe("");
     const multi = { type: "microsoft", allowedDomains: "acme.com", tenant: "organizations" } as never;
-    expect(sso.trustedEmail(multi, { preferred_username: "bob@acme.com" })).toBe("bob@acme.com");
-    expect(sso.trustedEmail(multi, { preferred_username: "bob@evil.com" })).toBe("");
+    // nOAuth: another tenant's admin can set any address, so multi-tenant needs xms_edov
+    expect(sso.trustedEmail(multi, { preferred_username: "bob@acme.com" })).toBe("");
+    expect(sso.trustedEmail(multi, { email: "bob@acme.com" })).toBe("");
+    expect(sso.trustedEmail(multi, { email: "bob@acme.com", xms_edov: false })).toBe("");
+    expect(sso.trustedEmail(multi, { email: "Bob@acme.com", xms_edov: true })).toBe("bob@acme.com");
+    expect(sso.trustedEmail(multi, { preferred_username: "bob@acme.com", xms_edov: true })).toBe("");
+    const common = { type: "microsoft", allowedDomains: "", tenant: "Common" } as never;
+    expect(sso.trustedEmail(common, { email: "owner@acme.com" })).toBe("");
     const single = { type: "microsoft", allowedDomains: "", tenant: "11111111-2222-3333-4444-555555555555" } as never;
     expect(sso.trustedEmail(single, { email: "bob@evil.com" })).toBe("bob@evil.com");
+    expect(sso.trustedEmail(single, { preferred_username: "bob@acme.com" })).toBe("bob@acme.com");
   });
 });
 
@@ -149,6 +156,22 @@ describe("sign-in flow", () => {
     const u = await sso.resolveUser(p, claims("new@acme.io"));
     expect(u).toMatchObject({ email: "new@acme.io", role: "operator", name: "New Person" });
     await expect(sso.resolveUser(p, claims("new@other.io"))).rejects.toThrow(/limited to @acme.io/);
+  });
+
+  it("doesn't let another Entra tenant take over an account by email (nOAuth)", async () => {
+    const owner = await prisma.user.create({ data: { email: "boss@victim.io", name: "Boss", role: "owner", password: "x" } });
+    const v = sso.validateProvider({ type: "microsoft", clientId: "client-mt", clientSecret: "s", tenant: "organizations", allowedDomains: "victim.io", autoCreate: true });
+    const p = await prisma.ssoProvider.create({ data: { ...v, clientSecret: v.clientSecret! } });
+    const attacker = { sub: "attacker-sub", tid: "99999999-0000-0000-0000-000000000000", email: "boss@victim.io", preferred_username: "boss@victim.io" };
+    await expect(sso.resolveUser(p, attacker)).rejects.toThrow(/limited to @victim.io/);
+    expect(await prisma.userIdentity.count({ where: { providerId: p.id } })).toBe(0);
+    // Same claims, but the issuing tenant verified the domain: that's the real owner
+    const u = await sso.resolveUser(p, { ...attacker, sub: "real-sub", xms_edov: true });
+    expect(u.id).toBe(owner.id);
+    // Later sign-ins of that linked identity work even before xms_edov is configured
+    const again = await sso.resolveUser(p, { sub: "real-sub", tid: attacker.tid, preferred_username: "boss@victim.io" });
+    expect(again.id).toBe(owner.id);
+    expect((await prisma.userIdentity.findFirst({ where: { subject: "real-sub" } }))?.email).toBe("boss@victim.io");
   });
 
   it("checks the Microsoft tenant", async () => {

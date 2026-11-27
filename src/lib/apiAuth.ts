@@ -95,7 +95,8 @@ export async function getCurrentUser(): Promise<CurrentUser | null> {
     prisma.user.findUnique({ where: { id: u.id as string }, include: { roleBindings: true } }),
     prisma.session.findUnique({ where: { id: u.sid as string } }),
   ]);
-  if (!user || user.disabledAt || !s || s.revokedAt) return null;
+  // The session must be live and belong to the user named in the token
+  if (!user || user.disabledAt || !s || s.revokedAt || s.expiresAt.getTime() < Date.now() || s.userId !== user.id) return null;
   return {
     id: user.id,
     email: user.email,
