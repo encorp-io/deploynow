@@ -6,6 +6,9 @@ services:
     # build: .
     container_name: deploynow
     restart: unless-stopped
+    labels:
+      # DeployNow's own container holds AUTH_SECRET: its env is never shown and consoles are refused
+      io.deploynow.self: "true"
     ports:
       - "${DEPLOYNOW_PORT:-9444}:9444"     # HTTPS — DeployNow dashboard (DEPLOYNOW_PORT picks the host port)
       - "8444:8444"     # Agent hub — remote agents connect out to this (mutual TLS)

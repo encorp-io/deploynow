@@ -99,7 +99,8 @@ export const runCosign: CosignRunner = async (docker, args, auth) => {
   const c = await docker.createContainer({
     Image: COSIGN_IMAGE,
     Cmd: [...args, ...authArgs],
-    Labels: { "deploynow.role": "verify" },
+    // A helper (containerProtection.ts): its command can hold a registry password
+    Labels: { "deploynow.helper": "verify" },
     HostConfig: { AutoRemove: false, ReadonlyRootfs: false, CapDrop: ["ALL"], SecurityOpt: ["no-new-privileges"] },
   } as Docker.ContainerCreateOptions);
   try {

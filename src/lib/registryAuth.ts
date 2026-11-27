@@ -18,6 +18,7 @@ import { prisma } from "./prisma";
 import { decryptSecret, encryptSecret } from "./secretsCrypto";
 import { parseImageRef } from "./imageRef";
 import { can, type Binding, type Role } from "./rbac";
+import { BlockedAddressError, guardedGet } from "./netGuard";
 
 export interface AuthConfig {
   username: string;
@@ -256,28 +257,47 @@ export function appPullContext(app: { pullRegistryId?: string | null; registryId
   return { projectId: app.environment?.projectId ?? null, pullRegistryId: app.pullRegistryId ?? null, pushRegistryId: app.registryId ?? null };
 }
 
-/** Check credentials against the registry's token endpoint (Docker Registry v2 API). */
-export async function testRegistry(r: Registry): Promise<{ ok: boolean; message: string }> {
+/**
+ * Check credentials against the registry's token endpoint (Docker Registry v2 API).
+ *
+ * The host and the token realm the registry names are user-controlled, so both
+ * requests go through netGuard: https only, no redirects, and no internal
+ * addresses unless `allowPrivate` (admins, for a registry on their own network).
+ * Messages stay generic so the test can't be used to probe other services.
+ */
+export async function testRegistry(r: Registry, opts: { allowPrivate?: boolean } = {}): Promise<{ ok: boolean; message: string }> {
   const auth = toAuth(r);
   if (!auth) return { ok: false, message: "The stored password can't be decrypted" };
   const base = r.host === "docker.io" ? "https://registry-1.docker.io" : `https://${r.host}`;
   const basic = "Basic " + Buffer.from(`${auth.username}:${auth.password}`).toString("base64");
+  const guard = { allowPrivate: !!opts.allowPrivate, headers: { Authorization: basic }, timeoutMs: 10_000 };
   try {
-    const first = await fetch(`${base}/v2/`, { headers: { Authorization: basic }, signal: AbortSignal.timeout(10_000), redirect: "manual" });
+    const first = await guardedGet(`${base}/v2/`, guard);
     if (first.ok) return { ok: true, message: "Signed in" };
     const challenge = first.headers.get("www-authenticate") ?? "";
     const m = /Bearer realm="([^"]+)"(?:,service="([^"]+)")?/i.exec(challenge);
     if (first.status === 401 && m) {
-      const url = new URL(m[1]);
+      let url: URL;
+      try {
+        url = new URL(m[1]);
+      } catch {
+        return { ok: false, message: "The registry sent an invalid sign-in challenge" };
+      }
+      if (url.protocol !== "https:") return { ok: false, message: "The registry's token service must use https" };
       if (m[2]) url.searchParams.set("service", m[2]);
       // Docker Hub and GHCR hand out anonymous tokens; ask for an account scope so bad credentials fail
       if (r.host === "docker.io") url.searchParams.set("account", auth.username);
       if (r.host === "ghcr.io") url.searchParams.set("scope", `repository:${auth.username.toLowerCase()}/deploynow-login-check:pull`);
-      const tok = await fetch(url, { headers: { Authorization: basic }, signal: AbortSignal.timeout(10_000) });
-      return tok.ok ? { ok: true, message: "Signed in" } : { ok: false, message: `The registry refused the credentials (${tok.status})` };
+      const tok = await guardedGet(url, guard);
+      if (tok.ok) return { ok: true, message: "Signed in" };
+      return { ok: false, message: tok.status === 401 || tok.status === 403 ? "The registry refused the credentials" : "The registry's token service didn't accept the request" };
     }
-    return { ok: false, message: `The registry answered ${first.status}` };
+    if (first.status === 401 || first.status === 403) return { ok: false, message: "The registry refused the credentials" };
+    return { ok: false, message: "This doesn't look like a container registry (no Docker Registry v2 API)" };
   } catch (err) {
-    return { ok: false, message: err instanceof Error ? err.message : "Could not reach the registry" };
+    if (err instanceof BlockedAddressError) {
+      return { ok: false, message: opts.allowPrivate ? "That address isn't allowed" : "Registries on private or internal addresses can only be tested by an admin" };
+    }
+    return { ok: false, message: "Could not reach the registry" };
   }
 }

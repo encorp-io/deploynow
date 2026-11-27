@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { endpointGate, dockerError, validRef } from "@/lib/endpointRoute";
+import { endpointGate, dockerError, validRef, containerGuard } from "@/lib/endpointRoute";
 import { readJson } from "@/lib/apiAuth";
 import { issueExecTicket, ALLOWED_SHELLS } from "@/lib/execTicket";
 
@@ -22,6 +22,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
   try {
     const info = await docker.getContainer(cid).inspect();
+    const guard = containerGuard(user, id, info, "exec");
+    if (guard.response) return guard.response;
     if (!info.State.Running) return NextResponse.json({ error: "The container is not running" }, { status: 409 });
     const ticket = issueExecTicket({
       uid: user.id,
