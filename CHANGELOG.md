@@ -14,6 +14,16 @@ versions fix bugs. Every version upgrades the database by itself.
   with. Update now and auto-update both use it, and a channel switch moves `DEPLOYNOW_TAG`
   in the compose `.env` too.
 
+### Security
+- **Registry test can't reach internal addresses**: testing a registry login resolves the
+  host first and refuses metadata and link-local addresses for everyone, and loopback and
+  private ranges for non-admins. The token realm must be https, redirects aren't followed,
+  and errors no longer echo the remote answer.
+- **Client IP behind the domain can't be spoofed**: nginx trusts `X-Real-IP` and
+  `X-Forwarded-Proto` on the Traefik port only with a per-install secret that the domain
+  route adds (kept in `/data/proxy-secret`). Port 9444 sends HSTS when it has a real
+  certificate.
+
 ## [1.0.0] - 2026-11-27
 
 The first public release of DeployNow, a self-hosted replacement for Portainer and
