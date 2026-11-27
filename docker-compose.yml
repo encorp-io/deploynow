@@ -1,6 +1,6 @@
 services:
   deployer:
-    # Pin a release (1.0.0) for predictable upgrades; latest = newest stable release.
+    # Pin a release (1.1.0) for predictable upgrades; latest = newest stable release.
     image: ghcr.io/encorp-io/deploynow:${DEPLOYNOW_TAG:-latest}
     # Or build locally:
     # build: .
