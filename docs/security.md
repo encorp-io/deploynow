@@ -38,6 +38,19 @@ bastion. To report a vulnerability, see [SECURITY.md](../SECURITY.md).
 - **Update.** Watch the repository's releases, or pin `2.0` to get patch releases.
 - **API tokens:** give them the lowest scope and an expiry, and revoke the ones you no longer use (Account → API tokens shows when each was last used and from where).
 
+## Images and updates
+
+- Images on `ghcr.io/encorp-io` are built by GitHub Actions from this repository,
+  signed with cosign (keyless) and published with SLSA provenance and an SBOM. Each
+  release lists its image digests in `image-digests.txt`. Check one with `cosign verify`
+  (see [Upgrading](upgrading.md#by-hand)).
+- Self-update and auto-update check that signature, and the digest for a release,
+  before switching, and start only the exact image they checked.
+- The workflows pin each action to a commit, so a moved tag upstream can't change what
+  builds the images.
+- In the image, the app's files belong to root; the app runs as `nextjs` and can write
+  only to `/data`, `/tmp` and Next.js's cache.
+
 ## The Docker socket
 
 Mounting `/var/run/docker.sock` lets DeployNow manage the machine it runs on. It's

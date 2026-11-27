@@ -14,6 +14,18 @@ versions fix bugs. Every version upgrades the database by itself.
   with. Update now and auto-update both use it, and a channel switch moves `DEPLOYNOW_TAG`
   in the compose `.env` too.
 
+### Security
+- Images are signed with cosign (keyless) and published with SLSA provenance and an
+  SBOM; each release lists its image digests in `image-digests.txt`.
+- Self-update and auto-update check the new image's signature (and, for a release, its
+  digest) before switching, and the updater starts only the image that was checked.
+  `DEPLOYNOW_VERIFY_IMAGES=off` skips the check.
+- GitHub Actions are pinned to commit SHAs.
+- `setup.sh` removes `ADMIN_PASSWORD` from `.env` after the first start and recreates
+  the container, so `docker inspect` no longer shows it; DeployNow warns while it is
+  still set. `setup.sh` takes `docker-compose.yml` from the release it installs.
+- The app's files in the image belong to root, so the `nextjs` user can't change them.
+
 ## [1.0.0] - 2026-11-27
 
 The first public release of DeployNow, a self-hosted replacement for Portainer and

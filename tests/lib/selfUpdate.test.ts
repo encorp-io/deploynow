@@ -31,6 +31,17 @@ vi.mock("@/lib/audit", () => ({ audit: vi.fn(async () => {}) }));
 vi.mock("@/lib/registryAuth", () => ({ registryAuthFor: vi.fn(async () => undefined) }));
 const remote = vi.hoisted(() => ({ digest: "sha256:edge1" as string | null }));
 vi.mock("@/lib/ghcr", () => ({ getRemoteDigests: vi.fn(async () => (remote.digest ? { config: "sha256:cfg", manifest: remote.digest } : null)) }));
+const verify = vi.hoisted(() => ({ fail: "" }));
+vi.mock("@/lib/selfUpdate/verify", async () => {
+  const real = await vi.importActual<typeof import("@/lib/selfUpdate/verify")>("@/lib/selfUpdate/verify");
+  return {
+    ...real,
+    verifyTarget: vi.fn(async (...args: Parameters<typeof real.verifyTarget>) => {
+      if (verify.fail) throw new real.VerifyError(verify.fail);
+      return real.verifyTarget(...args);
+    }),
+  };
+});
 vi.mock("@/lib/platformDomain", () => ({
   findLocalTarget: vi.fn(async () => target.value),
   selfContainerCandidates: () => ["aaaaaaaaaaaa"],
@@ -212,6 +223,8 @@ describe("startSelfUpdate", () => {
     process.env.SELF_UPDATE_TEST_DB = path.join(dir, "deployer.db");
     process.env.DATABASE_URL = `file:${process.env.SELF_UPDATE_TEST_DB}`;
     delete process.env.DEPLOYNOW_SELF_UPDATE;
+    process.env.DEPLOYNOW_VERIFY_IMAGES = "off"; // verify.ts has its own tests
+    verify.fail = "";
     store.s = { latestRelease: "2.1.0", selfUpdateAuto: true, selfUpdateHour: -1 };
     store.services = [];
   });
@@ -232,7 +245,7 @@ describe("startSelfUpdate", () => {
       "/opt/deploynow:/compose-env",
     ]);
     const plan = JSON.parse(opts.Env[0].replace(/^SELF_UPDATE_PLAN=/, ""));
-    expect(plan).toMatchObject({ targetRef: "ghcr.io/encorp-io/deploynow:2.1.0", envFile: "/compose-env/.env", envFileHost: "/opt/deploynow/.env", envTag: "2.1.0", dbFile: process.env.SELF_UPDATE_TEST_DB });
+    expect(plan).toMatchObject({ targetRef: "ghcr.io/encorp-io/deploynow:2.1.0", targetImageId: "sha256:new", envFile: "/compose-env/.env", envFileHost: "/opt/deploynow/.env", envTag: "2.1.0", dbFile: process.env.SELF_UPDATE_TEST_DB });
     expect(t.helper.start).toHaveBeenCalled();
   });
 
@@ -268,6 +281,17 @@ describe("startSelfUpdate", () => {
     await expect(prepare("2.1.0")).rejects.toThrow(/socket isn't bind-mounted/);
     process.env.DEPLOYNOW_SELF_UPDATE = "off";
     await expect(prepare("2.1.0")).rejects.toMatchObject({ code: "disabled" });
+  });
+
+  it("doesn't start the updater when the image fails its check", async () => {
+    const t = fakeTarget();
+    target.value = t.value;
+    verify.fail = "ghcr.io/encorp-io/deploynow:2.1.0 has no valid signature";
+    await expect(startSelfUpdate()).rejects.toMatchObject({ code: "verify", message: expect.stringMatching(/no valid signature/) });
+    expect(t.docker.pull).toHaveBeenCalled();
+    expect(t.docker.createContainer).not.toHaveBeenCalled();
+    const { audit } = await import("@/lib/audit");
+    expect(audit).toHaveBeenCalledWith(expect.objectContaining({ outcome: "failure", details: expect.stringMatching(/no valid signature/) }));
   });
 
   it("doesn't start when the pulled image is the one running", async () => {

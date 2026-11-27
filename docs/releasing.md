@@ -2,6 +2,9 @@
 
 For maintainers. A release is a `vX.Y.Z` tag on `main`; GitHub Actions does the rest.
 
+Workflows pin every action to a commit SHA (the version is in a comment beside it);
+Dependabot opens monthly pull requests to move them.
+
 1. Pick the version: patch for fixes, minor for features, major if users must do
    something by hand.
 2. On a branch, set `"version"` in `package.json` (and `cli/package.json`), move the
@@ -19,7 +22,9 @@ What runs:
 
 - **Docker — Build & Publish** builds `ghcr.io/encorp-io/deploynow` and
   `ghcr.io/encorp-io/deploynow-agent` for amd64 and arm64, tagged `1.1.0`, `1.1`, `1`
-  (server) and `latest`.
+  (server) and `latest`. Each image is signed with cosign (keyless, through GitHub's
+  OIDC token) and carries SLSA provenance and an SBOM. Its digests go on the GitHub
+  release as `image-digests.txt`, which self-update checks against.
 - **Release** runs CI, checks that the tag matches `package.json`, and creates the
   GitHub release with the changelog section and install commands.
 

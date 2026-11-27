@@ -31,6 +31,7 @@ export interface SelfUpdateRun {
   logs?: string;
   actor?: string;
   envFile?: string;
+  verification?: string;
 }
 
 export interface SelfUpdateInfo {
@@ -332,6 +333,7 @@ function LastRun({ run }: { run: SelfUpdateRun }) {
       </p>
       {!ok && run.message && <p className="mt-1 text-xs text-text-secondary">{run.message}</p>}
       {ok && run.envFile && <p className="mt-1 text-xs text-text-secondary">DEPLOYNOW_TAG was moved in {run.envFile}.</p>}
+      {ok && run.verification && <p className="mt-1 text-xs text-text-secondary">{run.verification}.</p>}
       {run.logs && (
         <details className="mt-2">
           <summary className="cursor-pointer text-xs text-text-muted">What the new version printed</summary>

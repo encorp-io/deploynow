@@ -66,13 +66,19 @@ RUN mkdir -p /tmp/nginx_client_body /tmp/nginx_proxy \
     chown -R nextjs:nodejs /tmp/nginx_client_body /tmp/nginx_proxy \
                            /tmp/nginx_fastcgi /tmp/nginx_uwsgi /tmp/nginx_scgi
 
+# The app's own files belong to root and are read-only for nextjs, so a bug that lets
+# someone write files as nextjs can't change the code that runs (or the updater, which
+# runs as root). nextjs writes only to /data, /tmp and .next/cache.
+
 # ── nginx config ──────────────────────────────────────────────────────────────
-COPY --chown=nextjs:nodejs nginx/nginx.conf /app/nginx/nginx.conf
+COPY nginx/nginx.conf /app/nginx/nginx.conf
 
 # ── Next.js standalone output ─────────────────────────────────────────────────
 COPY --from=builder /app/public ./public
-COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
-COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+COPY --from=builder /app/.next/standalone ./
+COPY --from=builder /app/.next/static ./.next/static
+# Next.js caches optimized images and fetches here
+RUN mkdir -p /app/.next/cache && chown nextjs:nodejs /app/.next/cache
 
 # ── Prisma runtime (migrations run at container start) ────────────────────────
 COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
@@ -83,11 +89,11 @@ COPY --from=builder /app/node_modules/prisma ./node_modules/prisma
 COPY --from=builder /app/node_modules/bcryptjs ./node_modules/bcryptjs
 
 # ── Self-updater (Settings → Updates → Update now) ──────────────────────────
-COPY --from=builder --chown=nextjs:nodejs /app/updater ./updater
+COPY --from=builder /app/updater ./updater
 
 # ── Entrypoint ────────────────────────────────────────────────────────────────
-COPY --chown=nextjs:nodejs docker-entrypoint.sh /app/docker-entrypoint.sh
-RUN chmod +x /app/docker-entrypoint.sh
+COPY docker-entrypoint.sh /app/docker-entrypoint.sh
+RUN chmod 755 /app/docker-entrypoint.sh
 
 # /data  — SQLite database + generated TLS cert (persisted volume)
 # /certs — optional mount point for user-provided real TLS certificate
