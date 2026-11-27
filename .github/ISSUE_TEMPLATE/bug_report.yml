@@ -29,7 +29,7 @@ body:
     attributes:
       label: DeployNow version
       description: Shown at the bottom of the sidebar and at /api/health.
-      placeholder: "2.0.0"
+      placeholder: "1.0.0"
     validations:
       required: true
   - type: dropdown
