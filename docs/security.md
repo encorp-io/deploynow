@@ -55,6 +55,10 @@ passwords) get stricter rules for everyone, owners included:
 | Logs | admin | operator |
 | Start, stop, remove | owner | admin |
 
+Container details mask label values that look like credentials (header middlewares
+such as the domain route's proxy secret, Traefik basic and digest auth users, and keys
+named like passwords, secrets, tokens or API keys). Docker and Traefik still see them.
+
 DeployNow finds its own container by the `io.deploynow.self` label (set by the image
 and `docker-compose.yml`), by its image name and by its container id.
 

@@ -48,7 +48,7 @@ vi.mock("@/lib/endpoints", async (orig) => ({
 }));
 
 import { signInAs, signOut } from "../helpers/apiAuthMock";
-import { containerKind, protectionAllows } from "@/lib/containerProtection";
+import { containerKind, protectionAllows, redactLabels, MASKED } from "@/lib/containerProtection";
 import { GET, POST, DELETE } from "@/app/api/endpoints/[id]/containers/[cid]/route";
 import { GET as LOGS } from "@/app/api/endpoints/[id]/containers/[cid]/logs/route";
 import { POST as EXEC } from "@/app/api/endpoints/[id]/containers/[cid]/exec/route";
@@ -162,6 +162,23 @@ describe("consoles", () => {
     const res = await EXEC(req("POST", { shell: "/bin/sh" }), p("f"));
     expect(res.status).toBe(200);
     expect((await res.json()).ticket).toBeTruthy();
+  });
+});
+
+describe("labels", () => {
+  it("masks credential-like label values, like the UI route's proxy secret", async () => {
+    add("h", "traefik/whoami", {
+      "deploynow.role": "ui-route",
+      "traefik.http.middlewares.deploynow-ui-trust.headers.customrequestheaders.X-DeployNow-Proxy": "a".repeat(64),
+      "traefik.http.middlewares.auth.basicauth.users": "admin:$apr1$hash",
+      "traefik.http.routers.deploynow-ui.rule": "Host(`deploy.example.com`)",
+    });
+    signInAs("owner");
+    const d = (await (await GET(req(), p("h"))).json()) as { labels: Record<string, string> };
+    expect(JSON.stringify(d)).not.toContain("a".repeat(64));
+    expect(JSON.stringify(d)).not.toContain("$apr1$");
+    expect(d.labels["traefik.http.routers.deploynow-ui.rule"]).toBe("Host(`deploy.example.com`)");
+    expect(redactLabels({ DB_PASSWORD: "x", "com.example.api-key": "y", plain: "z" })).toEqual({ DB_PASSWORD: MASKED, "com.example.api-key": MASKED, plain: "z" });
   });
 });
 

@@ -51,10 +51,24 @@ export function validatePlatformDomain(raw: unknown): string {
   return host;
 }
 
-/** Traefik labels for the UI route: HTTPS with Let's Encrypt, plain HTTP redirected. */
-export function platformRouteLabels(domains: string[], network: string, port = UI_HTTP_PORT): Record<string, string> {
+/** Request header Traefik adds so nginx trusts its X-Real-IP / X-Forwarded-Proto (see nginx.conf). */
+export const PROXY_AUTH_HEADER = "X-DeployNow-Proxy-Auth";
+
+/**
+ * Traefik labels for the UI route: HTTPS with Let's Encrypt, plain HTTP redirected.
+ * With `secret` (DEPLOYNOW_PROXY_SECRET from the entrypoint), the HTTPS router also
+ * adds it as PROXY_AUTH_HEADER, which is how nginx tells Traefik apart from an app
+ * container that dials :9080 directly with made-up forwarded headers.
+ */
+export function platformRouteLabels(domains: string[], network: string, port = UI_HTTP_PORT, secret = process.env.DEPLOYNOW_PROXY_SECRET ?? ""): Record<string, string> {
   const r = "deploynow-ui";
   const rule = domains.map((d) => `Host(\`${d}\`)`).join(" || ");
+  const trust: Record<string, string> = /^[0-9a-f]{32,}$/.test(secret)
+    ? {
+        [`traefik.http.routers.${r}.middlewares`]: `${r}-trust`,
+        [`traefik.http.middlewares.${r}-trust.headers.customrequestheaders.${PROXY_AUTH_HEADER}`]: secret,
+      }
+    : {};
   return {
     "traefik.enable": "true",
     "traefik.docker.network": network,
@@ -63,6 +77,7 @@ export function platformRouteLabels(domains: string[], network: string, port = U
     [`traefik.http.routers.${r}.entrypoints`]: "websecure",
     [`traefik.http.routers.${r}.tls.certresolver`]: "letsencrypt",
     [`traefik.http.routers.${r}.service`]: r,
+    ...trust,
     [`traefik.http.routers.${r}-http.rule`]: rule,
     [`traefik.http.routers.${r}-http.entrypoints`]: "web",
     [`traefik.http.routers.${r}-http.middlewares`]: `${r}-https`,

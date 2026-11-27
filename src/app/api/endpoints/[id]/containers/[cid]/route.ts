@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { endpointGate, dockerError, validRef, containerGuard } from "@/lib/endpointRoute";
 import { readJson, requireStepUp, type CurrentUser } from "@/lib/apiAuth";
 import { can } from "@/lib/rbac";
-import { appSecretsAllowed, protectionAllows, type ContainerKind } from "@/lib/containerProtection";
+import { appSecretsAllowed, protectionAllows, redactLabels, type ContainerKind } from "@/lib/containerProtection";
 import { audit, clientIp } from "@/lib/audit";
 
 type Params = { params: Promise<{ id: string; cid: string }> };
@@ -81,7 +81,7 @@ export async function GET(_req: Request, { params }: Params) {
         ip: n.IPAddress,
         aliases: n.Aliases ?? [],
       })),
-      labels,
+      labels: redactLabels(labels),
     });
   } catch (err) {
     return dockerError(err);

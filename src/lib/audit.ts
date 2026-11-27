@@ -47,7 +47,9 @@ export async function audit(input: AuditInput): Promise<void> {
 
 /** Best-effort client IP behind nginx. */
 export function clientIp(request: Request | { headers: Headers }): string {
-  // nginx sets X-Real-IP from the TCP peer, so it can't be spoofed by the client.
+  // nginx sets X-Real-IP: from the TCP peer on :9444, and on :9080 from Traefik only
+  // when its X-DeployNow-Proxy-Auth secret matches (nginx/nginx.conf), so clients
+  // and other containers on the proxy network can't spoof it.
   const real = request.headers.get("x-real-ip");
   if (real) return real.trim().slice(0, 64);
   const fwd = request.headers.get("x-forwarded-for");

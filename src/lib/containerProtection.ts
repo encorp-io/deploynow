@@ -95,3 +95,16 @@ export async function appSecretsAllowed(subject: Subject, labels: Record<string,
   if (!app) return normalizeRole(subject.role) === "owner";
   return can(subject, "app.secrets", { projectId: app.environment.projectId });
 }
+
+// Labels can carry credentials too: the UI route's proxy secret header, Traefik
+// basic/digest auth users, or anything a compose file names like a secret.
+const SECRET_LABEL_RE = /customrequestheaders|customresponseheaders|basicauth\.users|digestauth\.users|passw(or)?d|secret|token|api[-_.]?key|private[-_.]?key|credential/i;
+
+export const MASKED = "••••••";
+
+/** Labels with credential-like values masked. Traefik still reads the real ones from Docker. */
+export function redactLabels(labels: Record<string, string> | null | undefined): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(labels ?? {})) out[k] = v && SECRET_LABEL_RE.test(k) ? MASKED : v;
+  return out;
+}
