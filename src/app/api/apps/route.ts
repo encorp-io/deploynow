@@ -8,6 +8,7 @@ import { ConfigError, validateAppInput } from "@/lib/apps/config";
 import { validateAppExtras } from "@/lib/apps/extras";
 import { EnvError } from "@/lib/apps/env";
 import { encryptSecret } from "@/lib/secretsCrypto";
+import { canPlaceOn, PLACE_DENIED } from "@/lib/apps/placement";
 
 export async function POST(request: Request) {
   const body = await readJson(request);
@@ -20,6 +21,7 @@ export async function POST(request: Request) {
   const endpointId = String(body.endpointId || env.defaultEndpointId || "");
   const endpoint = ID_RE.test(endpointId) ? await prisma.endpoint.findUnique({ where: { id: endpointId } }) : null;
   if (!endpoint) return NextResponse.json({ error: "Choose the endpoint this app runs on" }, { status: 400 });
+  if (!canPlaceOn(gate.user, endpointId)) return NextResponse.json({ error: PLACE_DENIED }, { status: 403 });
 
   let input;
   try {

@@ -74,7 +74,7 @@ export async function PATCH(request: Request, { params }: Params) {
   let input;
   try {
     input = validateAppInput(body, app);
-    input = { ...input, ...(await validateAppExtras(body, input.sourceType, app.endpointId, { actor: user, projectId: app.environment.projectId }, app)) };
+    input = { ...input, ...(await validateAppExtras(body, input.sourceType, app.endpointId, { actor: user, projectId: app.environment.projectId, appId: app.id }, app)) };
   } catch (err) {
     if (err instanceof ConfigError || err instanceof EnvError) return NextResponse.json({ error: err.message }, { status: 400 });
     throw err;
