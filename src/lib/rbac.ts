@@ -35,9 +35,10 @@ export const PERMISSIONS = {
   "endpoint.view": { min: "viewer", scoped: true },
   "container.inspect": { min: "viewer", scoped: true },
   "container.logs": { min: "operator", scoped: true },
-  "container.env": { min: "operator", scoped: true },
+  // Env values and consoles expose secrets (a console can print the env), so admins only
+  "container.env": { min: "admin", scoped: true },
   "container.control": { min: "operator", scoped: true },
-  "container.exec": { min: "operator", scoped: true },
+  "container.exec": { min: "admin", scoped: true },
   "service.update": { min: "operator", scoped: true },
   "container.remove": { min: "admin", scoped: true },
   "image.remove": { min: "admin", scoped: true },

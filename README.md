@@ -108,7 +108,7 @@ Then:
 
 Ports: `9444` for the dashboard and `8444` for agents. You can leave 8444 closed if you don't use agents.
 
-> Mounting the Docker socket gives root on that machine. Anyone who is an admin in DeployNow, or an operator with console access, can act as root on every endpoint they can reach. Keep 2FA on. See [docs/security.md](docs/security.md).
+> Mounting the Docker socket gives root on that machine. Anyone who is an admin in DeployNow can act as root on every endpoint they can reach. Keep 2FA on. See [docs/security.md](docs/security.md).
 
 ## Documentation
 

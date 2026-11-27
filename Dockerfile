@@ -36,6 +36,8 @@ RUN node scripts/build-updater.cjs /app/updater
 
 # ─── Stage 3: runner ──────────────────────────────────────────────────────────
 FROM node:22-alpine@sha256:9bef0ef1e268f60627da9ba7d7605e8831d5b56ad07487d24d1aa386336d1944 AS runner
+# Marks DeployNow's own container: its env is never shown and consoles are refused (src/lib/containerProtection.ts)
+LABEL io.deploynow.self="true"
 WORKDIR /app
 
 # openssl  — needed for self-signed cert generation at startup

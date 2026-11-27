@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import type { Readable } from "stream";
-import { endpointGate, dockerError, validRef } from "@/lib/endpointRoute";
+import { endpointGate, dockerError, validRef, containerGuard } from "@/lib/endpointRoute";
 import { demux, logBufferToText, isMultiplexed } from "@/lib/docker/streams";
 
 type Params = { params: Promise<{ id: string; cid: string }> };
@@ -21,6 +21,16 @@ export async function GET(request: Request, { params }: Params) {
   const follow = url.searchParams.get("follow") === "1";
   const container = gate.ctx.docker.getContainer(cid);
 
+  let tty = false;
+  try {
+    const info = await container.inspect();
+    const guard = containerGuard(gate.ctx.user, id, info, "logs");
+    if (guard.response) return guard.response;
+    tty = info.Config.Tty;
+  } catch (err) {
+    return dockerError(err);
+  }
+
   if (!follow) {
     try {
       const raw = (await container.logs({ stdout: true, stderr: true, tail, timestamps, follow: false })) as unknown as Buffer;
@@ -30,10 +40,8 @@ export async function GET(request: Request, { params }: Params) {
     }
   }
 
-  let tty = false;
   let stream: Readable;
   try {
-    tty = (await container.inspect()).Config.Tty;
     stream = (await container.logs({ stdout: true, stderr: true, tail, timestamps, follow: true })) as unknown as Readable;
   } catch (err) {
     return dockerError(err);

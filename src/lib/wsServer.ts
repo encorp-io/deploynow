@@ -12,6 +12,7 @@ import type { IncomingMessage } from "http";
 import type { Duplex } from "stream";
 import { WebSocketServer, type WebSocket } from "ws";
 import { redeemExecTicket, ALLOWED_SHELLS } from "./execTicket";
+import { containerKind, protectionAllows } from "./containerProtection";
 import { prisma } from "./prisma";
 import { can } from "./rbac";
 import { dockerFor } from "./endpoints";
@@ -69,6 +70,12 @@ async function handleConnection(ws: WebSocket, req: IncomingMessage) {
 
   try {
     const container = dockerFor(endpoint).getContainer(ticket.containerId);
+    // The ticket was issued for this container; check its kind again in case it was replaced since
+    const info = await container.inspect();
+    if (info.Id !== ticket.containerId || !protectionAllows({ role: user.role, bindings: user.roleBindings }, endpoint.id, containerKind(info), "exec")) {
+      ws.close(4403, "Forbidden");
+      return;
+    }
     const exec = await container.exec({
       Cmd: [ticket.shell],
       AttachStdin: true,
