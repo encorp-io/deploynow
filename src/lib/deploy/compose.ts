@@ -162,3 +162,18 @@ export function matchRepoDigest(image: string, repoDigests: string[]): string {
   const want = strip(imageRepo(image));
   return repoDigests.find((d) => strip(d.split("@")[0]) === want) ?? "";
 }
+
+/** ${VAR}, ${VAR:-default}, ${VAR-default}, $VAR and $$, as compose interpolates them. Unknown variables → null. */
+export function interpolate(text: string, env: Record<string, string | undefined>): string | null {
+  let missing = false;
+  const out = text.replace(/\$\$|\$\{([A-Za-z_][A-Za-z0-9_]*)(?:(:?-)([^}]*))?\}|\$([A-Za-z_][A-Za-z0-9_]*)/g, (m, braced, op, def, bare) => {
+    if (m === "$$") return "$";
+    const key = braced ?? bare;
+    const v = env[key];
+    if (op === ":-") return v ? v : def;
+    if (op === "-") return v !== undefined ? v : def;
+    if (v === undefined) missing = true;
+    return v ?? "";
+  });
+  return missing ? null : out;
+}

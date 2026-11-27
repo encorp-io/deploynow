@@ -92,9 +92,11 @@ describe.skipIf(!up)("compose auto-update with rollback (real Docker)", () => {
 
     const ep = await prisma.endpoint.create({ data: { name: "local", type: "socket", host: SOCKET, status: "online" } });
     const project = await prisma.project.create({ data: { name: `IT ${tag}`, slug: tag, environments: { create: { name: "production", slug: "production" } } }, include: { environments: true } });
-    const compose = `services:\n  web:\n    image: ${IMAGE}\n`;
+    // The image comes from an env var, as many compose files write it
+    const compose = "services:\n  web:\n    image: ${WEB_IMAGE}\n";
+    const env = JSON.stringify([{ key: "WEB_IMAGE", kind: "plain", value: IMAGE }]);
     const app = await prisma.application.create({
-      data: { environmentId: project.environments[0].id, endpointId: ep.id, name: "web", slug: `${tag}-web`, sourceType: "compose", composeInline: compose, restartPolicy: "no", autoUpdate: true },
+      data: { environmentId: project.environments[0].id, endpointId: ep.id, name: "web", slug: `${tag}-web`, sourceType: "compose", composeInline: compose, env, restartPolicy: "no", autoUpdate: true },
     });
     appId = app.id;
 
@@ -131,7 +133,7 @@ describe.skipIf(!up)("compose auto-update with rollback (real Docker)", () => {
     const rb = await runDeployment(run.rollbackDeploymentId, { healthTimeoutMs: 30_000 });
     expect(rb.status).toBe("success");
     // It ran v1 by digest, but records the tag so auto-update keeps following it
-    expect(rb.renderedCompose).toContain(`image: ${IMAGE}`);
+    expect(rb.renderedCompose).toContain("image: ${WEB_IMAGE}");
     expect(JSON.parse(rb.serviceImages)).toEqual({ web: `${REG}/${tag}/web@${v1}` });
     await au.advanceRuns();
     expect((await prisma.autoUpdateRun.findUniqueOrThrow({ where: { id: run.id } })).status).toBe("rolled-back");

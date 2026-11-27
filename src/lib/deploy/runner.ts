@@ -31,7 +31,7 @@ import { parsePorts, parseVolumes, splitCommand, traefikLabels } from "../apps/c
 import { checkout } from "./git";
 import { createLogger, type DeployLogger } from "./log";
 import { deployContainer, oldContainers } from "./container";
-import { imageRepo, matchRepoDigest, pinImages, renderCompose, stripBuild } from "./compose";
+import { imageRepo, interpolate, matchRepoDigest, pinImages, renderCompose, stripBuild } from "./compose";
 import { ensureNetwork } from "./proxy";
 
 type FullApp = Application & {
@@ -100,7 +100,7 @@ async function pruneImages(docker: Docker, app: FullApp, log: DeployLogger, extr
 }
 
 /** service → image@sha256:… for the registry images a compose deployment runs. */
-async function serviceDigests(docker: Docker, renderedYaml: string, list: Docker.ContainerInfo[]): Promise<Record<string, string>> {
+async function serviceDigests(docker: Docker, renderedYaml: string, list: Docker.ContainerInfo[], env: Record<string, string | undefined>): Promise<Record<string, string>> {
   const out: Record<string, string> = {};
   let services: Record<string, { image?: unknown; build?: unknown }> = {};
   try {
@@ -112,7 +112,9 @@ async function serviceDigests(docker: Docker, renderedYaml: string, list: Docker
     const svc = c.Labels?.["com.docker.compose.service"];
     const def = svc ? services[svc] : undefined;
     if (!svc || out[svc] || !def || def.build !== undefined || typeof def.image !== "string") continue;
-    const configured = def.image;
+    // ${IMAGE} / ${REPO}:${TAG}: what compose resolved it to
+    const configured = def.image.includes("$") ? interpolate(def.image, env) : def.image;
+    if (!configured) continue;
     if (configured.startsWith("dn/")) continue;
     if (configured.includes("@sha256:")) {
       out[svc] = configured;
@@ -341,7 +343,7 @@ export async function runDeployment(deploymentId: string, ctx: RunContext = {}):
       });
       const list = await docker.listContainers({ all: true, filters: { label: [`com.docker.compose.project=${app.slug}`] } });
       result.containerIds = list.map((c) => c.Id).join(",");
-      result.serviceImages = JSON.stringify(await serviceDigests(docker, rendered, list));
+      result.serviceImages = JSON.stringify(await serviceDigests(docker, rendered, list, envMap));
     }
 
     await pruneImages(docker, app, log, pushRepo);

@@ -59,6 +59,7 @@ const RUN_LABELS: Record<string, [string, "success" | "warning" | "danger" | "ac
   "rollback-failed": ["Rollback failed", "danger"],
   failed: ["Failed", "danger"],
   cancelled: ["Cancelled", "muted"],
+  superseded: ["Replaced", "muted"],
 };
 
 function watches(sourceType: string): string {

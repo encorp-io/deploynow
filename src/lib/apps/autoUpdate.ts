@@ -31,6 +31,7 @@ import { BRANCH_RE, gitEnv } from "../deploy/git";
 import { runCommand } from "../docker/cliBridge";
 import { decryptSecret } from "../secretsCrypto";
 import { readStoredEnv, resolveEnv } from "./env";
+import { interpolate } from "../deploy/compose";
 import { ConfigError } from "./config";
 import { audit } from "../audit";
 import { notify } from "../notify";
@@ -41,6 +42,7 @@ import { publicBaseUrl } from "../publicOrigin";
 export const CHECK_EVERY_MINUTES = [1, 5, 15, 30, 60, 360, 1440] as const;
 /** How long the new containers must stay up after the deployment before the update counts as healthy. */
 export const VERIFY_MS = 60_000;
+const RECENT_RESTART_MS = 30_000;
 const TIME_RE = /^([01]\d|2[0-3]):([0-5]\d)$/;
 
 export interface AutoUpdateSettings {
@@ -143,20 +145,7 @@ export function serverTimezone(): string {
 
 // ─── Finding updates ─────────────────────────────────────────────────────────
 
-/** ${VAR}, ${VAR:-default}, ${VAR-default}, $VAR and $$, as compose interpolates them. Unknown variables → null. */
-export function interpolate(text: string, env: Record<string, string | undefined>): string | null {
-  let missing = false;
-  const out = text.replace(/\$\$|\$\{([A-Za-z_][A-Za-z0-9_]*)(?:(:?-)([^}]*))?\}|\$([A-Za-z_][A-Za-z0-9_]*)/g, (m, braced, op, def, bare) => {
-    if (m === "$$") return "$";
-    const key = braced ?? bare;
-    const v = env[key];
-    if (op === ":-") return v ? v : def;
-    if (op === "-") return v !== undefined ? v : def;
-    if (v === undefined) missing = true;
-    return v ?? "";
-  });
-  return missing ? null : out;
-}
+export { interpolate } from "../deploy/compose";
 
 export interface ComposeImage {
   service: string;
@@ -410,6 +399,7 @@ export interface Verifier {
 
 /** The deployment's containers must be running (or have exited cleanly), not restarting, and healthy if they have a health check. */
 export async function containersHealthy(app: CheckApp, deployment: Deployment): Promise<string | null> {
+  const now = Date.now();
   const ids = deployment.containerIds.split(",").filter(Boolean);
   if (!ids.length) return null;
   const docker = dockerFor(app.endpoint);
@@ -422,7 +412,9 @@ export async function containersHealthy(app: CheckApp, deployment: Deployment): 
     }
     const name = info.Config?.Labels?.["com.docker.compose.service"] || info.Name?.replace(/^\//, "") || id.slice(0, 12);
     const st = info.State;
-    if (st.Restarting || (info.RestartCount ?? 0) > 0) problems.push(`${name} keeps restarting`);
+    // A restart during start-up is fine if it has stayed up since; one in the last 30 seconds isn't
+    const upFor = st.StartedAt ? now - new Date(st.StartedAt).getTime() : Infinity;
+    if (st.Restarting || ((info.RestartCount ?? 0) > 0 && st.Running && upFor < RECENT_RESTART_MS)) problems.push(`${name} keeps restarting`);
     else if (st.Health?.Status === "unhealthy") problems.push(`${name} is unhealthy`);
     else if (!st.Running && st.ExitCode !== 0) problems.push(`${name} exited with code ${st.ExitCode}`);
     else if (!st.Running && st.Status !== "exited") problems.push(`${name} is ${st.Status}`);
@@ -439,6 +431,7 @@ async function finish(run: AutoUpdateRun, app: CheckApp, status: string, error =
     "rollback-failed": "failed, and the rollback failed too",
     failed: "failed; the previous version kept running",
     cancelled: "was cancelled",
+    superseded: "was replaced by a newer deployment",
   };
   await audit({
     action: "app.auto_update",
@@ -449,7 +442,7 @@ async function finish(run: AutoUpdateRun, app: CheckApp, status: string, error =
     endpointId: app.endpointId,
     details: [run.summary, error].filter(Boolean).join(" — "),
   });
-  if (status === "cancelled") return;
+  if (status === "cancelled" || status === "superseded") return;
   await notify({
     event: ok ? "autoupdate.success" : "autoupdate.failure",
     ok,
@@ -458,6 +451,11 @@ async function finish(run: AutoUpdateRun, app: CheckApp, status: string, error =
     ...appLink(app.id),
     fields: { Endpoint: app.endpoint.name, Changes: run.summary },
   });
+}
+
+/** A deployment other than the update and the one before it is current: a person (or a push) deployed meanwhile. */
+function superseded(app: CheckApp, run: AutoUpdateRun): boolean {
+  return !!app.currentDeploymentId && app.currentDeploymentId !== run.deploymentId && app.currentDeploymentId !== run.previousDeploymentId;
 }
 
 async function startRollback(run: AutoUpdateRun, app: CheckApp, why: string) {
@@ -499,6 +497,8 @@ export async function advanceRuns(opts: { now?: Date; verifier?: Verifier; verif
         if (dep.status === "queued" || dep.status === "running") continue;
         if (dep.status === "cancelled") {
           await finish(run, app, "cancelled", "The deployment was cancelled");
+        } else if (dep.status === "failed" && superseded(app, run)) {
+          await finish(run, app, "superseded", "A newer deployment replaced it; not rolled back");
         } else if (dep.status === "failed") {
           // Image and Dockerfile apps keep the old container when the new one doesn't come up;
           // compose may have replaced some services already, so roll those back
@@ -512,6 +512,11 @@ export async function advanceRuns(opts: { now?: Date; verifier?: Verifier; verif
       }
       // verifying
       if (run.verifyAfter && run.verifyAfter > now) continue;
+      // Someone deployed again in the meantime: their deployment is what runs now, don't undo it
+      if (app.currentDeploymentId !== run.deploymentId) {
+        await finish(run, app, "superseded", "A newer deployment replaced it before the health check");
+        continue;
+      }
       const problem = await verify(app, dep);
       if (!problem) await finish(run, app, "success");
       else await startRollback(run, app, `Unhealthy after the update: ${problem}`);

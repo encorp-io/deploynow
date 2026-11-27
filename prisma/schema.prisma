@@ -406,7 +406,7 @@ model AutoUpdateRun {
   deploymentId         String      @default("")
   previousDeploymentId String      @default("") // what ran before: the rollback target
   rollbackDeploymentId String      @default("")
-  // deploying, verifying, success, failed, rolling-back, rolled-back, rollback-failed, cancelled
+  // deploying, verifying, success, failed, superseded, rolling-back, rolled-back, rollback-failed, cancelled
   status               String      @default("deploying")
   error                String      @default("")
   verifyAfter          DateTime?

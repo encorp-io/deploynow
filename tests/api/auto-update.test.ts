@@ -30,7 +30,7 @@ vi.mock("@/lib/registryAuth", async (orig) => ({ ...(await orig<typeof import("@
 import { signInAs, signOut } from "../helpers/apiAuthMock";
 import { notify } from "@/lib/notify";
 import { prisma } from "@/lib/prisma";
-import { advanceRuns, checkApp, runAutoUpdates, type Finder } from "@/lib/apps/autoUpdate";
+import { advanceRuns, checkApp, containersHealthy, runAutoUpdates, type Finder } from "@/lib/apps/autoUpdate";
 import * as appRoute from "@/app/api/apps/[id]/route";
 import * as autoRoute from "@/app/api/apps/[id]/auto-update/route";
 
@@ -206,6 +206,56 @@ describe("compose apps", () => {
     const run = await prisma.autoUpdateRun.findFirstOrThrow({ where: { applicationId: app.id } });
     expect(run.status).toBe("failed");
     expect(run.error).toMatch(/rollback is off/);
+  });
+});
+
+describe("deployments in between", () => {
+  it("doesn't roll back over a newer deployment made during verification", async () => {
+    const { app } = await makeApp({ image: "nginx:latest" }, { imageDigest: D("1") });
+    await checkApp(app.id, { finder: finder(SHA_NEW, { "nginx:latest": D("2") }) });
+    const dep = await prisma.deployment.findFirstOrThrow({ where: { applicationId: app.id, trigger: "auto-update" } });
+    await finishDeployment(dep.id, "success");
+    const verifier = { check: vi.fn(async () => "container gone") };
+    await advanceRuns({ verifier });
+    // A manual deploy replaces it before the health check
+    const manual = await prisma.deployment.create({ data: { applicationId: app.id, trigger: "manual", status: "success", finishedAt: new Date() } });
+    await prisma.application.update({ where: { id: app.id }, data: { currentDeploymentId: manual.id } });
+    await advanceRuns({ verifier });
+    const run = await prisma.autoUpdateRun.findFirstOrThrow({ where: { applicationId: app.id } });
+    expect(run.status).toBe("superseded");
+    expect(verifier.check).not.toHaveBeenCalled();
+    expect(await prisma.deployment.count({ where: { applicationId: app.id, trigger: "rollback" } })).toBe(0);
+  });
+
+  it("doesn't roll back a failed compose update when a newer deployment is current", async () => {
+    docker.listContainers.mockResolvedValue([{ Id: "c1", ImageID: D("5"), Labels: { "com.docker.compose.service": "web" } }]);
+    const { app } = await makeApp({ sourceType: "compose", composeInline: "x" }, { renderedCompose: "services:\n  web:\n    image: nginx:latest\n" });
+    await checkApp(app.id, { finder: finder(SHA_NEW, { "nginx:latest": D("9") }) });
+    const dep = await prisma.deployment.findFirstOrThrow({ where: { applicationId: app.id, trigger: "auto-update" } });
+    await finishDeployment(dep.id, "failed");
+    const push = await prisma.deployment.create({ data: { applicationId: app.id, trigger: "push", status: "success", finishedAt: new Date() } });
+    await prisma.application.update({ where: { id: app.id }, data: { currentDeploymentId: push.id } });
+    await advanceRuns();
+    expect((await prisma.autoUpdateRun.findFirstOrThrow({ where: { applicationId: app.id } })).status).toBe("superseded");
+  });
+});
+
+describe("containersHealthy", () => {
+  const inspect = (state: Record<string, unknown>, restarts = 0) => ({ inspect: async () => ({ Name: "/web", Config: { Labels: {} }, RestartCount: restarts, State: { Running: true, Status: "running", ExitCode: 0, ...state } }) });
+  const ago = (s: number) => new Date(Date.now() - s * 1000).toISOString();
+  const check = (c: ReturnType<typeof inspect>) => {
+    docker.getContainer.mockReturnValue(c);
+    return containersHealthy({ endpoint: {} } as never, { containerIds: "c1" } as never);
+  };
+  it("accepts a container that restarted once at start-up and stayed up", async () => {
+    expect(await check(inspect({ StartedAt: ago(50) }, 1))).toBeNull();
+  });
+  it("flags a container that just restarted, is restarting, unhealthy or exited with an error", async () => {
+    expect(await check(inspect({ StartedAt: ago(5) }, 2))).toMatch(/keeps restarting/);
+    expect(await check(inspect({ Restarting: true }))).toMatch(/keeps restarting/);
+    expect(await check(inspect({ Health: { Status: "unhealthy" } }))).toMatch(/unhealthy/);
+    expect(await check(inspect({ Running: false, Status: "exited", ExitCode: 1 }))).toMatch(/code 1/);
+    expect(await check(inspect({ Running: false, Status: "exited", ExitCode: 0 }))).toBeNull();
   });
 });
 
