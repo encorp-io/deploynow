@@ -9,6 +9,7 @@ import { checkComposeFiles, checkComposeRuntime, ComposePolicyError } from "../d
 
 export const SOURCE_TYPES = ["image", "git-dockerfile", "git-compose", "compose"] as const;
 export type SourceType = (typeof SOURCE_TYPES)[number];
+/** manual or on-push (GitHub webhook). "auto-digest" is still accepted: it now turns on auto-update (lib/apps/autoUpdate.ts). */
 export const UPDATE_POLICIES = ["manual", "auto-digest", "on-push"] as const;
 export const RESTART_POLICIES = ["no", "always", "unless-stopped", "on-failure"] as const;
 
@@ -201,7 +202,7 @@ export function validateAppInput(body: Record<string, unknown>, existing?: Exist
       throw new ConfigError("Enter an image such as ghcr.io/org/app:latest");
     }
     out.image = image;
-    if (out.updatePolicy === "on-push") throw new ConfigError("Image apps update on a new digest, not on a Git push");
+    if (out.updatePolicy === "on-push") throw new ConfigError("Image apps can't deploy on a Git push; turn on auto-update to follow the tag");
   }
 
   if (sourceType === "git-dockerfile" || sourceType === "git-compose") {
@@ -218,14 +219,13 @@ export function validateAppInput(body: Record<string, unknown>, existing?: Exist
     } catch (err) {
       throw err instanceof ConfigError ? err : new ConfigError((err as Error).message);
     }
-    if (out.updatePolicy === "auto-digest") throw new ConfigError("Git apps update on push, not on a new image digest");
   }
 
   if (sourceType === "compose") {
     out.composeInline = String(pick("composeInline", ""));
     if (!out.composeInline.trim()) throw new ConfigError("Paste the docker-compose.yml");
     if (out.composeInline.length > 200_000) throw new ConfigError("The compose file is too large");
-    if (out.updatePolicy !== "manual") throw new ConfigError("Inline compose apps are deployed by hand");
+    if (out.updatePolicy === "on-push") throw new ConfigError("Compose file apps have no Git repository to push to; turn on auto-update to follow their images");
     // Say so on save, not only on the next deploy: host access and Traefik labels (see deploy/composePolicy.ts)
     let doc: unknown = null;
     try {
@@ -241,6 +241,9 @@ export function validateAppInput(body: Record<string, unknown>, existing?: Exist
       throw err;
     }
   }
+
+  // The old auto-digest policy is stored as auto-update (validateAutoUpdateInput turns it on)
+  if (out.updatePolicy === "auto-digest") out.updatePolicy = "manual";
 
   if (sourceType === "git-compose" || sourceType === "compose") {
     if (JSON.parse(out.ports).length || JSON.parse(out.volumes).length) {

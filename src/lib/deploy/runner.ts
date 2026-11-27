@@ -10,10 +10,10 @@
  *   record    digest, commit, env snapshot, containers; notify
  */
 import fs from "fs";
-import YAML from "yaml";
 import os from "os";
 import path from "path";
 import type Docker from "dockerode";
+import YAML from "yaml";
 import type { Application, Deployment, Domain, Endpoint, Environment, Project } from "@prisma/client";
 import { prisma } from "../prisma";
 import { dockerFor, toConnection } from "../endpoints";
@@ -31,7 +31,7 @@ import { parsePorts, parseVolumes, splitCommand, traefikLabels } from "../apps/c
 import { checkout } from "./git";
 import { createLogger, type DeployLogger } from "./log";
 import { deployContainer, oldContainers } from "./container";
-import { renderCompose, rollbackSource } from "./compose";
+import { imageRepo, interpolate, matchRepoDigest, pinImages, renderCompose, rollbackSource } from "./compose";
 import { checkComposeFiles, checkComposeRuntime } from "./composePolicy";
 import { ensureNetwork } from "./proxy";
 
@@ -113,6 +113,34 @@ async function pruneImages(docker: Docker, app: FullApp, log: DeployLogger, extr
   } catch {
     /* best effort */
   }
+}
+
+/** service → image@sha256:… for the registry images a compose deployment runs. */
+async function serviceDigests(docker: Docker, renderedYaml: string, list: Docker.ContainerInfo[], env: Record<string, string | undefined>): Promise<Record<string, string>> {
+  const out: Record<string, string> = {};
+  let services: Record<string, { image?: unknown; build?: unknown }> = {};
+  try {
+    services = (YAML.parse(renderedYaml)?.services ?? {}) as typeof services;
+  } catch {
+    return out;
+  }
+  for (const c of list) {
+    const svc = c.Labels?.["com.docker.compose.service"];
+    const def = svc ? services[svc] : undefined;
+    if (!svc || out[svc] || !def || def.build !== undefined || typeof def.image !== "string") continue;
+    // ${IMAGE} / ${REPO}:${TAG}: what compose resolved it to
+    const configured = def.image.includes("$") ? interpolate(def.image, env) : def.image;
+    if (!configured) continue;
+    if (configured.startsWith("dn/")) continue;
+    if (configured.includes("@sha256:")) {
+      out[svc] = configured;
+      continue;
+    }
+    const info = await docker.getImage(c.ImageID).inspect().catch(() => null);
+    const match = matchRepoDigest(configured, info?.RepoDigests ?? []);
+    if (match) out[svc] = `${imageRepo(configured)}@${match.split("@")[1]}`;
+  }
+  return out;
 }
 
 export interface RunContext {
@@ -291,10 +319,24 @@ export async function runDeployment(deploymentId: string, ctx: RunContext = {}):
         domains: app.domains,
         proxyNetwork,
       });
-      const rendered = render.yaml;
+      let rendered = render.yaml;
+      // What's recorded keeps the tags, so auto-update can still follow them after a rollback
+      const recorded = rendered;
+      if (rollbackOf) {
+        // Registry images: the exact digests that deployment ran, not what the tag points to now
+        let pins: Record<string, string> = {};
+        try {
+          pins = rollbackOf.serviceImages ? JSON.parse(rollbackOf.serviceImages) : {};
+        } catch {
+          /* older deployment */
+        }
+        const pinned = pinImages(rendered, pins);
+        rendered = pinned.yaml;
+        if (pinned.pinned) log(`Using the image digests deployment ${rollbackOf.id.slice(-8)} ran (${pinned.pinned} service${pinned.pinned === 1 ? "" : "s"})`);
+      }
       // Files compose would read must be the app's own, not DeployNow's (see composePolicy.ts)
       checkComposeFiles(YAML.parse(rendered), app.sourceType === "git-compose" ? repoDir : workDir, composeDir);
-      result.renderedCompose = rendered;
+      result.renderedCompose = recorded;
       const file = path.join(composeDir, ".deploynow-compose.yml");
       fs.writeFileSync(file, rendered, { mode: 0o600 });
       // Only the repository's own .env while building; the app's values go in right before up
@@ -334,6 +376,7 @@ export async function runDeployment(deploymentId: string, ctx: RunContext = {}):
       });
       const list = await docker.listContainers({ all: true, filters: { label: [`com.docker.compose.project=${app.slug}`] } });
       result.containerIds = list.map((c) => c.Id).join(",");
+      result.serviceImages = JSON.stringify(await serviceDigests(docker, rendered, list, envMap));
     }
 
     await pruneImages(docker, app, log, pushRepo);
@@ -358,7 +401,7 @@ export async function runDeployment(deploymentId: string, ctx: RunContext = {}):
     data: ok ? { status: "running", currentDeploymentId: dep.id } : { status: app.currentDeploymentId ? "running" : "failed" },
   });
 
-  const verb = dep.trigger === "rollback" ? "Rollback" : "Deploy";
+  const verb = dep.trigger === "rollback" ? "Rollback" : dep.trigger === "auto-update" ? "Auto-update" : "Deploy";
   await audit({
     actor: dep.startedById ? { id: dep.startedById, email: dep.startedByEmail } : null,
     action: dep.trigger === "rollback" ? "app.rollback" : "app.deploy",
