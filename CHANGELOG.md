@@ -9,10 +9,18 @@ versions fix bugs. Every version upgrades the database by itself.
 ## [Unreleased]
 
 ### Fixed
+- **Compose env vars:** an app's environment variables only filled `${NAME}` in the compose
+  file, so a service with `env_file: .env` got none of them. They are now also written to
+  `.env` next to the compose file at deploy time (a `.env` from the repository is kept, and
+  the app's values win).
 - **Passkeys:** about 1 in 110 passkey sign-ins failed with "The passkey couldn't be
   verified". SimpleWebAuthn is upgraded to v13, which reads every valid signature.
 
 ### Added
+- **Import .env:** upload, drop or paste a .env file on an app's Environment tab. It reads
+  comments, quotes, multi-line values and `export`, previews what changes, lets you merge
+  (file wins), add new only or replace all, imports password and token names as secrets,
+  and saves right away. The tab also shows when there are unsaved changes.
 - **Forms and dialogs:** redesigned dropdowns (themed menu with keyboard support and a
   filter for long lists), text fields, checkboxes, radios and toggle switches, and
   dialogs (lit edge, icon header, focus kept inside, bottom sheet on phones).
