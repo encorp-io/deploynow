@@ -3,27 +3,40 @@
 import { clsx } from "clsx";
 import { useId } from "react";
 
-/** The DeployNow mark (Ascend): a launch chevron on the encorp.ai gradient tile. */
+/** The DeployNow mark (Boost): three rising chevrons on a dark tile with the encorp.ai gradient. */
 export function LogoMark({ className }: { className?: string }) {
   const id = useId().replace(/:/g, "");
   return (
     <svg viewBox="0 0 64 64" fill="none" aria-hidden="true" className={className}>
       <defs>
-        <linearGradient id={`${id}bg`} x1="6" y1="4" x2="58" y2="62" gradientUnits="userSpaceOnUse">
+        <linearGradient id={`${id}edge`} x1="6" y1="4" x2="58" y2="62" gradientUnits="userSpaceOnUse">
           <stop stopColor="#5FCEF9" />
           <stop offset=".5" stopColor="#1D9CFF" />
           <stop offset="1" stopColor="#2E4FE0" />
         </linearGradient>
-        <linearGradient id={`${id}sh`} x1="32" y1="2" x2="32" y2="34" gradientUnits="userSpaceOnUse">
-          <stop stopColor="#fff" stopOpacity=".35" />
-          <stop offset="1" stopColor="#fff" stopOpacity="0" />
+        <linearGradient id={`${id}chev`} x1="32" y1="12" x2="32" y2="54" gradientUnits="userSpaceOnUse">
+          <stop stopColor="#BDEBFF" />
+          <stop offset=".45" stopColor="#1D9CFF" />
+          <stop offset="1" stopColor="#2E4FE0" />
         </linearGradient>
       </defs>
-      <rect x="2" y="2" width="60" height="60" rx="16" fill={`url(#${id}bg)`} />
-      <rect x="2" y="2" width="60" height="60" rx="16" fill={`url(#${id}sh)`} />
-      <rect x="2.5" y="2.5" width="59" height="59" rx="15.5" stroke="#fff" strokeOpacity=".25" />
-      <path d="M20 35 32 23l12 12" stroke="#fff" strokeWidth="6" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M23 45h18" stroke="#fff" strokeOpacity=".6" strokeWidth="6" strokeLinecap="round" />
+      <rect x="2" y="2" width="60" height="60" rx="16" fill="#0B1020" />
+      <rect x="2.5" y="2.5" width="59" height="59" rx="15.5" stroke={`url(#${id}edge)`} strokeOpacity=".6" />
+      {[
+        ["M18 27 32 14l14 13", 1],
+        ["M18 39 32 26l14 13", 0.78],
+        ["M18 51 32 38l14 13", 0.5],
+      ].map(([d, o]) => (
+        <path
+          key={d}
+          d={d as string}
+          stroke={`url(#${id}chev)`}
+          strokeOpacity={o as number}
+          strokeWidth="6.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      ))}
     </svg>
   );
 }
