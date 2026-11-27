@@ -78,6 +78,7 @@ DeployNow ships with a dark theme by default and a matching light theme. Switch 
 - A fresh 2FA code for destructive actions, server-side sessions you can revoke, and an audit log.
 - API tokens, an OpenAPI description at `/api/openapi.json`, and the `deploynow` CLI.
 - AI connectors: a built-in MCP server at `/mcp` with OAuth sign-in, so you can run DeployNow from Claude, ChatGPT and other AI apps. See [docs/ai-connectors.md](docs/ai-connectors.md).
+- Make any repository DeployNow-ready with your AI coding agent: the [`deploynow-ready` skill](skills/README.md) adds a Dockerfile, a GitHub Actions image build, a compose file, `.env.example` and a health check.
 
 ## Quick start
 

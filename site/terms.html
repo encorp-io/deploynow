@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Terms of Service | DeployNow by encorp.ai</title>
+<meta name="description" content="Terms of Service for DeployNow, the open-source, self-hosted deploy platform by encorp.ai. DeployNow is provided as is, without warranty, under the MIT License; you use it at your own risk.">
+<link rel="canonical" href="https://deploynow.encorp.ai/terms.html">
+<meta name="robots" content="index, follow">
+<meta name="theme-color" content="#05070d">
+<meta property="og:title" content="DeployNow Terms of Service">
+<meta property="og:description" content="DeployNow is open source under the MIT License and provided as is. You use it at your own risk.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://deploynow.encorp.ai/terms.html">
+<meta property="og:image" content="https://deploynow.encorp.ai/assets/og.png">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="icon" href="assets/favicon.ico" sizes="any">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@300..700&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"WebPage","name":"DeployNow Terms of Service","url":"https://deploynow.encorp.ai/terms.html","dateModified":"2026-11-27","isPartOf":{"@type":"WebSite","url":"https://deploynow.encorp.ai/","name":"DeployNow"},"publisher":{"@type":"Organization","name":"encorp.ai","url":"https://encorp.ai"}}
+</script>
+</head>
+<body>
+<div class="bg" aria-hidden="true"><div class="bg-grid"></div><div class="bg-aurora a1"></div><div class="bg-aurora a2"></div></div>
+
+<header class="nav scrolled">
+  <div class="wrap nav-inner">
+    <a class="brand" href="./" aria-label="DeployNow home">
+      <img src="assets/deploynow-mark.svg" alt="" width="30" height="30">
+      <span class="brand-name">DeployNow</span>
+      <span class="brand-by">by <img src="assets/encorp-logo-white.svg" alt="encorp.ai" width="62" height="13"></span>
+    </a>
+    <div class="nav-cta" style="margin-left:auto">
+      <a class="btn btn-ghost btn-sm" href="./">Back to the site</a>
+    </div>
+  </div>
+</header>
+
+<main class="legal">
+  <div class="wrap">
+    <h1>Terms of Service</h1>
+    <p class="updated">Last updated: 27 November 2026</p>
+
+    <p class="callout"><b>The short version.</b> DeployNow is free, open-source software under the MIT License. You run it yourself, on your own machines, and you are responsible for them. It comes as is, with no warranty and no guarantee of support. Use it at your own risk, keep backups, and test before you rely on it in production.</p>
+
+    <h2>1. Who we are and what these terms cover</h2>
+    <p>DeployNow is developed by encorp.ai ("we", "us"). These terms cover the DeployNow software (the source code, container images, installer scripts such as <code>setup.sh</code> and <code>install.sh</code>, the agent, the CLI and the <code>deploynow-ready</code> skill), its documentation, and this website. By downloading, installing or using any of them you agree to these terms. If you do not agree, do not use them.</p>
+
+    <h2>2. Open-source license</h2>
+    <p>The software is licensed under the <a href="https://github.com/encorp-io/deploynow/blob/main/LICENSE">MIT License</a>. You may use, copy, modify, merge, publish, distribute, sublicense and sell copies of it under that license. Where these terms and the MIT License differ about the software itself, the MIT License wins. Third-party components bundled with or downloaded by DeployNow (for example Docker, Traefik, restic and container images you deploy) keep their own licenses and terms.</p>
+
+    <h2>3. Provided "as is", without warranty</h2>
+    <p>The software, the documentation and this website are provided "as is" and "as available", without warranty of any kind, express or implied, including but not limited to warranties of merchantability, fitness for a particular purpose, title, non-infringement, accuracy, availability or security. We do not promise that DeployNow is free of bugs or vulnerabilities, that it will work with your setup, that updates will be released, or that any problem will be fixed.</p>
+
+    <h2>4. Use at your own risk</h2>
+    <p>DeployNow controls Docker on your machines, which is equivalent to root access. It can start, stop, replace and remove containers, volumes, images and networks, change routing and certificates, and run backups and restores. Mistakes, misconfiguration or bugs can cause downtime, data loss or security exposure. You alone are responsible for:</p>
+    <ul>
+      <li>the machines, networks, domains, DNS and cloud accounts you connect, and everything that runs on them;</li>
+      <li>securing your installation: strong passwords, two-factor authentication or passkeys, keeping DeployNow and your systems up to date, firewall rules, and limiting who has access;</li>
+      <li>your data and your backups, including keeping the recovery kit and <code>AUTH_SECRET</code> safe and testing that restores work;</li>
+      <li>the apps, images, templates and configuration you deploy, and their licenses;</li>
+      <li>complying with the laws, regulations and contracts that apply to you, including data protection law for any personal data your apps process.</li>
+    </ul>
+    <p>Read installer scripts before you pipe them into a shell, and test changes on a machine you can afford to lose before using them in production.</p>
+
+    <h2>5. AI agents and connectors</h2>
+    <p>DeployNow can be connected to AI applications (such as Claude, ChatGPT, Cursor and Claude Code) through its MCP server, and the <code>deploynow-ready</code> skill and the prompt on this website ask AI coding agents to change your repository. AI agents can misunderstand instructions and make mistakes. Any action an AI agent takes through a connection you approved, and any file it writes, is treated as your action. Review what agents change, grant the lowest access level that works, and disconnect agents you no longer use. Your use of an AI application is governed by that provider's own terms; we are not responsible for third-party AI services.</p>
+
+    <h2>6. Third-party services</h2>
+    <p>DeployNow can work with services we do not run, including Docker Hub, GitHub, container registries, Let's Encrypt, Cloudflare, AWS, Backblaze, HashiCorp Vault, identity providers and notification services such as Slack, Discord, Telegram and email. Your use of them is between you and their providers, under their terms and prices. We are not responsible for their availability, changes or charges.</p>
+
+    <h2>7. Your data</h2>
+    <p>DeployNow is self-hosted. Your configuration, secrets, logs, metrics and backups stay on the machines and storage you choose; we do not receive them. By default, DeployNow checks GitHub twice a day for new releases (turn this off with <code>DEPLOYNOW_UPDATE_CHECK=off</code>). Installer scripts download software from GitHub, the Docker image registry and, if Docker is missing, get.docker.com. This website does not use cookies or analytics; it is hosted by Cloudflare, which may log requests as part of serving it.</p>
+
+    <h2>8. Limitation of liability</h2>
+    <p>To the fullest extent permitted by law, in no event shall encorp.ai, the authors or the contributors be liable for any claim, damages or other liability, whether in contract, tort or otherwise, arising from, out of or in connection with the software, the documentation, this website, or their use or other dealings. This includes, without limitation, direct, indirect, incidental, special, consequential or exemplary damages, loss of data, loss of profits, revenue or business, downtime, security incidents, and costs of replacement services, even if we were told such damages were possible. Some jurisdictions do not allow certain exclusions or limitations; in that case they apply to the fullest extent allowed.</p>
+
+    <h2>9. Indemnity</h2>
+    <p>You agree to hold encorp.ai, the authors and the contributors harmless from claims by third parties arising from how you use DeployNow, the apps and content you deploy with it, or your breach of these terms or of applicable law.</p>
+
+    <h2>10. Support and security reports</h2>
+    <p>There is no service-level agreement and no guaranteed support. You can ask questions and report bugs in <a href="https://github.com/encorp-io/deploynow/issues">GitHub issues</a>. Please report security vulnerabilities privately as described in <a href="https://github.com/encorp-io/deploynow/blob/main/SECURITY.md">SECURITY.md</a>. Commercial support, if you need it, can be agreed separately with encorp.ai.</p>
+
+    <h2>11. Names and logos</h2>
+    <p>The MIT License covers the code, not our names and logos. "DeployNow", "encorp.ai" and their logos identify our project and company. You may use the names to refer to the project truthfully, but not in a way that suggests we endorse or provide your product or service. If you distribute a modified version, give it a different name or say clearly that it is modified.</p>
+
+    <h2>12. Changes to these terms</h2>
+    <p>We may update these terms. The date at the top shows the latest version, and the history is in the project's Git repository. Continuing to use DeployNow after a change means you accept the updated terms.</p>
+
+    <h2>13. Contact</h2>
+    <p>Questions about these terms: open an issue on <a href="https://github.com/encorp-io/deploynow/issues">GitHub</a> or contact us through <a href="https://encorp.ai">encorp.ai</a>.</p>
+  </div>
+</main>
+
+<footer class="foot">
+  <div class="wrap foot-base" style="margin-top:0;border-top:0;padding-top:0">
+    <span>© 2026 encorp.ai. Open source under the MIT License.</span>
+    <span><a href="./">DeployNow</a> · <a href="https://github.com/encorp-io/deploynow">GitHub</a></span>
+  </div>
+</footer>
+</body>
+</html>
