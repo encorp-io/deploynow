@@ -133,16 +133,22 @@ export interface GuardedResponse {
   status: number;
   ok: boolean;
   headers: { get(name: string): string | null };
+  /** The body, when the request asked for it with maxBodyBytes (else ""). */
+  text(): Promise<string>;
+  json(): Promise<unknown>;
 }
 
 export interface GuardedRequest extends GuardOptions {
   headers?: Record<string, string>;
   timeoutMs?: number;
+  /** Keep up to this many bytes of the body; larger bodies fail. Default: discard it. */
+  maxBodyBytes?: number;
 }
 
 /**
  * GET an https URL without following redirects, refusing internal addresses.
- * The body is discarded: callers only see the status and headers.
+ * The body is discarded unless `maxBodyBytes` asks for it (capped). The deadline
+ * covers reading the body too.
  */
 export function guardedGet(rawUrl: string | URL, req: GuardedRequest = {}): Promise<GuardedResponse> {
   let url: URL;
@@ -176,18 +182,31 @@ export function guardedGet(rawUrl: string | URL, req: GuardedRequest = {}): Prom
         timeout: timeoutMs,
       },
       (res) => {
-        res.resume(); // drain and drop the body
         const status = res.statusCode ?? 0;
-        done(resolve)({
-          status,
-          ok: status >= 200 && status < 300,
-          headers: {
-            get(name: string) {
-              const v = res.headers[name.toLowerCase()];
-              return v === undefined ? null : Array.isArray(v) ? v.join(", ") : String(v);
-            },
+        const headers = {
+          get(name: string) {
+            const v = res.headers[name.toLowerCase()];
+            return v === undefined ? null : Array.isArray(v) ? v.join(", ") : String(v);
           },
+        };
+        const respond = (body: string) => {
+          const text = async () => body;
+          done(resolve)({ status, ok: status >= 200 && status < 300, headers, text, json: async () => JSON.parse(body) as unknown });
+        };
+        const max = req.maxBodyBytes ?? 0;
+        if (!max) {
+          res.resume(); // drain and drop the body
+          return respond("");
+        }
+        const chunks: Buffer[] = [];
+        let size = 0;
+        res.on("data", (c: Buffer) => {
+          size += c.length;
+          if (size > max) return r.destroy(new Error("response too large"));
+          chunks.push(c);
         });
+        res.on("end", () => respond(Buffer.concat(chunks).toString("utf8")));
+        res.on("error", done(reject));
       },
     );
     r.on("timeout", () => r.destroy(new Error("timed out")));

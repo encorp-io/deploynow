@@ -96,3 +96,31 @@ describe("guardedGet", () => {
     await expect(guardedGet("https://localhost:1/v2/")).rejects.toBeInstanceOf(BlockedAddressError);
   });
 });
+
+describe("guardedGet body", () => {
+  const fakeResponse = (chunks: string[]) => {
+    const { EventEmitter } = require("events");
+    const req = Object.assign(new EventEmitter(), { end: vi.fn(), destroy: vi.fn(function (this: any, e: Error) { this.emit("error", e); }) });
+    vi.spyOn(https, "request").mockImplementation(((_u: unknown, _o: unknown, cb: (r: unknown) => void) => {
+      const res = Object.assign(new EventEmitter(), { statusCode: 200, headers: { "content-type": "application/json" }, resume: vi.fn() });
+      setImmediate(() => {
+        cb(res);
+        for (const c of chunks) res.emit("data", Buffer.from(c));
+        res.emit("end");
+      });
+      return req;
+    }) as never);
+  };
+
+  it("discards the body by default and reads it when asked", async () => {
+    fakeResponse(['{"a":', "1}"]);
+    expect(await (await guardedGet("https://140.82.112.33/")).text()).toBe("");
+    fakeResponse(['{"a":', "1}"]);
+    expect(await (await guardedGet("https://140.82.112.33/", { maxBodyBytes: 100 })).json()).toEqual({ a: 1 });
+  });
+
+  it("fails a body over the cap", async () => {
+    fakeResponse(["x".repeat(60), "x".repeat(60)]);
+    await expect(guardedGet("https://140.82.112.33/", { maxBodyBytes: 100 })).rejects.toThrow(/too large/);
+  });
+});
