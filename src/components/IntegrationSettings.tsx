@@ -87,6 +87,8 @@ interface Channel { id: string; name: string; type: string; events: string[]; en
 const EVENT_LABELS: Record<string, string> = {
   "deploy.success": "Deploy succeeded",
   "deploy.failure": "Deploy failed",
+  "autoupdate.success": "App auto-updated",
+  "autoupdate.failure": "App auto-update failed or rolled back",
   "backup.success": "Backup succeeded",
   "backup.failure": "Backup failed",
   "restore.success": "Restore finished",
@@ -239,7 +241,7 @@ export function NotificationSettings() {
           </div>
         </div>
       ) : (
-        <Button type="button" variant="secondary" className="mt-4" onClick={() => setForm({ name: "", type: "slack", url: "", botToken: "", chatId: "", events: ["deploy.failure", "backup.failure", "restore.failure", "task.failure", "alert.firing", "alert.resolved", "update.available", "update.installed", "uptime.down", "uptime.up", "uptime.cert"] })}>
+        <Button type="button" variant="secondary" className="mt-4" onClick={() => setForm({ name: "", type: "slack", url: "", botToken: "", chatId: "", events: ["deploy.failure", "autoupdate.failure", "backup.failure", "restore.failure", "task.failure", "alert.firing", "alert.resolved", "update.available", "update.installed", "uptime.down", "uptime.up", "uptime.cert"] })}>
           <Plus className="w-4 h-4" /> Add channel
         </Button>
       )}

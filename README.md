@@ -53,6 +53,7 @@ DeployNow ships with a dark theme by default and a matching light theme. Switch 
 - Deploy from a GHCR or Docker Hub image, a Dockerfile in Git, a compose file in Git, or a pasted compose file.
 - Zero-downtime replace for stateless apps, a full log for every deployment, and one-click rollback.
 - Push-to-deploy from GitHub webhooks, and pull request previews at `pr-<n>.<your preview domain>`.
+- Auto-update for every app: new image digests (also the images in a compose file) and new commits on the branch, with a maintenance window, a health check and automatic rollback.
 - Optional build server that builds and pushes to your registry, then pulls on the target. Private registry logins.
 - Environment variables and secrets: secrets are encrypted at rest and masked in logs, with optional HashiCorp Vault references.
 
