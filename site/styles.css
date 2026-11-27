@@ -453,3 +453,4 @@ code { font-family: var(--mono); font-size: .88em; white-space: nowrap; backgrou
 .cta-card p { max-width: 580px; text-wrap: balance; }
 @media (max-width: 1020px) { .faq-wrap > div:first-child { position: static; } }
 .card .fine { font-size: 13.5px; color: var(--text-3); margin-top: 18px; }
+.fine code { white-space: normal; overflow-wrap: anywhere; }
