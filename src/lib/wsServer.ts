@@ -12,7 +12,7 @@ import type { IncomingMessage } from "http";
 import type { Duplex } from "stream";
 import { WebSocketServer, type WebSocket } from "ws";
 import { redeemExecTicket, ALLOWED_SHELLS } from "./execTicket";
-import { appSecretsAllowed, containerKind, protectionAllows } from "./containerProtection";
+import { containerKind, protectionAllows } from "./containerProtection";
 import { prisma } from "./prisma";
 import { can } from "./rbac";
 import { dockerFor } from "./endpoints";
@@ -75,8 +75,7 @@ async function handleConnection(ws: WebSocket, req: IncomingMessage) {
     const subject = { role: user.role, bindings: user.roleBindings };
     if (
       info.Id !== ticket.containerId ||
-      !protectionAllows(subject, endpoint.id, containerKind(info), "exec") ||
-      !(await appSecretsAllowed(subject, info.Config.Labels))
+      !protectionAllows(subject, endpoint.id, containerKind(info), "exec")
     ) {
       ws.close(4403, "Forbidden");
       return;

@@ -25,8 +25,8 @@ bastion. To report a vulnerability, see [SECURITY.md](../SECURITY.md).
   it rather than `https://<ip>:9444`.
 - **Limit who reaches port 9444.** Put it behind a firewall, VPN or Cloudflare Access
   if only your team uses it. Close 8444 if you don't use agents.
-- **Give the least role that works.** Docker access is root on the machine: admins
-  are effectively root on their endpoints. Prefer
+- **Give the least role that works.** Docker access is root on the machine: admins,
+  and operators with console access, are effectively root on their endpoints. Prefer
   project or endpoint grants to instance-wide roles.
 - **Prefer agents or SSH to exposing the Docker API.** Never publish Docker's TCP port
   without TLS. The agent needs no inbound port on the machine.
@@ -40,10 +40,12 @@ bastion. To report a vulnerability, see [SECURITY.md](../SECURITY.md).
 
 ## Secrets inside containers
 
-Container env values and consoles are admin only, since a console can print the
-env. An app's container shows its env values, and opens a console, only for people who may read that app's
-secrets. DeployNow's own container (it holds `AUTH_SECRET`), the `deploynow-updater`
-and the backup, restore and task helpers (restic passwords, S3 keys, database
+Container env values are admin only, and an app's container shows them only to
+people who may read that app's secrets. Operators keep the console in ordinary
+containers, so an operator can still print an app's env from inside it: give the
+operator role only to people you'd trust with those secrets. DeployNow's own
+container (it holds `AUTH_SECRET`), the `deploynow-updater` and the backup, restore
+and task helpers (restic passwords, S3 keys, database
 passwords) get stricter rules for everyone, owners included:
 
 | | DeployNow, updater, helpers | Proxy and UI route |

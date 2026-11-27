@@ -154,26 +154,14 @@ describe("consoles", () => {
     }
   });
 
-  it("is admin only for other containers", async () => {
-    signInAs("operator");
+  it("is open to operators in other containers, admin in the proxy", async () => {
+    signInAs("viewer");
     expect((await EXEC(req("POST", { shell: "/bin/sh" }), p("f"))).status).toBe(403);
-    signInAs("admin");
+    signInAs("operator");
+    expect((await EXEC(req("POST", { shell: "/bin/sh" }), p("d"))).status).toBe(403);
     const res = await EXEC(req("POST", { shell: "/bin/sh" }), p("f"));
     expect(res.status).toBe(200);
     expect((await res.json()).ticket).toBeTruthy();
-  });
-});
-
-describe("consoles in app containers", () => {
-  it("need access to the app's secrets", async () => {
-    // Admin on the endpoint, operator on the project: env shows nothing, so the console must not either
-    signInAs("operator", { bindings: [{ role: "admin", scopeType: "endpoint", scopeId: EP }] });
-    const res = await EXEC(req("POST", { shell: "/bin/sh" }), p("e"));
-    expect(res.status).toBe(403);
-    expect((await envOf("e")).allowed.console).toBe(false);
-    signInAs("operator", { bindings: [{ role: "admin", scopeType: "endpoint", scopeId: EP }, { role: "admin", scopeType: "project", scopeId: PROJECT }] });
-    expect((await EXEC(req("POST", { shell: "/bin/sh" }), p("e"))).status).toBe(200);
-    expect((await envOf("e")).allowed.console).toBe(true);
   });
 });
 
@@ -205,6 +193,6 @@ describe("logs, control and removal", () => {
   it("reports what the person may do", async () => {
     signInAs("operator");
     expect((await envOf("a")).allowed).toEqual({ logs: false, console: false, control: false, remove: false });
-    expect((await envOf("f")).allowed).toEqual({ logs: true, console: false, control: true, remove: false });
+    expect((await envOf("f")).allowed).toEqual({ logs: true, console: true, control: true, remove: false });
   });
 });

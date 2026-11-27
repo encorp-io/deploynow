@@ -35,10 +35,11 @@ export const PERMISSIONS = {
   "endpoint.view": { min: "viewer", scoped: true },
   "container.inspect": { min: "viewer", scoped: true },
   "container.logs": { min: "operator", scoped: true },
-  // Env values and consoles expose secrets (a console can print the env), so admins only
+  // Env values can hold secrets: admins only. Operators keep the console in ordinary
+  // containers (Martin's call); DeployNow's own and helper containers refuse it.
   "container.env": { min: "admin", scoped: true },
   "container.control": { min: "operator", scoped: true },
-  "container.exec": { min: "admin", scoped: true },
+  "container.exec": { min: "operator", scoped: true },
   "service.update": { min: "operator", scoped: true },
   "container.remove": { min: "admin", scoped: true },
   "image.remove": { min: "admin", scoped: true },

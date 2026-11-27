@@ -82,8 +82,8 @@ export function protectionMessage(kind: ContainerKind, action: ContainerAction):
 }
 
 /**
- * An app container's env holds that app's decrypted secrets, and a console can
- * print it. Both need app.secrets on the app's project. A label pointing at a
+ * An app container's env holds that app's decrypted secrets: showing it needs
+ * app.secrets on the app's project. A label pointing at a
  * deleted or unknown app may still carry its secrets: owners only.
  */
 export async function appSecretsAllowed(subject: Subject, labels: Record<string, string> | null | undefined): Promise<boolean> {

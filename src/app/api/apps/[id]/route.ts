@@ -54,8 +54,7 @@ export async function GET(request: Request, { params }: Params) {
       logs: can(user, "app.logs", { projectId }),
       // Runtime logs and the console go through the endpoint's container routes
       containerLogs: can(user, "container.logs", { endpointId: app.endpointId }),
-      // A console can print the app's secrets
-      console: can(user, "container.exec", { endpointId: app.endpointId }) && can(user, "app.secrets", { projectId }),
+      console: can(user, "container.exec", { endpointId: app.endpointId }),
     },
   });
 }

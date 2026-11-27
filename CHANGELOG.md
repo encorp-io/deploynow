@@ -15,9 +15,8 @@ versions fix bugs. Every version upgrades the database by itself.
   in the compose `.env` too.
 
 ### Security
-- **Secrets inside containers:** container env values and consoles are now admin only
-  (operators lose them), and an app container's env values need access to that app's
-  secrets. DeployNow's own container, the updater and backup/task helpers never show
+- **Secrets inside containers:** container env values are now admin only, and an app
+  container's env values need access to that app's secrets. DeployNow's own container, the updater and backup/task helpers never show
   env values or open a console; their logs are admin only and only owners can stop or
   remove them. See docs/security.md.
 

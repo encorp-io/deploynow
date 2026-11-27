@@ -437,7 +437,7 @@ export default function AppPage({ params }: { params: Promise<{ id: string }> })
       {tab === "console" && (
         <Card className="p-4">
           {!app.can.console ? (
-            <p className="text-sm text-text-muted">Only admins who can see this app\u2019s secrets can open a console.</p>
+            <p className="text-sm text-text-muted">Operators and above can open a console.</p>
           ) : !container ? (
             noContainer
           ) : (

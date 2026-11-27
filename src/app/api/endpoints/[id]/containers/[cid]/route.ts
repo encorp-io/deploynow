@@ -62,7 +62,7 @@ export async function GET(_req: Request, { params }: Params) {
       kind,
       allowed: {
         logs: can(user, "container.logs", { endpointId: id }) && protectionAllows(user, id, kind, "logs"),
-        console: can(user, "container.exec", { endpointId: id }) && protectionAllows(user, id, kind, "exec") && (await appSecretsAllowed(user, labels)),
+        console: can(user, "container.exec", { endpointId: id }) && protectionAllows(user, id, kind, "exec"),
         control: can(user, "container.control", { endpointId: id }) && protectionAllows(user, id, kind, "control"),
         remove: can(user, "container.remove", { endpointId: id }) && protectionAllows(user, id, kind, "remove"),
       },
