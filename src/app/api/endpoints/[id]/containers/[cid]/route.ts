@@ -2,8 +2,7 @@ import { NextResponse } from "next/server";
 import { endpointGate, dockerError, validRef, containerGuard } from "@/lib/endpointRoute";
 import { readJson, requireStepUp, type CurrentUser } from "@/lib/apiAuth";
 import { can } from "@/lib/rbac";
-import { prisma } from "@/lib/prisma";
-import { protectionAllows, type ContainerKind } from "@/lib/containerProtection";
+import { appSecretsAllowed, protectionAllows, type ContainerKind } from "@/lib/containerProtection";
 import { audit, clientIp } from "@/lib/audit";
 
 type Params = { params: Promise<{ id: string; cid: string }> };
@@ -19,12 +18,7 @@ type Action = (typeof ACTIONS)[number];
 async function envVisible(user: CurrentUser, endpointId: string, kind: ContainerKind, labels: Record<string, string>): Promise<boolean> {
   if (!can(user, "container.env", { endpointId })) return false;
   if (!protectionAllows(user, endpointId, kind, "env")) return false;
-  const appId = labels["deploynow.app"];
-  if (!appId) return true;
-  const app = await prisma.application.findUnique({ where: { id: appId }, select: { environment: { select: { projectId: true } } } }).catch(() => null);
-  // A label pointing at a deleted or unknown app: the values may still be its secrets
-  if (!app) return user.role === "owner";
-  return can(user, "app.secrets", { projectId: app.environment.projectId });
+  return appSecretsAllowed(user, labels);
 }
 
 export async function GET(_req: Request, { params }: Params) {
@@ -68,7 +62,7 @@ export async function GET(_req: Request, { params }: Params) {
       kind,
       allowed: {
         logs: can(user, "container.logs", { endpointId: id }) && protectionAllows(user, id, kind, "logs"),
-        console: can(user, "container.exec", { endpointId: id }) && protectionAllows(user, id, kind, "exec"),
+        console: can(user, "container.exec", { endpointId: id }) && protectionAllows(user, id, kind, "exec") && (await appSecretsAllowed(user, labels)),
         control: can(user, "container.control", { endpointId: id }) && protectionAllows(user, id, kind, "control"),
         remove: can(user, "container.remove", { endpointId: id }) && protectionAllows(user, id, kind, "remove"),
       },

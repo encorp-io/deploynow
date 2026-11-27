@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { endpointGate, dockerError, validRef, containerGuard } from "@/lib/endpointRoute";
 import { readJson } from "@/lib/apiAuth";
+import { appSecretsAllowed } from "@/lib/containerProtection";
 import { issueExecTicket, ALLOWED_SHELLS } from "@/lib/execTicket";
 
 /**
@@ -24,6 +25,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     const info = await docker.getContainer(cid).inspect();
     const guard = containerGuard(user, id, info, "exec");
     if (guard.response) return guard.response;
+    // A console in an app container can print that app's secrets
+    if (!(await appSecretsAllowed(user, info.Config.Labels))) {
+      return NextResponse.json({ error: "You need access to this app's secrets to open a console in it", protected: true }, { status: 403 });
+    }
     if (!info.State.Running) return NextResponse.json({ error: "The container is not running" }, { status: 409 });
     const ticket = issueExecTicket({
       uid: user.id,

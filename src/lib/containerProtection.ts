@@ -11,7 +11,8 @@
  *
  * Proxy and UI-route containers (deploynow.role) hold TLS keys: admin only.
  */
-import { effectiveRole, roleAtLeast, type Role, type Subject } from "./rbac";
+import { can, effectiveRole, normalizeRole, roleAtLeast, type Role, type Subject } from "./rbac";
+import { prisma } from "./prisma";
 import { isSelfContainer } from "./selfUpdate";
 import { UPDATER_LABEL } from "./selfUpdate/shared";
 import { HELPER_LABEL } from "./backup/helper";
@@ -78,4 +79,19 @@ export function protectionMessage(kind: ContainerKind, action: ContainerAction):
     default:
       return `Only ${kind === "platform" ? "admins" : "owners"} can change ${what}`;
   }
+}
+
+/**
+ * An app container's env holds that app's decrypted secrets, and a console can
+ * print it. Both need app.secrets on the app's project. A label pointing at a
+ * deleted or unknown app may still carry its secrets: owners only.
+ */
+export async function appSecretsAllowed(subject: Subject, labels: Record<string, string> | null | undefined): Promise<boolean> {
+  const appId = labels?.["deploynow.app"];
+  if (!appId) return true;
+  const app = await prisma.application
+    .findUnique({ where: { id: appId }, select: { environment: { select: { projectId: true } } } })
+    .catch(() => null);
+  if (!app) return normalizeRole(subject.role) === "owner";
+  return can(subject, "app.secrets", { projectId: app.environment.projectId });
 }

@@ -41,7 +41,7 @@ bastion. To report a vulnerability, see [SECURITY.md](../SECURITY.md).
 ## Secrets inside containers
 
 Container env values and consoles are admin only, since a console can print the
-env. An app's container shows its env values only to people who may read that app's
+env. An app's container shows its env values, and opens a console, only for people who may read that app's
 secrets. DeployNow's own container (it holds `AUTH_SECRET`), the `deploynow-updater`
 and the backup, restore and task helpers (restic passwords, S3 keys, database
 passwords) get stricter rules for everyone, owners included:
