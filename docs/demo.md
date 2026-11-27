@@ -10,11 +10,11 @@ reachable on its port.
 ## 1. Install (1 minute)
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/encorp-io/deploynow/main/install.sh | sudo ADMIN_EMAIL=you@example.com bash
+curl -fsSL https://raw.githubusercontent.com/encorp-io/deploynow/main/setup.sh | sudo bash -s -- --yes --email you@example.com
 ```
 
-Open the address it prints, sign in with the password it prints, and add a passkey or
-2FA when asked. The machine you installed on is already the `local` endpoint.
+Open the address it prints and sign in with the password it prints (a passkey or 2FA
+is optional, under Account). The machine you installed on is already the `local` endpoint.
 
 ## 2. Look around (30 seconds)
 

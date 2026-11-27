@@ -14,7 +14,7 @@ export async function GET() {
     prisma.settings.findUnique({ where: { id: "singleton" } }),
     prisma.passkey.count({ where: { userId: user.id } }),
   ]);
-  const require2fa = settings?.require2faForAdmins ?? true;
+  const require2fa = settings?.require2faForAdmins ?? false;
 
   return NextResponse.json({
     id: user.id,

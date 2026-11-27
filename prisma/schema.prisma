@@ -167,7 +167,7 @@ model Settings {
   githubToken         String    @default("") // AES-256-GCM encrypted at rest
   pollingInterval     Int       @default(60) // seconds, range 30–3600
   autoUpdateLatest    Boolean   @default(false)
-  require2faForAdmins Boolean   @default(true)
+  require2faForAdmins Boolean   @default(false)
   // Optional HashiCorp Vault: env vars of kind "vault" hold <mount>/<path>#<field>
   vaultAddr           String    @default("") // https://vault.example.com:8200
   vaultNamespace      String    @default("") // Vault Enterprise / HCP namespace

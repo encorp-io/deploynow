@@ -7,7 +7,7 @@ bastion. To report a vulnerability, see [SECURITY.md](../SECURITY.md).
 
 | | |
 |---|---|
-| Sign-in | Passwords (scrypt), TOTP 2FA with recovery codes, passkeys, SSO. Admins and owners must have 2FA or a passkey (Settings → Access). |
+| Sign-in | Passwords (scrypt), TOTP 2FA with recovery codes, passkeys, SSO. Owners can require 2FA or a passkey for admins and owners (Settings → Security and sign-in; off on a new install unless `REQUIRE_2FA=true`). |
 | Sessions | Server-side, 8 hours, revocable under Account → Sessions. Failed sign-ins are throttled per email and per IP. |
 | Destructive actions | Deleting endpoints or apps, restores, prune and 2FA resets need a 2FA code from the last 10 minutes, and a person rather than an API token or AI connection. |
 | Roles | Viewer, operator, admin, owner, instance-wide or per project or endpoint. |

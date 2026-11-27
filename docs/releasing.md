@@ -26,5 +26,5 @@ What runs:
 Pre-releases (`v2.1.0-rc.1`) get version tags but not `latest`, and are marked as
 pre-releases on GitHub.
 
-After a release, check that `curl -fsSL https://raw.githubusercontent.com/encorp-io/deploynow/v2.1.0/install.sh | sudo DEPLOYNOW_TAG=2.1.0 bash`
+After a release, check that `curl -fsSL https://raw.githubusercontent.com/encorp-io/deploynow/v2.1.0/setup.sh | sudo DEPLOYNOW_TAG=2.1.0 bash`
 works on a fresh VM, and that an upgrade from the previous version keeps its data.

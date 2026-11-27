@@ -41,7 +41,7 @@ async function seed() {
     await prisma.user.create({
       data: { email: adminEmail, name: 'Admin', password: hash, role: 'owner' }
     });
-    console.log('[deployer] Owner account created: ' + adminEmail + ' (set up 2FA at first sign-in)');
+    console.log('[deployer] Owner account created: ' + adminEmail);
   } else {
     console.log('[deployer] Users exist — skipping user seed');
   }
@@ -67,7 +67,9 @@ async function seed() {
   const settings = await prisma.settings.findUnique({ where: { id: 'singleton' } });
   if (!settings) {
     await prisma.settings.create({
-      data: { id: 'singleton', githubUser, githubToken: encrypt(githubToken), pollingInterval: 60, autoUpdateLatest: false, schemaVersion: 2 }
+      data: { id: 'singleton', githubUser, githubToken: encrypt(githubToken), pollingInterval: 60, autoUpdateLatest: false, schemaVersion: 2,
+        // 2FA is optional unless REQUIRE_2FA=true; owners can require it later under Settings → Security
+        require2faForAdmins: /^(1|true|yes|on)$/i.test(process.env.REQUIRE_2FA || '') }
     });
     console.log('[deployer] Settings created' + (githubToken ? ' with GitHub token from env' : ''));
   } else {

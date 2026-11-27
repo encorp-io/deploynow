@@ -17,7 +17,7 @@ let policyCache: { value: boolean; at: number } | null = null;
 async function requireTwoFactorForAdmins(): Promise<boolean> {
   if (policyCache && Date.now() - policyCache.at < 30_000) return policyCache.value;
   const s = await prisma.settings.findUnique({ where: { id: "singleton" } });
-  policyCache = { value: s?.require2faForAdmins ?? true, at: Date.now() };
+  policyCache = { value: s?.require2faForAdmins ?? false, at: Date.now() };
   return policyCache.value;
 }
 
