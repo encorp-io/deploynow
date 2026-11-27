@@ -5,6 +5,7 @@ import { audit, clientIp } from "@/lib/audit";
 import { appGate, serializeApp, serializeDeployment, type AppWithRelations } from "@/lib/apps/access";
 import { ConfigError, validateAppInput } from "@/lib/apps/config";
 import { validateAppExtras } from "@/lib/apps/extras";
+import { validateAutoUpdateInput } from "@/lib/apps/autoUpdate";
 import { removePreview } from "@/lib/apps/previews";
 import { EnvError } from "@/lib/apps/env";
 import { can } from "@/lib/rbac";
@@ -74,7 +75,7 @@ export async function PATCH(request: Request, { params }: Params) {
   let input;
   try {
     input = validateAppInput(body, app);
-    input = { ...input, ...(await validateAppExtras(body, input.sourceType, app.endpointId, { actor: user, projectId: app.environment.projectId }, app)) };
+    input = { ...input, ...(await validateAppExtras(body, input.sourceType, app.endpointId, { actor: user, projectId: app.environment.projectId }, app)), ...validateAutoUpdateInput(body, app) };
   } catch (err) {
     if (err instanceof ConfigError || err instanceof EnvError) return NextResponse.json({ error: err.message }, { status: 400 });
     throw err;

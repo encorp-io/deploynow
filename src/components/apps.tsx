@@ -89,12 +89,8 @@ export function AppForm({
   const set = <K extends keyof AppFormValue>(k: K, v: AppFormValue[K]) => onChange({ ...value, [k]: v });
   const isGit = value.sourceType === "git-dockerfile" || value.sourceType === "git-compose";
   const isCompose = value.sourceType === "git-compose" || value.sourceType === "compose";
-  const policies =
-    value.sourceType === "image"
-      ? [["manual", "Deploy by hand"], ["auto-digest", "Redeploy when the image tag gets a new digest"]]
-      : isGit
-        ? [["manual", "Deploy by hand"], ["on-push", "Deploy on every push to the branch (GitHub webhook)"]]
-        : [["manual", "Deploy by hand"]];
+  // Scheduled updates (image digests, compose images, new commits) are on the Auto-update card
+  const policies = [["manual", "Off (deploy by hand, or with auto-update)"], ["on-push", "Deploy on every push to the branch"]];
 
   return (
     <div className="space-y-4">
@@ -212,11 +208,13 @@ export function AppForm({
         </>
       )}
 
-      <Field label="Updates">
-        <Select value={value.updatePolicy} onChange={(e) => set("updatePolicy", e.target.value)}>
-          {policies.map(([k, label]) => <option key={k} value={k}>{label}</option>)}
-        </Select>
-      </Field>
+      {isGit && (
+        <Field label="Push to deploy (GitHub webhook)" hint={isNew ? "Auto-update on a schedule, without a webhook, is in the app's Settings after it's created" : "To poll the branch without a webhook, use Auto-update below"}>
+          <Select value={value.updatePolicy} onChange={(e) => set("updatePolicy", e.target.value)}>
+            {policies.map(([k, label]) => <option key={k} value={k}>{label}</option>)}
+          </Select>
+        </Field>
+      )}
     </div>
   );
 }
