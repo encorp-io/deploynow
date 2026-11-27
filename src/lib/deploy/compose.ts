@@ -132,3 +132,33 @@ export function stripBuild(renderedYaml: string): string {
   for (const svc of Object.values((doc.services ?? {}) as Record<string, Obj>)) delete svc.build;
   return YAML.stringify(doc, { lineWidth: 0 });
 }
+
+/**
+ * Point registry services at the exact images an earlier deployment ran
+ * (image@sha256:…), so a rollback doesn't start whatever the tag points to now.
+ * Built services and services without a recorded digest are left as they are.
+ */
+export function pinImages(renderedYaml: string, pins: Record<string, string>): { yaml: string; pinned: number } {
+  const doc = YAML.parse(renderedYaml) as Obj;
+  let pinned = 0;
+  for (const [name, svc] of Object.entries((doc.services ?? {}) as Record<string, Obj>)) {
+    const pin = pins[name];
+    if (!pin || !isObj(svc) || svc.build !== undefined || typeof svc.image !== "string" || svc.image.startsWith("dn/")) continue;
+    if (!/^[\w./:-]+@sha256:[0-9a-f]{64}$/.test(pin)) continue;
+    svc.image = pin;
+    pinned++;
+  }
+  return { yaml: pinned ? YAML.stringify(doc, { lineWidth: 0 }) : renderedYaml, pinned };
+}
+
+/** The repository part of an image reference: "ghcr.io/acme/web:1" → "ghcr.io/acme/web", "nginx" → "nginx". */
+export function imageRepo(image: string): string {
+  return image.replace(/@sha256:[0-9a-f]+$/, "").replace(/:[\w.-]+$/, "");
+}
+
+/** The RepoDigest of `image`'s repository among an image's RepoDigests (Docker Hub names may be written with or without docker.io/library/). */
+export function matchRepoDigest(image: string, repoDigests: string[]): string {
+  const strip = (r: string) => r.replace(/^(docker\.io|index\.docker\.io|registry-1\.docker\.io)\//, "").replace(/^library\//, "");
+  const want = strip(imageRepo(image));
+  return repoDigests.find((d) => strip(d.split("@")[0]) === want) ?? "";
+}
