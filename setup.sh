@@ -211,7 +211,9 @@ docker compose version >/dev/null 2>&1 || die "The Docker Compose plugin is miss
 # Docker from the Ubuntu snap is confined: it can't read files outside a home folder, so
 # Compose doesn't find $DIR/docker-compose.yml ("no configuration file provided: not found")
 SNAP_DOCKER=0
-case "$(readlink -f "$(command -v docker)" 2>/dev/null)" in /snap/*) SNAP_DOCKER=1 ;; esac
+# (/snap/bin/docker is a link to /usr/bin/snap, so look at the path itself, not its target)
+case "$(command -v docker)" in /snap/*) SNAP_DOCKER=1 ;; esac
+command -v snap >/dev/null 2>&1 && snap list docker >/dev/null 2>&1 && SNAP_DOCKER=1
 
 # Every Compose call names the project folder and file, whatever the working directory
 dc() { docker compose --project-directory "$DIR" -f "$DIR/docker-compose.yml" "$@"; }
