@@ -23,6 +23,9 @@ versions fix bugs. Every version upgrades the database by itself.
   written as one variable, switch to the new tag from the banner. New notification event
   *App update available*.
 ### Fixed
+- **setup.sh** piped into bash (`curl … | sudo bash`) ended silently right after "Pulling":
+  `docker compose run` read the rest of the script from stdin. The script is now read in
+  full before it runs, and Compose never gets stdin.
 - **setup.sh** stopped at the image pull with "no configuration file provided: not found"
   and wrongly said there was no stable release yet. Every Compose call now names
   `/opt/deploynow/docker-compose.yml`, the file is checked before anything starts (with a
