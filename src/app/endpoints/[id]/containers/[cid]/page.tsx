@@ -3,7 +3,7 @@
 import ResourceHistory from "@/components/ResourceHistory";
 import { use, useCallback, useEffect, useState } from "react";
 import dynamic from "next/dynamic";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Play, Square, RotateCw, Trash2, Pause } from "lucide-react";
 import { useApi } from "@/components/AppShell";
 import { Badge, Button, Card, ErrorText, IconButton, PageHeader, PageSkeleton, Tabs, formatBytes, stateTone, timeAgo } from "@/components/ui";
@@ -53,7 +53,9 @@ export default function ContainerPage({ params }: { params: Promise<{ id: string
   const toast = useToast();
   const [d, setD] = useState<Detail | null>(null);
   const [stats, setStats] = useState<Stats | null>(null);
-  const [tab, setTab] = useState<Tab>("overview");
+  const search = useSearchParams();
+  const initialTab = search.get("tab");
+  const [tab, setTab] = useState<Tab>(initialTab === "logs" || initialTab === "console" ? initialTab : "overview");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState("");
 
