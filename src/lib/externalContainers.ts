@@ -15,7 +15,7 @@
  */
 import type Docker from "dockerode";
 import YAML from "yaml";
-import { containerKind, type ContainerKind } from "./containerProtection";
+import { containerKind, SECRET_LABEL_RE, type ContainerKind } from "./containerProtection";
 import { checkComposeRuntime, ComposePolicyError, composePolicyTrusted } from "./deploy/composePolicy";
 import { SLUG_RE } from "./apps/config";
 
@@ -171,8 +171,10 @@ const sameList = (a: string[] | null | undefined, b: string[] | null | undefined
 /** Compose escapes: a literal $ in a value written into the file must be $$ */
 const esc = (s: string) => s.replace(/\$/g, "$$$$");
 
-function envVarName(service: string, key: string): string {
-  return `${service.toUpperCase().replace(/[^A-Z0-9]/g, "_")}_${key}`;
+/** A shell-safe variable name for compose interpolation. */
+function varSafe(s: string): string {
+  const v = s.replace(/[^A-Za-z0-9_]/g, "_");
+  return /^[A-Za-z_]/.test(v) ? v : `_${v}`;
 }
 
 /**
@@ -191,6 +193,23 @@ export function planAdoption(
   const topNetworks: Record<string, Record<string, unknown>> = {};
   const envValues = new Map<string, string>(); // variable → value
   const envKinds = new Map<string, "plain" | "secret">();
+  /**
+   * The variable that carries `value`: the key itself when free (or already holding the
+   * same value), else SERVICE_KEY, then SERVICE_KEY_2, … until one is unused.
+   */
+  const allocVar = (service: string, key: string, value: string, secret: boolean): string => {
+    const base = varSafe(key);
+    const scoped = varSafe(`${service.toUpperCase()}_${base}`);
+    for (let i = 0; ; i++) {
+      const v = i === 0 ? base : i === 1 ? scoped : `${scoped}_${i}`;
+      const have = envValues.get(v);
+      if (have === undefined || have === value) {
+        envValues.set(v, value);
+        if (secret || envKinds.get(v) !== "secret") envKinds.set(v, secret ? "secret" : "plain");
+        return v;
+      }
+    }
+  };
   const replicas = new Map<string, number>();
   const idToService = new Map<string, string>();
   const slug = SLUG_RE.test(stack) ? stack : stack.replace(/_/g, "-").replace(/^-+|-+$/g, "").slice(0, 42) || "stack";
@@ -237,14 +256,8 @@ export function planAdoption(
     const environment: Record<string, string> = {};
     for (const [key, value] of envPairs(c.Config.Env)) {
       if (imageEnv.get(key) === value) continue;
-      let variable = key;
-      if (envValues.has(variable) && envValues.get(variable) !== value) variable = envVarName(name, key);
-      if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(variable)) {
-        environment[key] = esc(value);
-        continue;
-      }
-      envValues.set(variable, value);
-      envKinds.set(variable, value && looksSecret(key, value) ? "secret" : "plain");
+      // Names that aren't shell identifiers (API-KEY, db.password) get a safe variable too
+      const variable = allocVar(name, key, value, !!value && looksSecret(key, value));
       environment[key] = `\${${variable}}`;
     }
     if (Object.keys(environment).length) s.environment = environment;
@@ -353,7 +366,8 @@ export function planAdoption(
         traefikDropped.add(name);
         continue;
       }
-      own[k] = esc(v);
+      // Credential-like labels (masked on the container page too) become secret variables
+      own[k] = v && SECRET_LABEL_RE.test(k) ? `\${${allocVar(name, `LABEL_${k}`, v, true)}}` : esc(v);
     }
     if (Object.keys(own).length) s.labels = own;
 

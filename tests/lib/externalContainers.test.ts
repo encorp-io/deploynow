@@ -155,4 +155,33 @@ describe("planAdoption", () => {
     const named = inspect("c", "web", { Name: "/my-nginx" });
     expect(YAML.parse(planAdoption("blog", [named], images, { proxyNetwork: null }).yaml).services.web.container_name).toBe("my-nginx");
   });
+
+  it("keeps values of odd env names and credential labels out of the file", () => {
+    const c = inspect("a", "web", {
+      Config: {
+        Env: ["PATH=/usr/bin", "API-KEY=k-123", "db.password=pw-456"],
+        Labels: { "com.docker.compose.project": "blog", "com.docker.compose.service": "web", "com.docker.compose.container-number": "1", "backup.password": "pw-789", "team": "web" },
+      },
+    });
+    const plan = planAdoption("blog", [c], images, { proxyNetwork: null });
+    expect(plan.yaml).not.toMatch(/k-123|pw-456|pw-789/);
+    const doc = YAML.parse(plan.yaml);
+    expect(doc.services.web.environment["API-KEY"]).toBe("${API_KEY}");
+    expect(doc.services.web.environment["db.password"]).toBe("${db_password}");
+    expect(doc.services.web.labels).toEqual({ "backup.password": "${LABEL_backup_password}", team: "web" });
+    const env = Object.fromEntries(plan.env.map((e) => [e.key, e]));
+    expect(env.API_KEY).toEqual({ key: "API_KEY", value: "k-123", kind: "secret" });
+    expect(env.LABEL_backup_password).toEqual({ key: "LABEL_backup_password", value: "pw-789", kind: "secret" });
+  });
+
+  it("never reuses a variable that holds another value", () => {
+    const db = inspect("b", "db", { Config: { Env: ["PATH=/usr/bin", "FOO=old", "WEB_FOO=one"], Cmd: ["postgres"] } });
+    const web = inspect("a", "web", { Config: { Env: ["PATH=/usr/bin", "FOO=new"] } });
+    const plan = planAdoption("blog", [db, web], images, { proxyNetwork: null });
+    const env = Object.fromEntries(plan.env.map((e) => [e.key, e.value]));
+    const doc = YAML.parse(plan.yaml);
+    expect(env.WEB_FOO).toBe("one");
+    expect(doc.services.web.environment.FOO).toBe("${WEB_FOO_2}");
+    expect(env.WEB_FOO_2).toBe("new");
+  });
 });

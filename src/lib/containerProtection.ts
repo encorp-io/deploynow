@@ -98,7 +98,7 @@ export async function appSecretsAllowed(subject: Subject, labels: Record<string,
 
 // Labels can carry credentials too: the UI route's proxy secret header, Traefik
 // basic/digest auth users, or anything a compose file names like a secret.
-const SECRET_LABEL_RE = /customrequestheaders|customresponseheaders|basicauth\.users|digestauth\.users|passw(or)?d|secret|token|api[-_.]?key|private[-_.]?key|credential/i;
+export const SECRET_LABEL_RE = /customrequestheaders|customresponseheaders|basicauth\.users|digestauth\.users|passw(or)?d|secret|token|api[-_.]?key|private[-_.]?key|credential/i;
 
 export const MASKED = "••••••";
 
