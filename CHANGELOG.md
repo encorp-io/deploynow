@@ -9,6 +9,13 @@ versions fix bugs. Every version upgrades the database by itself.
 ## [Unreleased]
 
 ### Added
+- **The installer works everywhere**: `setup.sh` now also runs on macOS (Docker Desktop,
+  OrbStack or Colima, installing Docker Desktop with Homebrew when nothing is there), with
+  Docker from the Ubuntu snap (installs into `/var/snap/docker/common/deploynow`), and on
+  distributions get.docker.com doesn't cover (Rocky, Alma, Amazon Linux, Alpine, Arch,
+  openSUSE), adding the Compose plugin when it's missing. New `setup.ps1` for Windows with
+  Docker Desktop: `irm https://raw.githubusercontent.com/encorp-io/deploynow/main/setup.ps1 | iex`.
+  `DOCKER_GID` is read from inside a container, so the socket works on Docker Desktop too.
 - **Update available for every app**: every deployed app is checked about once an hour,
   auto-update on or not, and the app page shows what is new. Apps on a pinned tag
   (`4.55`, `17-alpine`, `sha-82e99af`) now see newer tags too: the newest version of the

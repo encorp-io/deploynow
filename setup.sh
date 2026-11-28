@@ -3,9 +3,14 @@
 #
 #   curl -fsSL https://raw.githubusercontent.com/encorp-io/deploynow/main/setup.sh | sudo bash
 #
+# Linux (any distribution, Docker from get.docker.com, the distro or the Ubuntu snap) and
+# macOS (Docker Desktop, OrbStack or Colima). On Windows use setup.ps1 in PowerShell:
+#   irm https://raw.githubusercontent.com/encorp-io/deploynow/main/setup.ps1 | iex
+#
 # Installs Docker if it's missing, asks a few questions (domain, port, admin email and
-# password; Enter keeps the default), writes /opt/deploynow/{docker-compose.yml,.env},
-# starts DeployNow and waits until it answers. Run it again to upgrade: it keeps .env.
+# password; Enter keeps the default), writes docker-compose.yml and .env to the install
+# folder (/opt/deploynow; ~/deploynow on a Mac; /var/snap/docker/common/deploynow with
+# snap Docker), starts DeployNow and waits until it answers. Run it again to upgrade: it keeps .env.
 #
 # Without questions (CI, cloud-init):  ... | sudo bash -s -- --yes --email you@example.com
 #
@@ -16,7 +21,7 @@
 #   --password PW     ADMIN_PASSWORD    its password, 12+ characters        (default: generated)
 #   --require-2fa     REQUIRE_2FA=true  make admins set up 2FA              (default: optional)
 #   --tag TAG         DEPLOYNOW_TAG     2.1.0, latest or edge               (default latest)
-#   --dir PATH        DEPLOYNOW_DIR     install folder                      (default /opt/deploynow)
+#   --dir PATH        DEPLOYNOW_DIR     install folder                      (default: see above)
 #   --url URL         DEPLOYNOW_URL     public URL when there's no domain   (default https://<public IP>:<port>)
 #   --yes, -y                           don't ask, use the options and defaults
 #   --no-start        DEPLOYNOW_NO_START=1  write the files, don't start
@@ -32,7 +37,7 @@ say()  { printf '%s==>%s %s\n' "$C" "$N" "$*"; }
 warn() { printf '%swarning:%s %s\n' "$Y" "$N" "$*" >&2; }
 die()  { printf '%serror:%s %s\n' "$R" "$N" "$*" >&2; exit 1; }
 
-usage() { sed -n '2,24p' "${BASH_SOURCE[0]:-$0}" 2>/dev/null | sed 's/^# \{0,1\}//' || echo "See $SETUP_URL"; exit 0; }
+usage() { sed -n '2,28p' "${BASH_SOURCE[0]:-$0}" 2>/dev/null | sed 's/^# \{0,1\}//' || echo "See $SETUP_URL"; exit 0; }
 
 # ── Options ────────────────────────────────────────────────────────────────────
 DOMAIN="${DEPLOYNOW_DOMAIN:-}"
@@ -41,7 +46,7 @@ EMAIL="${ADMIN_EMAIL:-}"
 PASSWORD="${ADMIN_PASSWORD:-}"
 REQUIRE_2FA="${REQUIRE_2FA:-false}"
 TAG="${DEPLOYNOW_TAG:-}"
-DIR="${DEPLOYNOW_DIR:-/opt/deploynow}"
+DIR="${DEPLOYNOW_DIR:-}"
 URL="${DEPLOYNOW_URL:-}"
 NO_START="${DEPLOYNOW_NO_START:-}"
 INSTALL_DOCKER="${INSTALL_DOCKER:-yes}"
@@ -68,25 +73,69 @@ while [ $# -gt 0 ]; do
 done
 
 # ── Checks ─────────────────────────────────────────────────────────────────────
-[ "$(uname -s)" = "Linux" ] || die "DeployNow runs on Linux. On a Mac or Windows, use a Linux VM or server."
+OS="$(uname -s)"
+case "$OS" in
+  Linux|Darwin) ;;
+  MINGW*|MSYS*|CYGWIN*) die "On Windows, run this in PowerShell instead: irm $RAW/main/setup.ps1 | iex" ;;
+  *) die "DeployNow installs on Linux, macOS and Windows; $OS isn't supported." ;;
+esac
 command -v curl >/dev/null 2>&1 || die "curl is required (apt install curl)."
 
-if [ "$(id -u)" -ne 0 ]; then
-  command -v sudo >/dev/null 2>&1 || die "Run this as root: curl -fsSL $SETUP_URL | sudo bash"
-  say "DeployNow needs root to install Docker and write $DIR; asking sudo"
-  if [ -f "${BASH_SOURCE[0]:-}" ]; then
-    exec sudo -E bash "${BASH_SOURCE[0]}" "${ORIG_ARGS[@]}"
-  fi
-  # Piped into bash: there is no file to run again, so fetch it
-  tmp="$(mktemp)"
+# Fetch this script again when it was piped into bash and has to restart itself
+self_copy() {
+  if [ -f "${BASH_SOURCE[0]:-}" ]; then echo "${BASH_SOURCE[0]}"; return; fi
+  local tmp; tmp="$(mktemp)"
   curl -fsSL "$SETUP_URL" -o "$tmp" || die "Couldn't download $SETUP_URL"
-  exec sudo -E bash "$tmp" "${ORIG_ARGS[@]}"
+  chmod 644 "$tmp"; echo "$tmp"
+}
+
+if [ "$OS" = "Darwin" ]; then
+  # Docker Desktop, OrbStack and Colima belong to your user: no root needed, and files
+  # written as root would get in the way. sudo bash still works and drops back to you.
+  if [ "$(id -u)" -eq 0 ] && [ -n "${SUDO_USER:-}" ] && [ "$SUDO_USER" != root ]; then
+    script="$(self_copy)"
+    exec sudo -E -u "$SUDO_USER" -H bash "$script" ${ORIG_ARGS[@]+"${ORIG_ARGS[@]}"}
+  fi
+elif [ "$(id -u)" -ne 0 ]; then
+  command -v sudo >/dev/null 2>&1 || die "Run this as root: curl -fsSL $SETUP_URL | sudo bash"
+  say "DeployNow needs root to install Docker and write its folder; asking sudo"
+  script="$(self_copy)"
+  exec sudo -E bash "$script" ${ORIG_ARGS[@]+"${ORIG_ARGS[@]}"}
 fi
 
 case "$(uname -m)" in
   x86_64|amd64|aarch64|arm64) ;;
   *) die "Unsupported CPU $(uname -m): images are built for amd64 and arm64." ;;
 esac
+
+# Docker from the Ubuntu snap is confined: it only reads its own folders (and home folders),
+# so a compose file in /opt is "not found". With the snap, DeployNow lives in the snap's folder.
+SNAP_DOCKER=0
+SNAP_DIR=/var/snap/docker/common/deploynow
+detect_snap() {
+  SNAP_DOCKER=0
+  # /snap/bin/docker links to /usr/bin/snap, so look at the path, not where it leads
+  case "$(command -v docker 2>/dev/null)" in /snap/*) SNAP_DOCKER=1 ;; esac
+  if command -v snap >/dev/null 2>&1 && snap list docker >/dev/null 2>&1; then SNAP_DOCKER=1; fi
+  return 0
+}
+[ "$OS" = "Linux" ] && detect_snap
+
+DIR_GIVEN=1
+if [ -z "$DIR" ]; then
+  DIR_GIVEN=0
+  if [ "$OS" = "Darwin" ]; then DIR="$HOME/deploynow"
+  elif [ "$SNAP_DOCKER" = 1 ]; then DIR="$SNAP_DIR"
+  else DIR=/opt/deploynow; fi
+fi
+
+# An install that setup.sh began in /opt/deploynow before it knew about the snap moves over
+if [ "$SNAP_DOCKER" = 1 ] && [ "$DIR_GIVEN" = 0 ] && [ -f /opt/deploynow/.env ] && [ ! -f "$DIR/.env" ]; then
+  mkdir -p "$DIR"
+  for f in .env docker-compose.yml; do if [ -f "/opt/deploynow/$f" ]; then mv "/opt/deploynow/$f" "$DIR/$f"; fi; done
+  rmdir /opt/deploynow 2>/dev/null || true
+  say "Docker is the snap, which can't read /opt: moved /opt/deploynow to $DIR"
+fi
 
 # Questions come from the terminal even when the script itself arrives on stdin
 INTERACTIVE=0
@@ -123,12 +172,18 @@ ask_secret() { # ask_secret VAR "Question"
 valid_domain() { [[ "$1" =~ ^([a-z0-9]([a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,}$ ]] && ! [[ "$1" =~ ^[0-9.]+$ ]]; }
 valid_email()  { [[ "$1" =~ ^[^[:space:]@]+@[^[:space:]@]+\.[^[:space:]@]+$ ]]; }
 real_email()   { valid_email "$1" && ! [[ "$1" =~ @example\.(com|org|net)$ ]]; }
-port_busy()    { command -v ss >/dev/null 2>&1 && ss -Hltn "sport = :$1" 2>/dev/null | grep -q .; }
+port_busy() {
+  if command -v ss >/dev/null 2>&1; then ss -Hltn "sport = :$1" 2>/dev/null | grep -q .
+  elif command -v lsof >/dev/null 2>&1; then lsof -nP -iTCP:"$1" -sTCP:LISTEN >/dev/null 2>&1
+  elif command -v netstat >/dev/null 2>&1; then netstat -an 2>/dev/null | grep -E "[.:]$1 .*LISTEN" | grep -q .
+  else return 1; fi
+}
 
 public_ip() {
   local ip
   ip="$(curl -fsS --max-time 5 https://api.ipify.org 2>/dev/null || true)"
-  [[ "$ip" =~ ^[0-9.]+$|: ]] || ip="$(hostname -I 2>/dev/null | awk '{print $1}')"
+  [[ "$ip" =~ ^[0-9.]+$|: ]] || ip="$(hostname -I 2>/dev/null | awk '{print $1}' || true)"
+  [ -n "$ip" ] || ip="$(ipconfig getifaddr en0 2>/dev/null || true)"
   echo "${ip:-localhost}"
 }
 
@@ -146,7 +201,7 @@ else
   # Domain
   while :; do
     ask DOMAIN "Domain for DeployNow, e.g. deploy.example.com (Enter to use the IP)" "$DOMAIN"
-    DOMAIN="$(printf '%s' "$DOMAIN" | tr 'A-Z' 'a-z' | sed -e 's#^https\?://##' -e 's#/.*$##')"
+    DOMAIN="$(printf '%s' "$DOMAIN" | tr 'A-Z' 'a-z' | sed -E -e 's#^https?://##' -e 's#/.*$##')"
     [ -z "$DOMAIN" ] && break
     valid_domain "$DOMAIN" && break
     [ "$INTERACTIVE" = 1 ] || die "--domain $DOMAIN isn't a domain name such as deploy.example.com"
@@ -197,23 +252,82 @@ else
 fi
 
 # ── Docker ─────────────────────────────────────────────────────────────────────
-if ! command -v docker >/dev/null 2>&1; then
-  [ "$INSTALL_DOCKER" = "no" ] && die "Docker is not installed. Install it (https://docs.docker.com/engine/install/) and run this again."
-  say "Installing Docker (get.docker.com), this takes a minute"
-  curl -fsSL https://get.docker.com | sh >/tmp/deploynow-docker-install.log 2>&1 \
-    || { tail -n 20 /tmp/deploynow-docker-install.log >&2; die "Docker didn't install. The log is in /tmp/deploynow-docker-install.log"; }
-  systemctl enable --now docker >/dev/null 2>&1 || service docker start >/dev/null 2>&1 || true
-fi
-for _ in 1 2 3 4 5; do docker info >/dev/null 2>&1 && break; sleep 2; done
-docker info >/dev/null 2>&1 || die "Docker is installed but not running. Start it (systemctl start docker) and run this again."
-docker compose version >/dev/null 2>&1 || die "The Docker Compose plugin is missing. Install docker-compose-plugin and run this again."
+DOCKER_LOG="${TMPDIR:-/tmp}/deploynow-docker-install.log"
+start_service() { # start_service NAME: systemd, OpenRC or SysV
+  systemctl enable --now "$1" >/dev/null 2>&1 \
+    || { rc-update add "$1" default >/dev/null 2>&1; rc-service "$1" start >/dev/null 2>&1; } \
+    || service "$1" start >/dev/null 2>&1 || true
+}
 
-# Docker from the Ubuntu snap is confined: it can't read files outside a home folder, so
-# Compose doesn't find $DIR/docker-compose.yml ("no configuration file provided: not found")
-SNAP_DOCKER=0
-# (/snap/bin/docker is a link to /usr/bin/snap, so look at the path itself, not its target)
-case "$(command -v docker)" in /snap/*) SNAP_DOCKER=1 ;; esac
-command -v snap >/dev/null 2>&1 && snap list docker >/dev/null 2>&1 && SNAP_DOCKER=1
+# Distributions get.docker.com doesn't cover use their own packages
+install_docker_pkg() {
+  if command -v apk >/dev/null 2>&1; then apk add --no-cache docker docker-cli-compose
+  elif command -v pacman >/dev/null 2>&1; then pacman -Sy --noconfirm --needed docker docker-compose
+  elif command -v zypper >/dev/null 2>&1; then zypper -n install docker docker-compose
+  elif command -v dnf >/dev/null 2>&1; then
+    # Rocky, Alma, Oracle: Docker's own RHEL packages; Amazon Linux: its docker package
+    if grep -qi amzn /etc/os-release 2>/dev/null; then dnf -y install docker
+    else dnf -y install dnf-plugins-core && dnf config-manager --add-repo https://download.docker.com/linux/rhel/docker-ce.repo \
+      && dnf -y install docker-ce docker-ce-cli containerd.io docker-compose-plugin; fi
+  elif command -v yum >/dev/null 2>&1; then yum -y install docker
+  else return 1; fi
+}
+
+# Compose v2 as a Docker CLI plugin, from Docker's releases, when the distro doesn't ship it
+install_compose_plugin() {
+  local arch dest=/usr/local/lib/docker/cli-plugins
+  case "$(uname -m)" in x86_64|amd64) arch=x86_64 ;; *) arch=aarch64 ;; esac
+  mkdir -p "$dest"
+  curl -fsSL "https://github.com/docker/compose/releases/latest/download/docker-compose-linux-$arch" -o "$dest/docker-compose" \
+    && chmod +x "$dest/docker-compose"
+}
+
+mac_start_docker() { # start whichever Docker the Mac has, then wait for it
+  if docker info >/dev/null 2>&1; then return 0; fi
+  if [ -d /Applications/OrbStack.app ]; then say "Starting OrbStack"; open -ga OrbStack || true
+  elif command -v colima >/dev/null 2>&1; then say "Starting Colima"; colima start >/dev/null 2>&1 || true
+  elif [ -d /Applications/Docker.app ]; then say "Starting Docker Desktop"; open -ga Docker || true
+  fi
+  for _ in $(seq 1 90); do docker info >/dev/null 2>&1 && return 0; sleep 2; done
+  return 1
+}
+
+if [ "$OS" = "Darwin" ]; then
+  if ! command -v docker >/dev/null 2>&1 && [ ! -d /Applications/Docker.app ] && [ ! -d /Applications/OrbStack.app ]; then
+    [ "$INSTALL_DOCKER" = "no" ] && die "Docker is not installed. Install Docker Desktop (https://www.docker.com/products/docker-desktop/) or OrbStack and run this again."
+    command -v brew >/dev/null 2>&1 || die "Docker is not installed. Install Docker Desktop (https://www.docker.com/products/docker-desktop/), OrbStack (https://orbstack.dev) or Colima, start it, and run this again."
+    say "Installing Docker Desktop with Homebrew"
+    brew install --cask docker-desktop || brew install --cask docker \
+      || die "Docker Desktop didn't install. Install it from https://www.docker.com/products/docker-desktop/ and run this again."
+  fi
+  # The docker command ships inside the app until Docker Desktop links it on its first start
+  if [ -x /Applications/Docker.app/Contents/Resources/bin/docker ]; then PATH="$PATH:/Applications/Docker.app/Contents/Resources/bin"; fi
+  if [ -d "$HOME/.orbstack/bin" ]; then PATH="$PATH:$HOME/.orbstack/bin"; fi
+  mac_start_docker || die "Docker isn't running. Start Docker Desktop (or OrbStack or Colima), wait until it's running, and run this again."
+else
+  if ! command -v docker >/dev/null 2>&1; then
+    [ "$INSTALL_DOCKER" = "no" ] && die "Docker is not installed. Install it (https://docs.docker.com/engine/install/) and run this again."
+    say "Installing Docker, this takes a minute"
+    if ! curl -fsSL https://get.docker.com | sh >"$DOCKER_LOG" 2>&1; then
+      say "get.docker.com doesn't cover this system; installing Docker from its packages"
+      install_docker_pkg >>"$DOCKER_LOG" 2>&1 \
+        || { tail -n 20 "$DOCKER_LOG" >&2; die "Docker didn't install. The log is in $DOCKER_LOG; install Docker (https://docs.docker.com/engine/install/) and run this again."; }
+    fi
+    hash -r
+    start_service docker
+  fi
+  for _ in 1 2 3 4 5; do docker info >/dev/null 2>&1 && break; sleep 2; done
+  if ! docker info >/dev/null 2>&1; then
+    start_service docker
+    for _ in 1 2 3 4 5 6 7 8 9 10; do docker info >/dev/null 2>&1 && break; sleep 2; done
+  fi
+  docker info >/dev/null 2>&1 || die "Docker is installed but not running. Start it (systemctl start docker, or snap start docker) and run this again."
+  if ! docker compose version >/dev/null 2>&1; then
+    say "Adding the Docker Compose plugin"
+    install_compose_plugin >>"$DOCKER_LOG" 2>&1 || true
+  fi
+fi
+docker compose version >/dev/null 2>&1 || die "The Docker Compose plugin is missing. Install it (docker-compose-plugin) and run this again."
 
 # Every Compose call names the project folder and file, whatever the working directory
 dc() { docker compose --project-directory "$DIR" -f "$DIR/docker-compose.yml" "$@"; }
@@ -254,7 +368,7 @@ fi
 if ! dc config --quiet 2>/tmp/deploynow-config.log; then
   cat /tmp/deploynow-config.log >&2
   if [ "$SNAP_DOCKER" = 1 ]; then
-    die "Docker on this server is the snap package, which can't read files in $DIR. Replace it with Docker Engine: run 'sudo snap remove --purge docker' (this removes the containers that snap Docker runs), then run this setup again: it installs Docker from get.docker.com."
+    die "Docker is the snap package, which only reads its own folders. Leave out --dir to install into $SNAP_DIR, or use Docker Engine instead of the snap."
   fi
   die "Docker Compose can't read $DIR/docker-compose.yml (the error is above)."
 fi
@@ -271,7 +385,9 @@ if [ "$UPGRADE" = 0 ]; then
   # The IP address until the domain answers: DeployNow switches to the domain by itself
   # once its certificate is valid, and the IP keeps working as a fallback
   if [ -z "$URL" ]; then
-    IP="$(public_ip)"; [[ "$IP" == *:* ]] && IP="[$IP]"
+    # A Mac is a workstation: DeployNow is for this machine, at localhost
+    if [ "$OS" = "Darwin" ]; then IP=localhost; else IP="$(public_ip)"; fi
+    [[ "$IP" == *:* ]] && IP="[$IP]"
     URL="https://$IP:$PORT"
   fi
   say "Writing $DIR/.env"
@@ -295,12 +411,16 @@ EOF
   [ -n "$DOMAIN" ] && set_env TLS_HOSTNAME "$DOMAIN"
 fi
 set_env DEPLOYNOW_TAG "$TAG"
-if [ -S /var/run/docker.sock ]; then set_env DOCKER_GID "$(stat -c %g /var/run/docker.sock)"; fi
+# DOCKER_GID is set after the pull: the socket's group as containers see it
 chmod 600 .env
 PORT="$(grep '^DEPLOYNOW_PORT=' .env | cut -d= -f2- || true)"; PORT="${PORT:-9444}"
 DOMAIN="$(grep '^DEPLOYNOW_DOMAIN=' .env | cut -d= -f2- || true)"
 
 if [ "$NO_START" = "1" ]; then
+  if [ -S /var/run/docker.sock ]; then
+    GID_IN="$(stat -c %g /var/run/docker.sock 2>/dev/null || stat -f %g /var/run/docker.sock 2>/dev/null || true)"
+    if [ -n "$GID_IN" ]; then set_env DOCKER_GID "$GID_IN"; fi
+  fi
   say "Files written to $DIR. Start with: cd $DIR && docker compose up -d"
   grep -q '^ADMIN_PASSWORD=' .env && say "After the first start, remove ADMIN_PASSWORD from .env and run docker compose up -d again."
   exit 0
@@ -322,6 +442,13 @@ if ! dc pull -q 2>/tmp/deploynow-pull.log; then
     die "Couldn't pull ghcr.io/${REPO}:$TAG (the error is above)."
   fi
 fi
+# The image runs as a non-root user and reaches Docker through the socket's group. Inside
+# containers that group can differ from the host's (Docker Desktop, OrbStack, the snap).
+GID_IN="$(dc run --rm --no-deps -T --entrypoint stat deployer -c %g /var/run/docker.sock 2>/dev/null | tr -dc '0-9' || true)"
+if [ -z "$GID_IN" ] && [ -S /var/run/docker.sock ]; then
+  GID_IN="$(stat -c %g /var/run/docker.sock 2>/dev/null || stat -f %g /var/run/docker.sock 2>/dev/null || true)"
+fi
+if [ -n "$GID_IN" ]; then set_env DOCKER_GID "$GID_IN"; fi
 dc up -d --remove-orphans
 
 wait_healthy() {
@@ -350,7 +477,7 @@ if grep -q '^ADMIN_PASSWORD=' .env; then
   wait_healthy
 fi
 
-IP_URL="https://$(public_ip):$PORT"
+if [ "$OS" = "Darwin" ]; then IP_URL="https://localhost:$PORT"; else IP_URL="https://$(public_ip):$PORT"; fi
 echo
 printf '%s✓ DeployNow is running%s\n\n' "$G" "$N"
 if [ -n "$DOMAIN" ]; then

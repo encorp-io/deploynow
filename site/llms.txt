@@ -1,6 +1,6 @@
 # DeployNow
 
-> DeployNow is an open-source (MIT), AI-first, self-hosted deploy platform for Docker machines, made by encorp.ai. It deploys and runs apps, domains with SSL, encrypted secrets, monitoring, uptime checks and backups on servers you own, and has a built-in MCP server so AI agents (Claude, ChatGPT, Cursor, Claude Code) can deploy and operate apps. It replaces Portainer and Dokploy. Install on any Linux server (amd64 or arm64, 1 GB RAM) with one command: `curl -fsSL https://raw.githubusercontent.com/encorp-io/deploynow/main/setup.sh | sudo bash`.
+> DeployNow is an open-source (MIT), AI-first, self-hosted deploy platform for Docker machines, made by encorp.ai. It deploys and runs apps, domains with SSL, encrypted secrets, monitoring, uptime checks and backups on servers you own, and has a built-in MCP server so AI agents (Claude, ChatGPT, Cursor, Claude Code) can deploy and operate apps. It replaces Portainer and Dokploy. Install on any Linux server or a Mac (amd64 or arm64, 1 GB RAM) with one command: `curl -fsSL https://raw.githubusercontent.com/encorp-io/deploynow/main/setup.sh | sudo bash`; on Windows with Docker Desktop, in PowerShell: `irm https://raw.githubusercontent.com/encorp-io/deploynow/main/setup.ps1 | iex`.
 
 Key facts:
 
