@@ -1,12 +1,21 @@
 # Install DeployNow
 
-You need a Linux machine (amd64 or arm64) with 1 GB of RAM or more, and port 9444
-reachable (8444 too if you use agents).
+You need a machine (amd64 or arm64) with 1 GB of RAM or more, and port 9444
+reachable (8444 too if you use agents). Servers run Linux; DeployNow also runs on a Mac or
+a Windows PC with Docker Desktop.
 
 ## One command
 
+Linux or macOS:
+
 ```bash
 curl -fsSL https://raw.githubusercontent.com/encorp-io/deploynow/main/setup.sh | sudo bash
+```
+
+Windows (PowerShell):
+
+```powershell
+irm https://raw.githubusercontent.com/encorp-io/deploynow/main/setup.ps1 | iex
 ```
 
 It asks four things, and Enter keeps the default:
@@ -25,6 +34,20 @@ healthy and prints where to sign in. Two-factor sign-in is optional: turn it on 
 
 Without `sudo` it asks for it. Run it again to upgrade: it keeps `.env` and your
 `docker-compose.yml`, asks nothing and pulls the image.
+
+### Where it works
+
+| System | Docker | Install folder |
+|---|---|---|
+| Ubuntu, Debian, Fedora, CentOS, RHEL, Raspberry Pi OS | installed from get.docker.com when missing | `/opt/deploynow` |
+| Rocky, Alma, Oracle, Amazon Linux, Alpine, Arch, openSUSE | installed from the distribution's packages when missing; the Compose plugin from Docker's releases if the distro has none | `/opt/deploynow` |
+| Ubuntu with Docker from the snap (`snap install docker`) | the snap is used as it is | `/var/snap/docker/common/deploynow`, because the snap can only read its own folders. An earlier attempt left in `/opt/deploynow` is moved there. |
+| macOS | Docker Desktop, OrbStack or Colima; Docker Desktop is installed with Homebrew when nothing is there. It starts the one you have. `sudo` isn't needed. | `~/deploynow` |
+| Windows 10/11 | Docker Desktop (Linux containers); installed with winget when missing, then start it once and run the command again | `%USERPROFILE%\deploynow` |
+
+On a Mac or PC the address is `https://localhost:<port>`. With snap Docker, apps that bind
+folders outside the snap's reach (`/opt`, `/srv`) can't read them either: use named volumes
+or folders under `/var/snap/docker/common`, or switch to Docker Engine.
 
 ### Without questions
 
@@ -45,11 +68,18 @@ curl -fsSL https://raw.githubusercontent.com/encorp-io/deploynow/main/setup.sh \
 | `--require-2fa` | `REQUIRE_2FA=true` | optional | Admins and owners must set up 2FA or a passkey |
 | `--tag` | `DEPLOYNOW_TAG` | `latest` | A release such as `2.1.0`, `latest` (newest stable) or `edge` (main) |
 | `--url` | `DEPLOYNOW_URL` | `https://<public IP>:<port>` | The address people and agents use when there's no domain |
-| `--dir` | `DEPLOYNOW_DIR` | `/opt/deploynow` | Where the files go |
+| `--dir` | `DEPLOYNOW_DIR` | see [Where it works](#where-it-works) | Where the files go |
 | `--no-docker` | `INSTALL_DOCKER=no` | install | Stop instead of installing Docker |
 | `--no-start` | `DEPLOYNOW_NO_START=1` | start | Write the files only |
 
 `install.sh`, the old name, still works and runs `setup.sh --yes`.
+
+On Windows the options are PowerShell parameters (`-Domain`, `-Port`, `-Email`, `-Password`,
+`-Require2fa`, `-Tag`, `-Dir`, `-Url`, `-Yes`, `-NoStart`, `-NoDocker`) or the same variables:
+
+```powershell
+iex "& { $(irm https://raw.githubusercontent.com/encorp-io/deploynow/main/setup.ps1) } -Yes -Email you@example.com"
+```
 
 > **Back up `/opt/deploynow/.env`.** `AUTH_SECRET` encrypts every stored secret, SSH
 > key, registry password and backup key. A restored database is unreadable without it.
@@ -112,6 +142,7 @@ volumes:
 - **"Docker socket is mounted but not accessible":** set `DOCKER_GID=$(stat -c %g /var/run/docker.sock)` in `.env` and run `docker compose up -d`.
 - **"database migration failed":** nothing was lost. The database from before the upgrade is in `/data/db-backups/`; see [Upgrading](upgrading.md#rolling-back).
 - **The browser warns about the certificate:** expected with the self-signed certificate. Set a domain under Settings → Domain, or mount your own.
-- **"no configuration file provided: not found":** Docker is the Ubuntu snap, which can't read `/opt/deploynow`. Remove it with `sudo snap remove --purge docker` (this removes the containers snap Docker runs) and run `setup.sh` again: it installs Docker Engine from get.docker.com.
+- **"no configuration file provided: not found":** Docker is the Ubuntu snap, which can't read `/opt/deploynow`. Run the current `setup.sh` again: it installs into `/var/snap/docker/common/deploynow` and moves what it finds in `/opt/deploynow`.
+- **Windows: "Docker Desktop runs Windows containers":** right-click the Docker tray icon, choose **Switch to Linux containers…**, and run the command again.
 - **`docker compose pull` is denied (unauthorized):** the images are public, so this means a stale or wrong login for ghcr.io: run `docker logout ghcr.io` and try again. For a private copy of the image, `docker login ghcr.io` with a token that has `read:packages`.
 - **Is it up?** `curl -k https://localhost:9444/api/health` answers `{"ok":true,"version":"…"}`.

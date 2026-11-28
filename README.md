@@ -83,15 +83,22 @@ DeployNow ships with a dark theme by default and a matching light theme. Switch 
 
 ## Quick start
 
-You need a Linux machine (amd64 or arm64) with ports 9444 and 8444 open.
+You need a Linux server (amd64 or arm64) with ports 9444 and 8444 open, or a Mac or
+Windows PC with Docker Desktop.
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/encorp-io/deploynow/main/setup.sh | sudo bash
 ```
 
+On Windows, in PowerShell:
+
+```powershell
+irm https://raw.githubusercontent.com/encorp-io/deploynow/main/setup.ps1 | iex
+```
+
 It asks for a domain, port, admin email and password (Enter keeps the defaults), installs
-Docker if needed, writes `/opt/deploynow/docker-compose.yml` and `.env`, starts DeployNow
-and prints where to sign in. `--yes` skips the questions. Prefer to do it by
+Docker if needed (any Linux distribution, the Ubuntu snap works too), writes
+`docker-compose.yml` and `.env`, starts DeployNow and prints where to sign in. `--yes` skips the questions. Prefer to do it by
 hand, or want options? See [docs/install.md](docs/install.md).
 
 Then:

@@ -102,7 +102,7 @@
       "mainEntity": [
         { "@type": "Question", "name": "What is DeployNow?", "acceptedAnswer": { "@type": "Answer", "text": "DeployNow is an open-source, self-hosted deploy platform for Docker machines, built AI-first. It deploys and runs your apps, domains, secrets, monitoring and backups on servers you own, and lets AI agents such as Claude, ChatGPT and Cursor deploy and operate them over MCP. It replaces Portainer and Dokploy." } },
         { "@type": "Question", "name": "Is DeployNow free and open source?", "acceptedAnswer": { "@type": "Answer", "text": "Yes. DeployNow is free and open source under the MIT license. You host it yourself; there is no paid tier and no account with us." } },
-        { "@type": "Question", "name": "How do I install DeployNow?", "acceptedAnswer": { "@type": "Answer", "text": "Run one command on a Linux server: curl -fsSL https://raw.githubusercontent.com/encorp-io/deploynow/main/setup.sh | sudo bash. It installs Docker if needed, asks for a domain, port, admin email and password, and starts DeployNow." } },
+        { "@type": "Question", "name": "How do I install DeployNow?", "acceptedAnswer": { "@type": "Answer", "text": "Run one command on a Linux server or a Mac: curl -fsSL https://raw.githubusercontent.com/encorp-io/deploynow/main/setup.sh | sudo bash. On Windows with Docker Desktop, in PowerShell: irm https://raw.githubusercontent.com/encorp-io/deploynow/main/setup.ps1 | iex. It installs Docker if needed, asks for a domain, port, admin email and password, and starts DeployNow." } },
         { "@type": "Question", "name": "Can my AI agent deploy my app with DeployNow?", "acceptedAnswer": { "@type": "Answer", "text": "Yes. DeployNow has a built-in MCP server at /mcp with OAuth. Add it as a custom connector in Claude, ChatGPT, Cursor or Claude Code, pick Read only, Operate or Admin, and the agent can list apps, deploy, read logs, roll back and run backups. It can never delete anything or read secret values, and every call is in the audit log." } },
         { "@type": "Question", "name": "How do I make my repository DeployNow-ready?", "acceptedAnswer": { "@type": "Answer", "text": "Ask your AI coding agent to make it DeployNow-ready, using the prompt on this page or the free deploynow-ready Claude skill. It adds a production Dockerfile, a GitHub Actions workflow that builds and pushes a multi-arch image to GHCR, a docker-compose.yml, a .env.example, a health endpoint and a DEPLOY.md." } },
         { "@type": "Question", "name": "How is DeployNow different from Portainer and Dokploy?", "acceptedAnswer": { "@type": "Answer", "text": "DeployNow combines container management like Portainer with app deploys like Dokploy in one app, and adds encrypted backups with restore drills, machines behind NAT through an mTLS agent, uptime checks, Prometheus metrics, self-update with rollback and an MCP server for AI agents." } },
@@ -502,7 +502,7 @@ Never commit real secrets. Keep local development working.</pre>
         <li>Leave the password blank and it generates a strong one</li>
         <li>Run it again any time to upgrade; your settings are kept</li>
       </ul>
-      <p class="fine reveal">Unattended: <code>… | sudo bash -s -- --yes --domain deploy.example.com --email you@example.com</code>. Prefer to do it by hand? See the <a href="https://github.com/encorp-io/deploynow/blob/main/docs/install.md">install guide</a>.</p>
+      <p class="fine reveal">Linux or macOS. On Windows, in PowerShell: <code>irm https://raw.githubusercontent.com/encorp-io/deploynow/main/setup.ps1 | iex</code>. Unattended: <code>… | sudo bash -s -- --yes --domain deploy.example.com --email you@example.com</code>. Prefer to do it by hand? See the <a href="https://github.com/encorp-io/deploynow/blob/main/docs/install.md">install guide</a>.</p>
     </div>
     <div class="term reveal">
       <div class="term-bar">
@@ -544,7 +544,7 @@ Never commit real secrets. Keep local development working.</pre>
       </details>
       <details class="reveal">
         <summary>How do I install it?</summary>
-        <p>Run <code>curl -fsSL https://raw.githubusercontent.com/encorp-io/deploynow/main/setup.sh | sudo bash</code> on a Linux server. It installs Docker if needed, asks for a domain, port, admin email and password, and starts DeployNow.</p>
+        <p>Run <code>curl -fsSL https://raw.githubusercontent.com/encorp-io/deploynow/main/setup.sh | sudo bash</code> on a Linux server or a Mac. On Windows with Docker Desktop, run <code>irm https://raw.githubusercontent.com/encorp-io/deploynow/main/setup.ps1 | iex</code> in PowerShell. It installs Docker if needed, asks for a domain, port, admin email and password, and starts DeployNow.</p>
       </details>
       <details class="reveal">
         <summary>Can my AI agent deploy my app?</summary>
