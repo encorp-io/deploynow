@@ -9,6 +9,21 @@ versions fix bugs. Every version upgrades the database by itself.
 ## [Unreleased]
 
 ### Added
+- **Containers that ran before DeployNow show up in Projects**: a "Not managed by DeployNow"
+  folder lists them per endpoint. Containers started with `docker compose` are grouped into
+  their stacks, the way Portainer shows stacks it didn't create; the rest are under
+  Standalone containers. Open a stack to start, stop or restart all of it, or a container for
+  its logs, console and details, with the same permissions and protections as the endpoint
+  page. DeployNow's own, helper and proxy containers never appear there; containers of a
+  deleted app are marked as left over.
+- **Manage an existing compose stack with DeployNow**: admins can turn a stack into a compose
+  app. The compose file is rebuilt from the running containers (images, ports, volumes,
+  networks, restart policies, healthchecks, dependencies); environment values are read from
+  the containers and stored as the app's variables, credential-like ones as secrets, never in
+  the file or the browser. The app keeps the stack's compose project, so its first deploy
+  recreates the containers in place and keeps the named volumes and their data. Host bind
+  mounts, privileged containers and external networks are flagged up front, since the compose
+  rules refuse them unless `DEPLOYNOW_COMPOSE_POLICY=trusted`.
 - **The installer works everywhere**: `setup.sh` now also runs on macOS (Docker Desktop,
   OrbStack or Colima, installing Docker Desktop with Homebrew when nothing is there), with
   Docker from the Ubuntu snap (installs into `/var/snap/docker/common/deploynow`), and on

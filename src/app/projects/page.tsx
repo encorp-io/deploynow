@@ -7,6 +7,7 @@ import { FolderKanban, FolderPlus, Plus } from "lucide-react";
 import { useApi } from "@/components/AppShell";
 import { Badge, Button, Card, EmptyState, ErrorText, Field, Input, Modal, PageHeader, Select, Skeleton } from "@/components/ui";
 import { appStatusTone } from "@/components/apps";
+import { ExternalSection } from "@/components/External";
 
 interface ProjectRow {
   id: string;
@@ -106,6 +107,8 @@ export default function ProjectsPage() {
           })}
         </div>
       )}
+
+      <ExternalSection />
 
       {creating && (
         <Modal icon={FolderPlus} title="New project" onClose={() => setCreating(false)}>
