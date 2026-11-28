@@ -1,5 +1,30 @@
 # Auto-update for apps
 
+## Update available (every app)
+
+Whether or not auto-update is on, DeployNow checks every deployed app about once an hour
+and shows **Update available** at the top of the app page (*Check for updates* checks now).
+It finds two kinds of updates:
+
+- **The same tag, newer**: a new digest for a tag the app runs, or a new commit on a Git
+  app's branch. *Deploy to update* applies it (auto-update does this by itself).
+- **A newer tag**: the app runs a pinned tag and the registry has a newer one. Deploying
+  again doesn't change a pinned tag, so this one is only shown:
+  - version tags get the newest tag of the same shape: `4.55` → `4.56`, `17-alpine` →
+    `18-alpine` (marked as a new major version), `v1.2.3` → `v1.3.0`;
+  - commit tags (`sha-82e99af`) get the build that `latest`, `main` or `master` points to,
+    when it is newer than the running one, named by its own `sha-...` tag when the image has
+    the `org.opencontainers.image.revision` label (docker/metadata-action sets it).
+
+  For an image app, *Use <tag>* changes the image. For a compose image written as one
+  variable (`image: ${APP_IMAGE:-ghcr.io/acme/app:sha-82e99af}`), *Set APP_IMAGE* sets the
+  variable; otherwise change the compose file. Then deploy.
+
+New findings are written to the audit log (`app.update_available`) and sent to
+notification channels subscribed to *App update available*.
+
+## Automatic updates
+
 Every app, whatever it is deployed from, can update itself: open the app, go to
 **Settings → Auto-update** and turn on *Update this app automatically*.
 
@@ -62,6 +87,8 @@ deploys right away. Auto-update is the way to follow a branch without a webhook,
 when DeployNow isn't reachable from GitHub, and it catches anything a webhook missed.
 
 ## API
+
+`GET /api/apps/{id}/updates` returns what the last update check found, `POST` checks now.
 
 The settings are fields of the app (`PATCH /api/apps/{id}`): `autoUpdate`, `autoUpdateEvery`
 (minutes: 1, 5, 15, 30, 60, 360 or 1440), `autoUpdateDays` (0 = Sunday ... 6), `autoUpdateFrom`

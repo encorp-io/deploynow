@@ -87,6 +87,8 @@ export const OPERATIONS: Op[] = [
   { method: "post", path: `/apps/${ID}/env`, summary: "Set environment variables and secrets", tag: "Apps", access: "admin" },
   { method: "get", path: `/apps/${ID}/auto-update`, summary: "Auto-update status: maintenance window, last check, what's waiting, recent automatic updates", tag: "Apps", access: "viewer" },
   { method: "post", path: `/apps/${ID}/auto-update`, summary: "Check for an update now (deploys it inside the maintenance window); retry forgets the update that failed", tag: "Apps", access: "operator", body: { action: "check | retry" } },
+  { method: "get", path: `/apps/${ID}/updates`, summary: "What the last update check found: a new image or commit for what the app runs, and newer tags (versions, commit builds)", tag: "Apps", access: "viewer" },
+  { method: "post", path: `/apps/${ID}/updates`, summary: "Check the app for updates now (deploys nothing)", tag: "Apps", access: "viewer" },
   { method: "get", path: `/apps/${ID}/webhook`, summary: "Push webhook URL", tag: "Apps", access: "admin" },
   { method: "post", path: `/apps/${ID}/webhook`, summary: "Rotate the webhook secret", tag: "Apps", access: "admin" },
   { method: "post", path: "/webhooks/github/{appId}", summary: "GitHub push and pull_request webhook (HMAC signed)", tag: "Apps", access: "public" },

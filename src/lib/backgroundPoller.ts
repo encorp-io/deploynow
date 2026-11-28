@@ -35,6 +35,9 @@ async function runCycle() {
     // Image, compose and Git apps with auto-update on
     const { runAutoUpdates } = await import("./apps/autoUpdate");
     await runAutoUpdates();
+    // Every deployed app: is there a newer image, commit or tag? (shown on the app, never deployed)
+    const { runUpdateChecks } = await import("./apps/updateCheck");
+    await runUpdateChecks();
   } catch (err) {
     // Message only: the full error object may contain credentials
     const msg = err instanceof Error ? err.message : "unknown error";

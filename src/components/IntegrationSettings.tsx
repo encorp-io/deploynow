@@ -89,6 +89,7 @@ const EVENT_LABELS: Record<string, string> = {
   "deploy.failure": "Deploy failed",
   "autoupdate.success": "App auto-updated",
   "autoupdate.failure": "App auto-update failed or rolled back",
+  "app.update_available": "App update available",
   "backup.success": "Backup succeeded",
   "backup.failure": "Backup failed",
   "restore.success": "Restore finished",

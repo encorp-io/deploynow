@@ -357,6 +357,10 @@ model Application {
   autoUpdatePending   String      @default("") // what the last check found but didn't deploy yet (outside the window, skipped)
   autoUpdateError     String      @default("") // why the last check failed
   autoUpdateSkip      String      @default("") // fingerprint of an update that failed; not retried until something newer comes out
+  // Update check for every deployed app, auto-update on or not (lib/apps/updateCheck.ts)
+  updateInfo          String      @default("") // JSON { changes, tags } of what the last check found; "" = up to date
+  updateError         String      @default("") // why the last check (partly) failed
+  updateCheckedAt     DateTime?
   status              String      @default("new") // new, deploying, running, failed, stopped
   currentDeploymentId String?
   createdAt           DateTime    @default(now())

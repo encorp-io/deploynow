@@ -14,6 +14,7 @@ export const EVENTS = [
   "deploy.failure",
   "autoupdate.success",
   "autoupdate.failure",
+  "app.update_available",
   "backup.success",
   "backup.failure",
   "restore.success",

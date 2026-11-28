@@ -398,7 +398,7 @@ export async function runDeployment(deploymentId: string, ctx: RunContext = {}):
   });
   await prisma.application.update({
     where: { id: app.id },
-    data: ok ? { status: "running", currentDeploymentId: dep.id } : { status: app.currentDeploymentId ? "running" : "failed" },
+    data: ok ? { status: "running", currentDeploymentId: dep.id, updateInfo: "", updateCheckedAt: null } : { status: app.currentDeploymentId ? "running" : "failed" },
   });
 
   const verb = dep.trigger === "rollback" ? "Rollback" : dep.trigger === "auto-update" ? "Auto-update" : "Deploy";
