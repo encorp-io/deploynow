@@ -15,11 +15,14 @@ versions fix bugs. Every version upgrades the database by itself.
   same shape, or the newer build `latest`/`main` points to. Image apps, and compose images
   written as one variable, switch to the new tag from the banner. New notification event
   *App update available*.
-
 ### Fixed
 - Compose apps never showed that an update was available.
 - Image updates: containers from registries other than GHCR were looked up on Docker Hub,
   and private images were checked without the registry login.
+### Fixed
+- **Settings → Updates on edge or latest** no longer offers "Pull and update" when the
+  registry still has the build that runs. It says you run the newest build instead of
+  failing with "… is the image DeployNow already runs."
 
 ## [1.1.0] - 2026-11-28
 

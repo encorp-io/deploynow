@@ -162,6 +162,36 @@ export async function prepare(latestRelease: string, channel: Channel = ""): Pro
   return { target, image, next, socketBind: `${sock.Source}:/var/run/docker.sock`, dataBind, envBind, envFile, envFileHost };
 }
 
+/**
+ * Does the registry still serve, under the tag DeployNow runs (edge, latest), the very image that
+ * runs now? Then there is nothing to pull. false when unsure (no registry answer): the pull decides.
+ */
+export async function runsNewestBuild(setup: Pick<SelfUpdateSetup, "target" | "next">): Promise<boolean> {
+  if (setup.next.changed || setup.next.pinned) return false;
+  const p = parseImageRef(setup.next.ref);
+  // getRemoteDigests speaks to GHCR and Docker Hub only: never send another registry's login to Docker Hub
+  if (p.registry !== "ghcr.io" && p.registry !== "docker.io") return false;
+  const local = await setup.target.docker
+    .getImage(setup.target.self.Image)
+    .inspect()
+    .catch(() => null);
+  const auth = await registryAuthFor(setup.next.ref).catch(() => undefined);
+  const creds = auth?.username && auth.password ? { username: auth.username, password: auth.password } : undefined;
+  const remote = await getRemoteDigests(p.registry, p.repository, p.tag, local?.Architecture, creds).catch(() => null);
+  if (!remote) return false;
+  const running = setup.target.self.Image;
+  const repoDigests = local?.RepoDigests ?? [];
+  return (
+    (!!remote.config && remote.config === running) ||
+    (!!remote.manifest && (remote.manifest === running || repoDigests.some((d) => d.endsWith(`@${remote.manifest}`))))
+  );
+}
+
+/** "You already run the newest edge build (edge-03f8789)." */
+export function newestBuildMessage(tag: string): string {
+  return `You already run the newest ${tag} build (${VERSION}). Nothing to update.`;
+}
+
 async function updaterContainer(docker: Docker): Promise<Docker.ContainerInspectInfo | null> {
   try {
     return await docker.getContainer(UPDATER_NAME).inspect();
@@ -202,6 +232,9 @@ export async function startSelfUpdate(opts: StartOptions = {}): Promise<SelfUpda
   if (existing?.State.Running) throw new SelfUpdateError("An update is already running.", "busy");
   if (isRunning(prior) && existing?.State.Running) throw new SelfUpdateError("An update is already running.", "busy");
 
+  // edge and latest: don't pull when the registry still has the image that runs
+  if (await runsNewestBuild(setup)) throw new SelfUpdateError(newestBuildMessage(next.tag), "current");
+
   const auth = await registryAuthFor(next.ref);
   try {
     await pullImage(docker, next.ref, auth);
@@ -211,7 +244,7 @@ export async function startSelfUpdate(opts: StartOptions = {}): Promise<SelfUpda
   const pulled = await docker.getImage(next.ref).inspect();
   // Same image under a new tag (latest → 1.0.0 on the stable channel) still goes ahead, so the
   // container and the compose .env name the tag the channel follows from now on
-  if (pulled.Id === target.self.Image && !next.changed) throw new SelfUpdateError(`${next.ref} is the image DeployNow already runs.`, "current");
+  if (pulled.Id === target.self.Image && !next.changed) throw new SelfUpdateError(newestBuildMessage(next.tag), "current");
 
   // The updater runs the new image as root with the socket: check it is the one the tag stands for (verify.ts)
   let verified;
@@ -333,12 +366,14 @@ export async function selfUpdateInfo(latestRelease: string): Promise<SelfUpdateI
   if (!support) {
     try {
       const setup = await prepare(latestRelease, channel);
-      support = { supported: true, reason: "", image: setup.image, pinned: setup.next.pinned, target: setup.next.ref, installable: true };
+      // A moving tag (edge, latest) is offered only while the registry has a newer build behind it
+      const newest = await runsNewestBuild(setup).catch(() => false);
+      support = { supported: true, reason: newest ? newestBuildMessage(setup.next.tag) : "", image: setup.image, pinned: setup.next.pinned, target: setup.next.ref, installable: !newest };
     } catch (err) {
       const e = err as SelfUpdateError;
       // "You already run the newest release" still means it works here
       const current = e.code === "current";
-      support = { supported: current, reason: current ? "" : e.message, image: "", pinned: false, target: "", installable: false };
+      support = { supported: current, reason: e.message, image: "", pinned: false, target: "", installable: false };
       if (current) {
         const t = await findLocalTarget().catch(() => null);
         support.image = t?.self.Config.Image ?? "";
