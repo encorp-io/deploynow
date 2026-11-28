@@ -16,6 +16,11 @@ versions fix bugs. Every version upgrades the database by itself.
   written as one variable, switch to the new tag from the banner. New notification event
   *App update available*.
 ### Fixed
+- **setup.sh** stopped at the image pull with "no configuration file provided: not found"
+  and wrongly said there was no stable release yet. Every Compose call now names
+  `/opt/deploynow/docker-compose.yml`, the file is checked before anything starts (with a
+  clear message when Docker is the Ubuntu snap, which can't read `/opt`), it falls back to
+  `edge` only when GitHub has no release at all, and a refused pull says so.
 - Compose apps never showed that an update was available.
 - Image updates: containers from registries other than GHCR were looked up on Docker Hub,
   and private images were checked without the registry login.

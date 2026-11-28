@@ -208,9 +208,20 @@ for _ in 1 2 3 4 5; do docker info >/dev/null 2>&1 && break; sleep 2; done
 docker info >/dev/null 2>&1 || die "Docker is installed but not running. Start it (systemctl start docker) and run this again."
 docker compose version >/dev/null 2>&1 || die "The Docker Compose plugin is missing. Install docker-compose-plugin and run this again."
 
+# Docker from the Ubuntu snap is confined: it can't read files outside a home folder, so
+# Compose doesn't find $DIR/docker-compose.yml ("no configuration file provided: not found")
+SNAP_DOCKER=0
+# (/snap/bin/docker is a link to /usr/bin/snap, so look at the path itself, not its target)
+case "$(command -v docker)" in /snap/*) SNAP_DOCKER=1 ;; esac
+command -v snap >/dev/null 2>&1 && snap list docker >/dev/null 2>&1 && SNAP_DOCKER=1
+
+# Every Compose call names the project folder and file, whatever the working directory
+dc() { docker compose --project-directory "$DIR" -f "$DIR/docker-compose.yml" "$@"; }
+
 # ── Files ──────────────────────────────────────────────────────────────────────
 mkdir -p "$DIR"
 cd "$DIR"
+DIR="$(pwd -P)"
 
 TAG="${TAG:-$(grep -s '^DEPLOYNOW_TAG=' .env | cut -d= -f2- || true)}"
 TAG="${TAG:-latest}"
@@ -237,6 +248,15 @@ if [ -f docker-compose.yml ]; then
 else
   say "Downloading docker-compose.yml ($REF)"
   curl -fsSL "$RAW/$REF/docker-compose.yml" -o docker-compose.yml || die "Couldn't download docker-compose.yml for $REF"
+fi
+
+# Make sure Docker Compose can read the file before writing anything else
+if ! dc config --quiet 2>/tmp/deploynow-config.log; then
+  cat /tmp/deploynow-config.log >&2
+  if [ "$SNAP_DOCKER" = 1 ]; then
+    die "Docker on this server is the snap package, which can't read files in $DIR. Replace it with Docker Engine: run 'sudo snap remove --purge docker' (this removes the containers that snap Docker runs), then run this setup again: it installs Docker from get.docker.com."
+  fi
+  die "Docker Compose can't read $DIR/docker-compose.yml (the error is above)."
 fi
 
 set_env() { # set_env KEY VALUE: add or replace a line in .env
@@ -288,28 +308,32 @@ fi
 
 # ── Start ──────────────────────────────────────────────────────────────────────
 say "Pulling ghcr.io/${REPO}:$TAG"
-if ! docker compose pull -q 2>/tmp/deploynow-pull.log; then
-  if [ "$TAG" = "latest" ] && grep -qi "not found\|manifest unknown" /tmp/deploynow-pull.log; then
+if ! dc pull -q 2>/tmp/deploynow-pull.log; then
+  if [ "$TAG" = "latest" ] && [ "$REF" = "main" ] && grep -qiE "manifest unknown|manifest for [^ ]+ not found|ghcr\.io/[^ ]+: not found" /tmp/deploynow-pull.log; then
+    # Only when GitHub showed no release at all: a :latest image comes with the first release
     warn "There's no stable release yet; using edge (built from main)."
     TAG=edge; set_env DEPLOYNOW_TAG edge
-    docker compose pull -q || die "Couldn't pull the image."
+    dc pull -q || die "Couldn't pull the image."
   else
     cat /tmp/deploynow-pull.log >&2
-    die "Couldn't pull the image. While the repository is private, run: docker login ghcr.io"
+    if grep -qiE "unauthorized|denied|authentication required" /tmp/deploynow-pull.log; then
+      die "ghcr.io refused the download of ghcr.io/${REPO}:$TAG. If you use a private copy of the image, run docker login ghcr.io first."
+    fi
+    die "Couldn't pull ghcr.io/${REPO}:$TAG (the error is above)."
   fi
 fi
-docker compose up -d --remove-orphans
+dc up -d --remove-orphans
 
 wait_healthy() {
   local cid status=""
-  cid="$(docker compose ps -q | head -n1)"
+  cid="$(dc ps -q | head -n1)"
   for _ in $(seq 1 60); do
     status="$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "$cid" 2>/dev/null || true)"
     [ "$status" = "healthy" ] && return 0
     [ "$status" = "exited" ] && break
     sleep 2
   done
-  docker compose logs --tail 40 || true
+  dc logs --tail 40 || true
   die "DeployNow didn't become healthy (status: ${status:-unknown}). The log is above; see https://github.com/$REPO/blob/main/docs/install.md#troubleshooting"
 }
 
@@ -322,7 +346,7 @@ if grep -q '^ADMIN_PASSWORD=' .env; then
   say "Removing the first-start password from .env"
   tmp="$(mktemp)"; grep -v -e '^ADMIN_PASSWORD=' -e '^# Only read on the first start' .env > "$tmp" || true
   cat "$tmp" > .env; rm -f "$tmp"
-  docker compose up -d --remove-orphans >/dev/null 2>&1 || docker compose up -d --remove-orphans
+  dc up -d --remove-orphans >/dev/null 2>&1 || dc up -d --remove-orphans
   wait_healthy
 fi
 
