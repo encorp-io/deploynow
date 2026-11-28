@@ -28,6 +28,11 @@
 #   --no-docker       INSTALL_DOCKER=no     stop instead of installing Docker
 set -euo pipefail
 
+# The whole script sits in one { } block: bash reads all of it before running anything. Under
+# `curl | bash` the script arrives on stdin, and a command that reads stdin (docker compose run)
+# would otherwise swallow the rest of it and end the setup silently.
+{
+
 REPO="encorp-io/deploynow"
 RAW="https://raw.githubusercontent.com/${REPO}"
 SETUP_URL="${DEPLOYNOW_SETUP_URL:-$RAW/main/setup.sh}"
@@ -330,7 +335,7 @@ fi
 docker compose version >/dev/null 2>&1 || die "The Docker Compose plugin is missing. Install it (docker-compose-plugin) and run this again."
 
 # Every Compose call names the project folder and file, whatever the working directory
-dc() { docker compose --project-directory "$DIR" -f "$DIR/docker-compose.yml" "$@"; }
+dc() { docker compose --project-directory "$DIR" -f "$DIR/docker-compose.yml" "$@" </dev/null; }
 
 # ── Files ──────────────────────────────────────────────────────────────────────
 mkdir -p "$DIR"
@@ -497,3 +502,5 @@ if [ "$UPGRADE" = 0 ]; then
 fi
 echo "    Open port $PORT (dashboard)$([ -n "$DOMAIN" ] && echo ", 80 and 443 (domain)") and 8444 for agents on other machines."
 echo
+exit 0
+}
