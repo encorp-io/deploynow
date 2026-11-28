@@ -94,8 +94,6 @@ Docker if needed, writes `/opt/deploynow/docker-compose.yml` and `.env`, starts 
 and prints where to sign in. `--yes` skips the questions. Prefer to do it by
 hand, or want options? See [docs/install.md](docs/install.md).
 
-While the repository is private, the image on GHCR is private too: run `docker login ghcr.io` with a GitHub token that has `read:packages` first.
-
 Then:
 
 1. Sign in. Set up 2FA or a passkey under **Account**; owners can require it for admins under **Settings → Security and sign-in**.

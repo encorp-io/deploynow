@@ -112,5 +112,6 @@ volumes:
 - **"Docker socket is mounted but not accessible":** set `DOCKER_GID=$(stat -c %g /var/run/docker.sock)` in `.env` and run `docker compose up -d`.
 - **"database migration failed":** nothing was lost. The database from before the upgrade is in `/data/db-backups/`; see [Upgrading](upgrading.md#rolling-back).
 - **The browser warns about the certificate:** expected with the self-signed certificate. Set a domain under Settings → Domain, or mount your own.
-- **`docker compose pull` is denied:** while the repository is private, run `docker login ghcr.io` with a GitHub token that has `read:packages`.
+- **"no configuration file provided: not found":** Docker is the Ubuntu snap, which can't read `/opt/deploynow`. Remove it with `sudo snap remove --purge docker` (this removes the containers snap Docker runs) and run `setup.sh` again: it installs Docker Engine from get.docker.com.
+- **`docker compose pull` is denied (unauthorized):** the images are public, so this means a stale or wrong login for ghcr.io: run `docker logout ghcr.io` and try again. For a private copy of the image, `docker login ghcr.io` with a token that has `read:packages`.
 - **Is it up?** `curl -k https://localhost:9444/api/health` answers `{"ok":true,"version":"…"}`.
